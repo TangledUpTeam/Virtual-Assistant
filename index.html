@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 기반 취업시장 분석 & 스펙 매칭 서비스</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px 50px;
+            text-align: center;
+            max-width: 600px;
+            width: 90%;
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #2d3748;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #718096;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .start-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 18px 50px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .start-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .start-button:active {
+            transform: translateY(0);
+        }
+
+        .features {
+            margin-top: 50px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            text-align: left;
+        }
+
+        .feature-item {
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #4a5568;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        footer {
+            margin-top: 40px;
+            font-size: 14px;
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🧭</div>
+        <h1>AI 기반 취업시장 분석<br>& 스펙 매칭 서비스</h1>
+        <p class="subtitle">
+            현재 시장이 요구하는 기술 트렌드와 개인 스펙 매칭도를 분석하여<br>
+            AI가 제시하는 취업 로드맵을 자동 생성합니다.
+        </p>
+        
+        <button class="start-button" onclick="startService()">시작하기</button>
+
+        <div class="features">
+            <div class="feature-item">
+                <div class="feature-icon">📊</div>
+                <strong>시장 분석</strong><br>
+                전체 시장 기술 비중 시각화
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">🎯</div>
+                <strong>스펙 매칭</strong><br>
+                개인 스펙과 시장 요구 분석
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">🤖</div>
+                <strong>AI 인사이트</strong><br>
+                AI 기반 취업 로드맵 제시
+            </div>
+            <div class="feature-item">
+                <div class="feature-icon">📈</div>
+                <strong>트렌드 추적</strong><br>
+                최신 IT 뉴스 및 트렌드
+            </div>
+        </div>
+
+        <footer>
+            Team 얼기설기 | Project Lead: 김진모<br>
+            © 2025 AI Job Market Research
+        </footer>
+    </div>
+
+    <script>
+        function startService() {
+            // TODO: 실제 서비스 시작 로직 구현
+            alert('서비스 준비 중입니다!\n백엔드와 프론트엔드 구현 후 연결됩니다.');
+            
+            // 향후 페이지 이동 또는 대시보드 로드
+            // window.location.href = '/dashboard';
+        }
+    </script>
+</body>
+</html>
+
