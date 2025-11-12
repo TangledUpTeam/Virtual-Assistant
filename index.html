@@ -1,154 +1,125 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 기반 취업시장 분석 & 스펙 매칭 서비스</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: #333;
-        }
-
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 60px 50px;
-            text-align: center;
-            max-width: 600px;
-            width: 90%;
-        }
-
-        .logo {
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
-
-        h1 {
-            font-size: 28px;
-            color: #2d3748;
-            margin-bottom: 15px;
-            line-height: 1.4;
-        }
-
-        .subtitle {
-            font-size: 16px;
-            color: #718096;
-            margin-bottom: 40px;
-            line-height: 1.6;
-        }
-
-        .start-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 18px 50px;
-            font-size: 18px;
-            font-weight: 600;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .start-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-        }
-
-        .start-button:active {
-            transform: translateY(0);
-        }
-
-        .features {
-            margin-top: 50px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 20px;
-            text-align: left;
-        }
-
-        .feature-item {
-            padding: 15px;
-            background: #f7fafc;
-            border-radius: 10px;
-            font-size: 14px;
-            color: #4a5568;
-        }
-
-        .feature-icon {
-            font-size: 24px;
-            margin-bottom: 8px;
-        }
-
-        footer {
-            margin-top: 40px;
-            font-size: 14px;
-            color: #a0aec0;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <title>Hiyori Test</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#111}
+    #app{width:100%;height:100%}
+  </style>
 </head>
 <body>
-    <div class="container">
-        <div class="logo">🧭</div>
-        <h1>AI 기반 취업시장 분석<br>& 스펙 매칭 서비스</h1>
-        <p class="subtitle">
-            현재 시장이 요구하는 기술 트렌드와 개인 스펙 매칭도를 분석하여<br>
-            AI가 제시하는 취업 로드맵을 자동 생성합니다.
-        </p>
+  <div id="app"></div>
+
+  <script>
+    // CDN 순차 로딩 시스템
+    async function loadScript(url) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = url;
+        script.onload = () => {
+          console.log('✅ 로드 성공:', url);
+          resolve();
+        };
+        script.onerror = () => {
+          console.error('❌ 로드 실패:', url);
+          reject(new Error(`Failed to load: ${url}`));
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    async function init() {
+      try {
+        // 1. Pixi.js 로드
+        console.log('📦 Pixi.js 로딩 중...');
+        await loadScript('https://cdn.jsdelivr.net/npm/pixi.js@6.5.8/dist/browser/pixi.min.js');
+        console.log('✅ PIXI 버전:', PIXI.VERSION);
+
+        // 2. Live2D Cubism Core 로드
+        console.log('📦 Live2D Cubism Core 로딩 중...');
+        await loadScript('https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js');
+        console.log('✅ Live2DCubismCore 존재:', typeof Live2DCubismCore);
+
+        // 3. pixi-live2d-display 로드 (여러 CDN 시도)
+        console.log('📦 pixi-live2d-display 로딩 중...');
         
-        <button class="start-button" onclick="startService()">시작하기</button>
+        const cdnUrls = [
+          'https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.js',
+          'https://unpkg.com/pixi-live2d-display@0.4.0/dist/cubism4.js',
+          'https://cdn.jsdelivr.net/gh/guansss/pixi-live2d-display@v0.4.0/dist/cubism4.js'
+        ];
 
-        <div class="features">
-            <div class="feature-item">
-                <div class="feature-icon">📊</div>
-                <strong>시장 분석</strong><br>
-                전체 시장 기술 비중 시각화
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">🎯</div>
-                <strong>스펙 매칭</strong><br>
-                개인 스펙과 시장 요구 분석
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">🤖</div>
-                <strong>AI 인사이트</strong><br>
-                AI 기반 취업 로드맵 제시
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">📈</div>
-                <strong>트렌드 추적</strong><br>
-                최신 IT 뉴스 및 트렌드
-            </div>
-        </div>
-
-        <footer>
-            Team 얼기설기 | Project Lead: 김진모<br>
-            © 2025 AI Job Market Research
-        </footer>
-    </div>
-
-    <script>
-        function startService() {
-            // TODO: 실제 서비스 시작 로직 구현
-            alert('서비스 준비 중입니다!\n백엔드와 프론트엔드 구현 후 연결됩니다.');
-            
-            // 향후 페이지 이동 또는 대시보드 로드
-            // window.location.href = '/dashboard';
+        let loaded = false;
+        for (const url of cdnUrls) {
+          try {
+            console.log('🔄 시도 중:', url);
+            await loadScript(url);
+            if (PIXI.live2d && PIXI.live2d.Live2DModel) {
+              console.log('✅ pixi-live2d-display 로드 성공!');
+              loaded = true;
+              break;
+            }
+          } catch (e) {
+            console.warn('⚠️ 이 CDN은 실패, 다음 시도:', e.message);
+          }
         }
-    </script>
+
+        if (!loaded) {
+          throw new Error('모든 CDN에서 pixi-live2d-display 로드 실패');
+        }
+
+        console.log('=== 최종 확인 ===');
+        console.log('PIXI.live2d:', typeof PIXI.live2d);
+        console.log('PIXI.live2d.Live2DModel:', typeof PIXI.live2d.Live2DModel);
+        console.log('==================');
+
+        // 4. Pixi 앱 생성
+        const app = new PIXI.Application({ 
+          backgroundAlpha: 0, 
+          resizeTo: window 
+        });
+        document.getElementById("app").appendChild(app.view);
+
+        // 5. Live2D 모델 로드
+        const MODEL_URL = "public/models/hiyori_free_ko/runtime/hiyori_free_t08.model3.json";
+        
+        console.log('📦 Live2D 모델 로딩 중:', MODEL_URL);
+        const model = await PIXI.live2d.Live2DModel.from(MODEL_URL);
+        
+        console.log('✅ 모델 로드 완료!');
+
+        // 모델 위치 설정 (크기 축소)
+        model.anchor.set(0.5, 1);
+        model.scale.set(0.15); // 0.5에서 0.2로 축소
+        model.position.set(window.innerWidth / 2, window.innerHeight);
+        
+        app.stage.addChild(model);
+
+        // 클릭 모션
+        model.interactive = true;
+        model.on("pointertap", () => {
+          console.log('👆 캐릭터 클릭!');
+          if (model.motion) {
+            model.motion("Tap");
+          }
+        });
+
+        console.log('🎉 모든 설정 완료! 캐릭터를 클릭해보세요!');
+
+      } catch (e) {
+        console.error('❌ 초기화 실패:', e);
+        document.getElementById('app').innerHTML = 
+          `<div style="color:white;padding:20px;font-family:monospace;">
+            <h2>❌ 로드 실패</h2>
+            <p>${e.message}</p>
+            <p>F12를 눌러 Console 탭을 확인하세요.</p>
+          </div>`;
+      }
+    }
+
+    // 페이지 로드 후 초기화
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
 </body>
 </html>
-
