@@ -1,0 +1,26 @@
+{
+  "name": "virtual-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop Live2D assistant (Electron, transparent window)",
+  "main": "main.js",                      
+  "scripts": {
+    "start": "electron .",               
+    "start:dev": "electron .",
+    "postinstall": "echo Done"            
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TangledUpTeam/Virtual-Assistant.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/TangledUpTeam/Virtual-Assistant/issues"
+  },
+  "homepage": "https://github.com/TangledUpTeam/Virtual-Assistant#readme",
+  "devDependencies": {
+    "electron": "^39.1.2"                 
+  }
+}
