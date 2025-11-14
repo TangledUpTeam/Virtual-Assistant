@@ -184,7 +184,7 @@
         console.log('🔍 크기:', newScale.toFixed(2));
       };
 
-      // 키보드로 크기 조절: +/- 키만 사용
+      // 키보드로 크기 조절 및 종료: +/- 키, ESC 키
       window.addEventListener('keydown', (e) => {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault();
@@ -192,6 +192,12 @@
         } else if (e.key === '-' || e.key === '_') {
           e.preventDefault();
           adjustScale(-1);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          console.log('⌨️  ESC 키 - 앱 종료');
+          if (ipcRenderer) {
+            ipcRenderer.send('va:request-quit');
+          }
         }
       });
 
