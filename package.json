@@ -5,8 +5,10 @@
   "description": "Desktop Live2D assistant (Electron, transparent window)",
   "main": "main.js",                      
   "scripts": {
-    "start": "electron .",               
-    "start:dev": "electron .",
+    "start": "electron .",
+    "start:backend": "python assistant.py",
+    "start:dev": "concurrently \"npm run start:backend\" \"npm run start:electron\"",
+    "start:electron": "electron .",
     "postinstall": "echo Done"            
   },
   "repository": {
@@ -21,6 +23,8 @@
   },
   "homepage": "https://github.com/TangledUpTeam/Virtual-Assistant#readme",
   "devDependencies": {
-    "electron": "^39.1.2"                 
+    "concurrently": "^8.2.2",
+    "electron": "^39.1.2",
+    "wait-on": "^8.0.0"
   }
 }
