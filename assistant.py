@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
 Virtual Desk Assistant - Backend 실행 파일
 루트 디렉토리에서 실행: python assistant.py

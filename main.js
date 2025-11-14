@@ -145,7 +145,12 @@ app.whenReady().then(() => {
   console.log('🔧 백엔드 서버 시작 중...');
   backendProcess = spawn('python', ['assistant.py'], {
     stdio: 'inherit',
-    shell: true
+    shell: true,
+    env: {
+      ...process.env,
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONUTF8: '1'
+    }
   });
   
   backendProcess.on('error', (err) => {
