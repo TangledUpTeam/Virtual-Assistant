@@ -123,5 +123,6 @@ Desktop.ini
 *.txt
 *.pdf 
 *.docx
+*.md
 package-lock.json
 package.json
