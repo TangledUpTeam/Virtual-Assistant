@@ -119,3 +119,9 @@ Desktop.ini
 *.swp
 *.swo
 
+# data files
+*.txt
+*.pdf 
+*.docx
+package-lock.json
+package.json
