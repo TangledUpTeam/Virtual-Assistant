@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     
     # ChromaDB
-    CHROMA_PERSIST_DIRECTORY: str = "./data/chroma"
+    CHROMA_PERSIST_DIRECTORY: str = "./internal_docs/chroma"
     CHROMA_COLLECTION_NAME: str = "company_manuals"
     
     # Redis
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     
     # File Upload
     MAX_UPLOAD_SIZE_MB: int = 10
-    UPLOAD_DIR: str = "./data/uploads"
+    UPLOAD_DIR: str = "./internal_docs/uploads"
     
     # Logging
     LOG_LEVEL: str = "INFO"

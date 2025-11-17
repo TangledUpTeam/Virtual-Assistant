@@ -1,0 +1,21 @@
+{
+  "filename": "근무지변경.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[근무지 변경 및 재택근무 규정]\n\n■ 1. 근무지 변경\n- 사유: 조직개편, 장거리 통근, 건강 문제  \n- 절차: 본인 신청 → 팀장 승인 → HR 승인  \n- 변경 반영일: HR 시스템 정기 반영일 기준  \n\n■ 2. 재택근무 기준\n- 주 3회 가능  \n- 사전 승인 필수  \n- 회사 지급 노트북 사용  \n\n■ 3. 재택근무 보안 수칙\n- 공용공간 근무 금지  \n- 외부인 화면 노출 금지  \n- 지문·얼굴인식 잠금 설정 필수",
+      "metadata": {
+        "filename": "근무지변경.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-17 19:27:17.648379",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-17 19:27:17.648379",
+  "file_path": "internal_docs\\uploads\\근무지변경.txt"
+}

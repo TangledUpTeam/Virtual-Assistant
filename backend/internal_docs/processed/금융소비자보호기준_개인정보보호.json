@@ -1,0 +1,21 @@
+{
+  "filename": "금융소비자보호기준_개인정보보호.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[개인정보보호 및 금융소비자보호 내부통제 기준]\n\n■ 1. 개인정보보호 원칙\n- 최소 수집  \n- 목적 외 이용 금지  \n- 보유기간 경과 시 즉시 파기  \n\n■ 2. 직원 의무\n① 설명의무  \n② 확인의무  \n③ 적합성·적정성 판단 의무  \n④ 불공정영업행위 금지  \n\n■ 3. 위반 예시\n- 고객 동의 없는 정보 조회  \n- 민감정보 무단 저장  \n- 허위·과장 설명  \n\n■ 4. 위반 시 조치\n- 즉시 팀장/준법감시인 보고  \n- 경고·징계·법적 처벌 가능  \n\n■ 5. FAQ\nQ. 고객이 설명을 이해 못하면 어떻게 해야 하나?  \nA. 이해할 때까지 반복 설명해야 하며, \"설명의무 이행기록\"을 남겨야 합니다.",
+      "metadata": {
+        "filename": "금융소비자보호기준_개인정보보호.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-17 19:27:17.932602",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-17 19:27:17.932602",
+  "file_path": "internal_docs\\uploads\\금융소비자보호기준_개인정보보호.txt"
+}

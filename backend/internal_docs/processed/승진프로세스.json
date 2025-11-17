@@ -1,0 +1,21 @@
+{
+  "filename": "승진프로세스.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[승진 운영 절차]\n\n■ 1. 승진 요건\n- 근속 요건 충족  \n- 성과평가 B등급 이상 2회 이상  \n- 결격 사유 없음(징계, 경고 등)  \n\n■ 2. 승진 절차\n1) 후보자 추천  \n2) 평가 검토  \n3) 인사위원회 심의  \n4) 임원 승인  \n5) 공지  \n\n■ 3. FAQ\nQ. 승진 누락 사유는 공개되나요?  \nA. HR 및 팀장이 피드백 제공합니다.",
+      "metadata": {
+        "filename": "승진프로세스.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-17 19:27:31.955012",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-17 19:27:31.955012",
+  "file_path": "internal_docs\\uploads\\승진프로세스.txt"
+}

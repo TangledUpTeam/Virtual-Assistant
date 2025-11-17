@@ -1,0 +1,21 @@
+{
+  "filename": "인사평가.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[인사평가 운영 기준]\n\n■ 1. 평가 구성\n(1) 성과평가: 70%  \n- KPI 달성률  \n- 프로젝트 성과  \n- 조직 기여도  \n\n(2) 역량평가: 30%  \n- 커뮤니케이션  \n- 전문성  \n- 협업·조직문화  \n\n■ 2. 평가 등급\nS, A, B, C, D (상대평가 기준)  \n\n■ 3. 평가 절차\n목표 설정 → 중간 면담 → 최종 평가 → 보정회의 → 결과 발표  \n\n■ 4. FAQ\nQ. 평가 결과는 보상과 연동되나요?  \nA. 성과급·승진·보상에 모두 반영됩니다.",
+      "metadata": {
+        "filename": "인사평가.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-17 19:27:33.517091",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-17 19:27:33.517091",
+  "file_path": "internal_docs\\uploads\\인사평가.txt"
+}

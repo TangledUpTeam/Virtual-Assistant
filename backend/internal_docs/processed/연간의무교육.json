@@ -1,0 +1,21 @@
+{
+  "filename": "연간의무교육.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[연간 필수 교육 안내]\n\n■ 1. 필수 교육 항목\n① 개인정보보호 교육  \n② 성희롱 예방 교육  \n③ 산업안전 교육  \n④ 금융소비자보호 교육(금융업종 해당)  \n⑤ 정보보안 교육  \n\n■ 2. 교육 일정\n- 분기별 1회 배포  \n- 전체 교육은 해당 연도 12월 31일까지 수강해야 함\n\n■ 3. 교육 수강 방식\n- e-Learning 온라인 플랫폼  \n- 모바일 수강 가능  \n- 진도율 100% & 평가 점수 80점 이상 필수  \n\n■ 4. 미이수 시 조치\n- 평가 연동  \n- 팀장/부서장 경고  \n- 반복 시 징계 가능  \n\n■ 5. FAQ\nQ. 교육 중 종료하면 처음부터 다시 해야 하나요?  \nA. 아닙니다. 자동 저장됩니다.",
+      "metadata": {
+        "filename": "연간의무교육.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-17 19:27:32.203696",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-17 19:27:32.203696",
+  "file_path": "internal_docs\\uploads\\연간의무교육.txt"
+}

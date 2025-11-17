@@ -1,0 +1,21 @@
+{
+  "filename": "가치평가설명서.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[가치평가 및 성과평가 제도]\n\n■ 1. 평가 구성\n① 성과평가  \n- KPI 달성률  \n- 프로젝트 결과  \n- 비용 절감/매출 기여  \n\n② 가치평가  \n- 협업  \n- 커뮤니케이션  \n- 고객 중심 사고  \n- 윤리의식 및 책임성  \n\n■ 2. 평가 절차\n목표 설정 → 중간 점검 → 연말 평가 → 보정회의  \n\n■ 3. 평가 등급\nS/A/B/C/D  \n\n■ 4. FAQ\nQ. 평가 결과 이의 제기는 가능한가요?  \nA. 가능합니다. 결과 발표 후 7일 내 HR에 요청하세요.",
+      "metadata": {
+        "filename": "가치평가설명서.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-17 19:27:16.289748",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-17 19:27:16.289748",
+  "file_path": "internal_docs\\uploads\\가치평가설명서.txt"
+}
