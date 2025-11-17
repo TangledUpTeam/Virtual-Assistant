@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 let loginWin = null;
 let characterWin = null;
 let backendProcess = null;
+let loginWindowBounds = null; // 로그인 창의 위치 저장
 
 /**
  * 로그인/시작 창 생성
@@ -35,22 +36,55 @@ function createLoginWindow() {
     console.log('🔐 로그인 창 닫힘');
     loginWin = null;
   });
+  
+  // 로그인 창의 위치를 저장 (캐릭터 창을 같은 위치에 띄우기 위해)
+  loginWin.on('ready-to-show', () => {
+    loginWindowBounds = loginWin.getBounds();
+    console.log('📍 로그인 창 위치 저장:', loginWindowBounds);
+  });
+  
+  // 로그인 창을 이동할 때마다 위치 업데이트
+  loginWin.on('move', () => {
+    loginWindowBounds = loginWin.getBounds();
+  });
 }
 
 /**
  * 캐릭터 투명 창 생성
  */
 function createCharacterWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
   console.log('🎭 투명 전체화면 캐릭터 창 생성');
+  
+  // 로그인 창이 있던 디스플레이 찾기
+  let targetDisplay = screen.getPrimaryDisplay();
+  
+  if (loginWindowBounds) {
+    // 로그인 창의 중앙 위치 계산
+    const loginCenterX = loginWindowBounds.x + loginWindowBounds.width / 2;
+    const loginCenterY = loginWindowBounds.y + loginWindowBounds.height / 2;
+    
+    // 로그인 창이 있던 디스플레이 찾기
+    const displays = screen.getAllDisplays();
+    for (const display of displays) {
+      const { x, y, width, height } = display.bounds;
+      if (loginCenterX >= x && loginCenterX < x + width &&
+          loginCenterY >= y && loginCenterY < y + height) {
+        targetDisplay = display;
+        console.log('📍 로그인 창이 있던 디스플레이 찾음:', display.id);
+        break;
+      }
+    }
+  }
+  
+  const { x, y, width, height } = targetDisplay.workArea;
+  console.log(`📐 캐릭터 창 크기: ${width}x${height}, 위치: (${x}, ${y})`);
 
   // 전체 화면 투명 창 (클릭-스루 가능)
   characterWin = new BrowserWindow({
     width: width,
     height: height,
-    x: 0,
-    y: 0,
+    x: x,
+    y: y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -136,7 +170,37 @@ ipcMain.on('va:request-quit', () => {
   app.quit();
 });
 
-app.whenReady().then(() => {
+// 백엔드 서버가 준비될 때까지 대기하는 함수
+async function waitForBackend(maxRetries = 30) {
+  const http = require('http');
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await new Promise((resolve, reject) => {
+        const req = http.get('http://localhost:8000/health', (res) => {
+          if (res.statusCode === 200) {
+            resolve();
+          } else {
+            reject(new Error(`Status: ${res.statusCode}`));
+          }
+        });
+        req.on('error', reject);
+        req.setTimeout(1000);
+      });
+      
+      console.log('✅ 백엔드 서버 준비 완료!');
+      return true;
+    } catch (err) {
+      console.log(`⏳ 백엔드 대기 중... (${i + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  
+  console.error('❌ 백엔드 서버 시작 타임아웃');
+  return false;
+}
+
+app.whenReady().then(async () => {
   console.log('🚀 일렉트론 앱 시작!');
   console.log('📝 세션 기반 - 앱 종료 시 로그인 정보 삭제됨');
   console.log('⌨️  단축키: ESC = 종료, F12 = 개발자 도구');
@@ -161,11 +225,16 @@ app.whenReady().then(() => {
     console.log(`📴 백엔드 서버 종료됨 (코드: ${code})`);
   });
   
-  // 백엔드 시작 후 잠시 대기 (포트 8000 준비)
-  setTimeout(() => {
-    // 처음에는 로그인 창만 띄움
+  // 백엔드가 준비될 때까지 대기
+  const ready = await waitForBackend();
+  
+  if (ready) {
+    // 백엔드 준비 완료 후 로그인 창 띄움
     createLoginWindow();
-  }, 3000);
+  } else {
+    console.error('❌ 백엔드를 시작할 수 없습니다.');
+    app.quit();
+  }
 });
 
 app.on('window-all-closed', () => { 
