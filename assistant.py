@@ -35,5 +35,7 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,
-        reload_dirs=[str(BACKEND_DIR)]
+        reload_dirs=[str(BACKEND_DIR)],
+        log_config=None,  # 기본 로그 설정 사용 (색상 코드 제거)
+        use_colors=False  # Windows 호환성: 색상 출력 끄기
     )
