@@ -15,6 +15,22 @@ pip install -r rag_requirements.txt
 # OPENAI_API_KEY=your_key_here
 ```
 
+# internal_docs/uploads 폴더의 모든 파일 처리
+python -m app.domain.rag.cli upload internal_docs/uploads
+
+#단일 파일 처리할 때
+# PDF 파일
+python -m app.domain.rag.cli upload 파일경로.pdf
+
+# 텍스트 파일
+python -m app.domain.rag.cli upload 파일경로.txt
+
+# 마크다운 파일
+python -m app.domain.rag.cli upload 파일경로.md
+
+#질의응답 시작
+python -m app.domain.rag.cli query
+
 ### 2. PDF 업로드
 
 ```bash

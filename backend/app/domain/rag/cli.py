@@ -218,12 +218,13 @@ class RAGCLI:
                 
                 # 참고 문서 출력
                 if response.retrieved_chunks:
-                    console.print(f"\n[dim]참고 문서 ({len(response.retrieved_chunks)}개):[/dim]")
+                    console.print(f"\n[bold cyan]참고 문서 ({len(response.retrieved_chunks)}개):[/bold cyan]")
                     for i, chunk in enumerate(response.retrieved_chunks, 1):
+                        score_color = "green" if chunk.score >= 0.7 else "yellow" if chunk.score >= 0.5 else "red"
                         console.print(
-                            f"  {i}. {chunk.metadata.get('filename', 'Unknown')} "
+                            f"  {i}. [cyan]{chunk.metadata.get('filename', 'Unknown')}[/cyan] "
                             f"(페이지 {chunk.metadata.get('page_number', '?')}) "
-                            f"- 유사도: {chunk.score:.2f}"
+                            f"- 유사도: [{score_color}]{chunk.score:.4f}[/{score_color}]"
                         )
                 
                 console.print(f"\n[dim]처리 시간: {response.processing_time:.2f}초[/dim]")
@@ -257,11 +258,13 @@ class RAGCLI:
             
             # 참고 문서
             if response.retrieved_chunks:
-                console.print(f"\n[dim]참고 문서:[/dim]")
+                console.print(f"\n[bold cyan]참고 문서 ({len(response.retrieved_chunks)}개):[/bold cyan]")
                 for i, chunk in enumerate(response.retrieved_chunks, 1):
+                    score_color = "green" if chunk.score >= 0.7 else "yellow" if chunk.score >= 0.5 else "red"
                     console.print(
-                        f"  {i}. {chunk.metadata.get('filename', 'Unknown')} "
-                        f"(페이지 {chunk.metadata.get('page_number', '?')})"
+                        f"  {i}. [cyan]{chunk.metadata.get('filename', 'Unknown')}[/cyan] "
+                        f"(페이지 {chunk.metadata.get('page_number', '?')}) "
+                        f"- 유사도: [{score_color}]{chunk.score:.4f}[/{score_color}]"
                     )
             
             console.print(f"\n[dim]처리 시간: {response.processing_time:.2f}초[/dim]")

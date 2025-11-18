@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
     
+    # LangSmith (Optional)
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = "virtual-assistant-rag"
+    LANGSMITH_TRACING: str = "false"
+    
     # ChromaDB
     CHROMA_PERSIST_DIRECTORY: str = "./internal_docs/chroma"
     CHROMA_COLLECTION_NAME: str = "company_manuals"

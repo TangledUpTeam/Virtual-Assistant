@@ -5,6 +5,11 @@ LangChain을 사용하여 문서를 마크다운 형식으로 변환하고 시�
 """
 
 from typing import List
+try:
+    from langchain_core.documents import Document as LangChainDocument
+except ImportError:
+    # 구버전 호환성
+    from langchain.schema import Document as LangChainDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import tiktoken
 
@@ -122,12 +127,23 @@ class DocumentConverter:
                 chunks.append(chunk)
                 
             else:
-                # 텍스트 분할
-                split_texts = self.text_splitter.split_text(markdown_text)
+                # LangChain Document 객체 생성
+                langchain_doc = LangChainDocument(
+                    page_content=markdown_text,
+                    metadata={
+                        "filename": processed_doc.filename,
+                        "page_number": content.metadata.page_number,
+                        "content_type": content.content_type,
+                        "document_id": document_id
+                    }
+                )
                 
-                for idx, split_text in enumerate(split_texts):
+                # LangChain Text Splitter로 분할
+                split_docs = self.text_splitter.split_documents([langchain_doc])
+                
+                for idx, split_doc in enumerate(split_docs):
                     # 최소 청크 크기 확인
-                    if self._token_length(split_text) < self.config.RAG_MIN_CHUNK_SIZE:
+                    if self._token_length(split_doc.page_content) < self.config.RAG_MIN_CHUNK_SIZE:
                         continue
                     
                     chunk_id = f"{document_id}_p{content.metadata.page_number}_c{idx}"
@@ -139,11 +155,11 @@ class DocumentConverter:
                         page_number=content.metadata.page_number,
                         content_type=content.content_type,
                         chunk_index=idx,
-                        total_chunks=len(split_texts)
+                        total_chunks=len(split_docs)
                     )
                     
                     chunk = DocumentChunk(
-                        text=split_text,
+                        text=split_doc.page_content,
                         metadata=metadata
                     )
                     chunks.append(chunk)

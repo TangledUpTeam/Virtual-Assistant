@@ -5,6 +5,7 @@ RAG 전용 설정 파일
 """
 
 from pathlib import Path
+from typing import Optional
 from app.core.config import settings
 
 
@@ -89,6 +90,25 @@ class RAGConfig:
     # 검색 설정
     RAG_TOP_K: int = 3
     RAG_MAX_TOP_K: int = 4
+    RAG_SIMILARITY_THRESHOLD: float = 0.25  # 거리도 threshold (0.0 ~ 1.0, 높을수록 유사도 높음)
+    # Cosine distance (0~2)를 similarity (0~1)로 변환: similarity = 1 - distance/2
+    # threshold 0.35 = distance 1.3 이하 (낮은 threshold로 더 많은 결과 포함)
+    
+    # LangSmith 설정
+    @property
+    def LANGSMITH_API_KEY(self) -> Optional[str]:
+        """LangSmith API Key (core settings에서 읽기)"""
+        return self._settings.LANGSMITH_API_KEY if self._settings.LANGSMITH_API_KEY else None
+    
+    @property
+    def LANGSMITH_PROJECT(self) -> str:
+        """LangSmith 프로젝트명"""
+        return self._settings.LANGSMITH_PROJECT
+    
+    @property
+    def LANGSMITH_TRACING(self) -> bool:
+        """LangSmith 추적 활성화 여부"""
+        return self._settings.LANGSMITH_TRACING.lower() == "true"
     
     # PDF 처리 설정
     MAX_IMAGE_SIZE: tuple = (1024, 1024)

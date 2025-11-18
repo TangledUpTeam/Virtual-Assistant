@@ -1,24 +1,49 @@
-# ========================================
-# RAG 시스템 추가 패키지
-# ========================================
-# 사용자가 수동으로 설치해야 합니다:
-# pip install -r rag_requirements.txt
-#
-# 주의: 기존 requirements.txt에 있는 패키지는 제외
-# (openai, chromadb, tiktoken, rich는 이미 설치됨)
+#########################################
+# 1. Core
+#########################################
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+python-dotenv==1.0.1
+python-dateutil==2.9.0.post0
+rich==13.9.4
+matplotlib==3.9.0
+httpx==0.27.0
 
-# PDF 처리
-PyMuPDF>=1.23.0
-pdfplumber>=0.10.0
+#########################################
+# 2. Torch (CPU) — NLP보다 먼저 깔기
+#########################################
+torch==2.4.0
+torchaudio==2.4.0
+torchvision==0.19.0
 
-# 한국어 임베딩
-sentence-transformers>=2.2.0
+#########################################
+# 3. NLP / Transformers — Torch 이후
+#########################################
+tiktoken==0.7.0
+transformers==4.44.2
+sentence-transformers==2.6.1
 
-# LangChain
-langchain>=0.1.0
-langchain-community>=0.0.10
-langchain-text-splitters>=0.0.1
-
-# 이미지 처리
+#########################################
+# 4. PDF 처리 — Torch/Transformers 이후
+#########################################
+PyMuPDF==1.23.9
+pdfplumber==0.10.4
 Pillow>=10.0.0
+
+#########################################
+# 5. OpenAI SDK
+#########################################
+openai==1.109.1
+
+#########################################
+# 6. LangChain (RAG)
+#########################################
+langchain==1.0.7
+langchain-core==1.0.5
+langchain-community==0.4.1
+langchain-text-splitters==1.0.0
+langchain-openai==1.0.3
+langsmith==0.4.43
+
 

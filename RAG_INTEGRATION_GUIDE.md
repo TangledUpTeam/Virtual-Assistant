@@ -333,7 +333,7 @@ CLI를 사용하여 바로 테스트할 수 있습니다:
 
 ```bash
 cd Virtual-Assistant/backend
-python -m app.domain.rag.cli upload "your_document.pdf"
+python -m app.domain.rag.cli upload
 python -m app.domain.rag.cli query
 ```
 

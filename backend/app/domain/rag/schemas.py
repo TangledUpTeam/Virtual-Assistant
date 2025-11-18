@@ -97,6 +97,7 @@ class QueryRequest(BaseModel):
     """질의응답 요청"""
     query: str
     top_k: Optional[int] = Field(default=3, ge=1, le=10)
+    similarity_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)  # 거리도 threshold
     collection_name: Optional[str] = None
 
 
