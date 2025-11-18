@@ -5,6 +5,7 @@ CanonicalReport를 RAG용 청크로 변환하는 기능 제공
 LLM 없이 Python 코드만으로 처리
 """
 import uuid
+import hashlib
 from typing import List, Dict, Any
 
 from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
@@ -14,6 +15,29 @@ from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
 # 설정
 # ========================================
 MAX_CHUNK_LENGTH = 1000  # 최대 청크 텍스트 길이 (글자 수)
+
+
+# ========================================
+# ID 생성 함수
+# ========================================
+def generate_chunk_id(*parts: str) -> str:
+    """
+    결정적(deterministic) chunk ID 생성
+    
+    동일한 입력에 대해 항상 동일한 ID를 생성합니다.
+    이를 통해 재실행 시 중복 데이터가 쌓이지 않습니다.
+    
+    Args:
+        *parts: ID 생성에 사용할 문자열들
+        
+    Returns:
+        SHA256 해시 기반 ID (32자)
+    """
+    # 모든 부분을 결합
+    combined = "|".join(str(p) for p in parts)
+    # SHA256 해시 생성 (32자로 축약)
+    hash_obj = hashlib.sha256(combined.encode('utf-8'))
+    return hash_obj.hexdigest()[:32]
 
 
 # ========================================
@@ -197,14 +221,16 @@ def _chunk_task(
     
     # 텍스트 길이 체크 및 분할
     if len(text) <= MAX_CHUNK_LENGTH:
-        chunk_id = str(uuid.uuid4())
+        # deterministic ID 생성
+        chunk_id = generate_chunk_id(canonical.report_id, "task", task.task_id or "", "0")
         return [_create_chunk(chunk_id, text, metadata)]
     else:
         # 긴 텍스트는 분할
         text_parts = _split_text_by_length(text, MAX_CHUNK_LENGTH)
         chunks = []
         for idx, part in enumerate(text_parts):
-            chunk_id = str(uuid.uuid4())
+            # deterministic ID 생성 (part index 포함)
+            chunk_id = generate_chunk_id(canonical.report_id, "task", task.task_id or "", str(idx))
             # 분할 청크용 메타데이터 재생성
             part_metadata = build_chunk_metadata(
                 chunk_type="task",
@@ -257,13 +283,13 @@ def _chunk_kpi(
     
     # 텍스트 길이 체크 및 분할
     if len(text) <= MAX_CHUNK_LENGTH:
-        chunk_id = str(uuid.uuid4())
+        chunk_id = generate_chunk_id(canonical.report_id, "kpi", kpi.name or kpi.kpi_name or "", "0")
         return [_create_chunk(chunk_id, text, metadata)]
     else:
         text_parts = _split_text_by_length(text, MAX_CHUNK_LENGTH)
         chunks = []
         for idx, part in enumerate(text_parts):
-            chunk_id = str(uuid.uuid4())
+            chunk_id = generate_chunk_id(canonical.report_id, "kpi", kpi.name or kpi.kpi_name or "", str(idx))
             # 분할 청크용 메타데이터 재생성
             part_metadata = build_chunk_metadata(
                 chunk_type="kpi",
@@ -282,7 +308,8 @@ def _chunk_kpi(
 # ========================================
 def _chunk_issue(
     issue: str,
-    canonical: CanonicalReport
+    canonical: CanonicalReport,
+    issue_idx: int = 0
 ) -> List[Dict[str, Any]]:
     """
     Issue 문자열을 청크로 변환
@@ -302,13 +329,13 @@ def _chunk_issue(
     
     # 텍스트 길이 체크 및 분할
     if len(issue) <= MAX_CHUNK_LENGTH:
-        chunk_id = str(uuid.uuid4())
+        chunk_id = generate_chunk_id(canonical.report_id, "issue", str(issue_idx), "0")
         return [_create_chunk(chunk_id, issue, metadata)]
     else:
         text_parts = _split_text_by_length(issue, MAX_CHUNK_LENGTH)
         chunks = []
         for idx, part in enumerate(text_parts):
-            chunk_id = str(uuid.uuid4())
+            chunk_id = generate_chunk_id(canonical.report_id, "issue", str(issue_idx), str(idx))
             # 분할 청크용 메타데이터 재생성
             part_metadata = build_chunk_metadata(
                 chunk_type="issue",
@@ -325,7 +352,8 @@ def _chunk_issue(
 # ========================================
 def _chunk_plan(
     plan: str,
-    canonical: CanonicalReport
+    canonical: CanonicalReport,
+    plan_idx: int = 0
 ) -> List[Dict[str, Any]]:
     """
     Plan 문자열을 청크로 변환
@@ -345,13 +373,13 @@ def _chunk_plan(
     
     # 텍스트 길이 체크 및 분할
     if len(plan) <= MAX_CHUNK_LENGTH:
-        chunk_id = str(uuid.uuid4())
+        chunk_id = generate_chunk_id(canonical.report_id, "plan", str(plan_idx), "0")
         return [_create_chunk(chunk_id, plan, metadata)]
     else:
         text_parts = _split_text_by_length(plan, MAX_CHUNK_LENGTH)
         chunks = []
         for idx, part in enumerate(text_parts):
-            chunk_id = str(uuid.uuid4())
+            chunk_id = generate_chunk_id(canonical.report_id, "plan", str(plan_idx), str(idx))
             # 분할 청크용 메타데이터 재생성
             part_metadata = build_chunk_metadata(
                 chunk_type="plan",
@@ -427,13 +455,13 @@ def _chunk_summary(canonical: CanonicalReport) -> List[Dict[str, Any]]:
     
     # 텍스트 길이 체크 및 분할
     if len(text) <= MAX_CHUNK_LENGTH:
-        chunk_id = str(uuid.uuid4())
+        chunk_id = generate_chunk_id(canonical.report_id, "summary", "0")
         return [_create_chunk(chunk_id, text, metadata)]
     else:
         text_parts = _split_text_by_length(text, MAX_CHUNK_LENGTH)
         chunks = []
         for idx, part in enumerate(text_parts):
-            chunk_id = str(uuid.uuid4())
+            chunk_id = generate_chunk_id(canonical.report_id, "summary", str(idx))
             # 분할 청크용 메타데이터 재생성
             part_metadata = build_chunk_metadata(
                 chunk_type="summary",
@@ -484,13 +512,13 @@ def chunk_report(
         chunks.extend(kpi_chunks)
     
     # (3) Issues 청킹
-    for issue in canonical_report.issues:
-        issue_chunks = _chunk_issue(issue, canonical_report)
+    for idx, issue in enumerate(canonical_report.issues):
+        issue_chunks = _chunk_issue(issue, canonical_report, issue_idx=idx)
         chunks.extend(issue_chunks)
     
     # (4) Plans 청킹
-    for plan in canonical_report.plans:
-        plan_chunks = _chunk_plan(plan, canonical_report)
+    for idx, plan in enumerate(canonical_report.plans):
+        plan_chunks = _chunk_plan(plan, canonical_report, plan_idx=idx)
         chunks.extend(plan_chunks)
     
     # (5) Summary 청킹 (옵션)
@@ -529,8 +557,9 @@ def get_chunk_statistics(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
         chunk_type = chunk["metadata"].get("chunk_type", "unknown")
         stats["chunk_types"][chunk_type] = stats["chunk_types"].get(chunk_type, 0) + 1
         
-        # 텍스트 길이 통계
-        text_length = len(chunk["text"])
+        # 텍스트 길이 통계 (chunk_text 또는 text 키 모두 지원)
+        text = chunk.get("chunk_text") or chunk.get("text", "")
+        text_length = len(text)
         total_length += text_length
         stats["max_text_length"] = max(stats["max_text_length"], text_length)
         stats["min_text_length"] = min(stats["min_text_length"], text_length)

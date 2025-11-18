@@ -39,6 +39,13 @@ pydantic-settings==2.6.1
 openai==1.57.0
 tiktoken==0.8.0
 
+# LangChain
+langchain==0.3.0
+langchain-openai==0.2.0
+langchain-core==0.3.0
+langchain-community==0.3.0
+langgraph==0.2.0
+
 # ========================================
 # Vector Database
 # ========================================
