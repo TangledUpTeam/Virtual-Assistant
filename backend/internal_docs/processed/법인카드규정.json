@@ -1,0 +1,21 @@
+{
+  "filename": "법인카드규정.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[출장비 및 법인카드 사용 규정]\n\n■ 1. 출장비 지급 기준\n- 교통비: 실비  \n- 숙박비: 지역별 기준 금액  \n- 식비: 1일 3만원 한도  \n\n■ 2. 법인카드 사용 원칙\n① 업무 관련 지출만 가능  \n② 개인 식비·가족 식비 사용 금지  \n③ 사적 사용 적발 시 전액 환수 + 징계  \n\n■ 3. 증빙 제출 기준\n- 모든 사용 건에 대한 영수증 필수  \n- 간이영수증 불가  \n- 전자영수증 권장  \n\n■ 4. FAQ\nQ. 개인 카드로 먼저 결제하고 법인으로 처리 가능?  \nA. 가능합니다. 단, 영수증과 사유 제출 필수.\n\nQ. 출장 중 커피 구매는 법인카드 사용 가능한가?  \nA. 가능합니다. 단, 1인 기준 적정 금액만 인정됩니다.",
+      "metadata": {
+        "filename": "법인카드규정.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-18 17:46:56.404666",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-18 17:46:56.404666",
+  "file_path": "internal_docs\\uploads\\법인카드규정.txt"
+}

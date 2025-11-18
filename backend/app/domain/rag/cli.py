@@ -308,6 +308,45 @@ class RAGCLI:
         except Exception as e:
             console.print(f"[red]오류 발생: {e}[/red]")
             logger.exception("JSON 파일 경로 업데이트 중 오류")
+    
+    def reset_collection(self, confirm: bool = False):
+        """
+        벡터 DB 컬렉션 초기화 (모든 문서 삭제)
+        
+        Args:
+            confirm: 확인 없이 바로 초기화 (기본값: False)
+        """
+        if not confirm:
+            console.print(Panel.fit(
+                "[bold yellow]경고: 벡터 DB 컬렉션 초기화[/bold yellow]\n\n"
+                "이 작업은 모든 저장된 문서와 임베딩을 삭제합니다.\n"
+                "이 작업은 되돌릴 수 없습니다!",
+                border_style="yellow"
+            ))
+            
+            # 현재 저장된 문서 수 확인
+            doc_count = self.vector_store.count_documents()
+            console.print(f"\n[dim]현재 저장된 청크 수: {doc_count}개[/dim]")
+            
+            # 확인 입력
+            response = console.input("\n[bold red]정말로 초기화하시겠습니까? (yes/no):[/bold red] ")
+            
+            if response.lower() not in ['yes', 'y', '예']:
+                console.print("[cyan]초기화가 취소되었습니다.[/cyan]")
+                return
+        
+        try:
+            console.print("\n[yellow]컬렉션 초기화 중...[/yellow]")
+            
+            # 컬렉션 초기화
+            self.vector_store.reset_collection()
+            
+            console.print("[green]OK - Collection reset successfully![/green]")
+            console.print("[dim]You can now upload new documents.[/dim]")
+            
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            logger.exception("컬렉션 초기화 중 오류")
 
 
 def main():
@@ -334,6 +373,10 @@ def main():
   # 통계 확인
   python -m app.domain.rag.cli stats
   
+  # 컬렉션 초기화 (모든 문서 삭제)
+  python -m app.domain.rag.cli reset
+  python -m app.domain.rag.cli reset --yes  # 확인 없이 바로 초기화
+  
   # 기존 JSON 파일 경로 업데이트 (data → internal_docs)
   python -m app.domain.rag.cli update-paths
         """
@@ -352,6 +395,10 @@ def main():
     
     # stats 명령어
     subparsers.add_parser('stats', help='시스템 통계 출력')
+    
+    # reset 명령어
+    reset_parser = subparsers.add_parser('reset', help='벡터 DB 컬렉션 초기화 (모든 문서 삭제)')
+    reset_parser.add_argument('--yes', '-y', action='store_true', help='확인 없이 바로 초기화')
     
     # update-paths 명령어
     subparsers.add_parser('update-paths', help='기존 JSON 파일들의 경로를 data에서 internal_docs로 업데이트')
@@ -375,6 +422,9 @@ def main():
     
     elif args.command == 'stats':
         cli.show_stats()
+    
+    elif args.command == 'reset':
+        cli.reset_collection(confirm=args.yes)
     
     elif args.command == 'update-paths':
         cli.update_json_paths()

@@ -5,6 +5,7 @@ LangChain을 사용하여 문서를 마크다운 형식으로 변환하고 시�
 """
 
 from typing import List
+import uuid
 try:
     from langchain_core.documents import Document as LangChainDocument
 except ImportError:
@@ -108,7 +109,8 @@ class DocumentConverter:
             
             # 청크 크기보다 작으면 분할하지 않음
             if token_length <= self.config.RAG_MAX_CHUNK_SIZE:
-                chunk_id = f"{document_id}_p{content.metadata.page_number}_c0"
+                # UUID 기반 청크 ID 생성
+                chunk_id = str(uuid.uuid4())
                 
                 metadata = ChunkMetadata(
                     chunk_id=chunk_id,
@@ -146,7 +148,8 @@ class DocumentConverter:
                     if self._token_length(split_doc.page_content) < self.config.RAG_MIN_CHUNK_SIZE:
                         continue
                     
-                    chunk_id = f"{document_id}_p{content.metadata.page_number}_c{idx}"
+                    # UUID 기반 청크 ID 생성
+                    chunk_id = str(uuid.uuid4())
                     
                     metadata = ChunkMetadata(
                         chunk_id=chunk_id,
