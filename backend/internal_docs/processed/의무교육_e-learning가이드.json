@@ -1,0 +1,21 @@
+{
+  "filename": "의무교육_e-learning가이드.txt",
+  "total_pages": 1,
+  "contents": [
+    {
+      "content_type": "text",
+      "text": "[e-Learning 플랫폼 사용 안내]\n\n■ 1. 로그인\n- 사내 계정(ID/PW) 동일  \n- 모바일·PC 모두 지원  \n\n■ 2. 지원 기능\n- 필수 교육 수강  \n- 선택 교육 수강  \n- 시험 응시  \n- 수료증 출력  \n- 전체 교육 이력 관리  \n\n■ 3. 수료 기준\n- 진도율 100%  \n- 평가 점수 80점 이상  \n\n■ 4. FAQ\nQ. 수료증은 어디서 볼 수 있나요?  \nA. “My 학습현황 → 수료증 보기”에서 확인 가능합니다.",
+      "metadata": {
+        "filename": "의무교육_e-learning가이드.txt",
+        "page_number": 1,
+        "content_type": "text",
+        "total_pages": 1,
+        "processed_at": "2025-11-18 17:47:08.805265",
+        "file_size": null
+      },
+      "table_data": null
+    }
+  ],
+  "processed_at": "2025-11-18 17:47:08.805265",
+  "file_path": "internal_docs\\uploads\\의무교육_e-learning가이드.txt"
+}
