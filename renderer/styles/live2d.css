@@ -1,0 +1,17 @@
+/* ========================================
+ * Live2D 스테이지 (전체 화면)
+ * ======================================== */
+ #stage {
+   position: fixed;
+   inset: 0;
+   pointer-events: none; /* 🔥 배경은 클릭 불가 */
+   z-index: 1; /* 채팅창 아래 */
+ }
+ 
+/* canvas만 클릭 가능 (Live2D 캐릭터) */
+#stage canvas {
+  pointer-events: auto !important;
+  cursor: move;
+  /* z-index 제거: stage의 z-index를 상속 */
+}
+
