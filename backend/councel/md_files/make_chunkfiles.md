@@ -17,14 +17,14 @@
 ```json
 {
   "id": "rogers_012",
-  "text": "칼 로저스는 인간중심 상담 이론의 핵심은...",
+  "text": "아들러는 개인중심 상담 이론의 핵심은...",
   "metadata": {
     "source": "rogers_theory.md",
     "author": "Carl Rogers",
     "category": "theory",
     "topic": "client-centered therapy",
     "year": "1951",
-    "tags": ["칼 로저스", "인간중심", "상담이론"],
+    "tags": ["아들러", "개인중심", "상담이론"],
     "chunk_index": 12,
     "total_chunks": 38
   }
