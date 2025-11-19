@@ -49,9 +49,21 @@ logs/
 *.log
 
 # Data
-data/
 uploads/
+
+# ChromaDB (벡터 DB는 로컬에서 생성)
 chroma/
+**/chroma/
+
+# Ephemeral sessions (임시 세션 데이터)
+**/ephemeral/
+
+# 하지만 브레인스토밍 임베딩 JSON은 Git에 포함
+!backend/app/domain/brainstorming/data/
+!backend/app/domain/brainstorming/data/embeddings/
+!backend/app/domain/brainstorming/data/embeddings/*.json
+!backend/app/domain/brainstorming/data/prompts/
+!backend/app/domain/brainstorming/data/prompts/*.md
 
 # OS
 .DS_Store
