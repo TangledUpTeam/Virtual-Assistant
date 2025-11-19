@@ -12,6 +12,8 @@ from typing import Optional, Dict, Any
 import openai
 from pydantic import BaseModel
 
+from app.core.config import settings
+
 
 class LLMClient:
     """OpenAI LLM 클라이언트"""
@@ -33,7 +35,7 @@ class LLMClient:
             max_tokens: 최대 토큰 수
         """
         self.model = model
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key or settings.OPENAI_API_KEY
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.client = openai.OpenAI(api_key=self.api_key)

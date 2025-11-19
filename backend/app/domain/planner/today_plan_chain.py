@@ -107,7 +107,7 @@ class TodayPlanGenerator:
         
         # Step 2: LLM 프롬프트 구성
         user_prompt = self._build_user_prompt(
-            today=request.date,
+            today=request.target_date,
             owner=request.owner,
             unresolved=unresolved,
             next_day_plan=next_day_plan

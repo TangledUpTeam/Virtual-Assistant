@@ -15,6 +15,7 @@ from app.domain.planner.tools import YesterdayReportTool
 from app.domain.search.retriever import UnifiedRetriever
 from app.infrastructure.vector_store import get_unified_collection
 from app.llm.client import get_llm
+from app.core.config import settings
 
 
 router = APIRouter(prefix="/plan", tags=["plan"])
@@ -23,7 +24,10 @@ router = APIRouter(prefix="/plan", tags=["plan"])
 def get_today_plan_generator() -> TodayPlanGenerator:
     """TodayPlanGenerator 의존성 주입"""
     collection = get_unified_collection()
-    retriever = UnifiedRetriever(collection)
+    retriever = UnifiedRetriever(
+        collection=collection,
+        openai_api_key=settings.OPENAI_API_KEY
+    )
     retriever_tool = YesterdayReportTool(retriever)
     llm_client = get_llm(model="gpt-4o-mini", temperature=0.7)
     

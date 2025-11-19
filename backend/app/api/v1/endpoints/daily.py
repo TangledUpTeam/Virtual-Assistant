@@ -6,10 +6,11 @@ Daily Report API
 Author: AI Assistant
 Created: 2025-11-18
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import date
+from sqlalchemy.orm import Session
 
 from app.domain.daily.fsm_state import DailyFSMContext
 from app.domain.daily.time_slots import generate_time_slots
@@ -18,8 +19,11 @@ from app.domain.daily.daily_fsm import DailyReportFSM
 from app.domain.daily.daily_builder import build_daily_report
 from app.domain.daily.session_manager import get_session_manager
 from app.domain.daily.main_tasks_store import get_main_tasks_store
+from app.domain.daily.repository import DailyReportRepository
+from app.domain.daily.schemas import DailyReportCreate
 from app.llm.client import get_llm
 from app.domain.report.schemas import CanonicalReport
+from app.infrastructure.database.session import get_db
 
 
 router = APIRouter(prefix="/daily", tags=["daily"])
@@ -38,11 +42,10 @@ class DailyStartRequest(BaseModel):
 
 class DailyStartResponse(BaseModel):
     """일일보고서 작성 시작 응답"""
+    status: str = Field(default="in_progress", description="항상 in_progress")
     session_id: str
     question: str
-    current_index: int
-    total_ranges: int
-    finished: bool
+    meta: Dict[str, Any] = Field(default_factory=dict, description="메타 정보")
 
 
 class DailyAnswerRequest(BaseModel):
@@ -53,12 +56,11 @@ class DailyAnswerRequest(BaseModel):
 
 class DailyAnswerResponse(BaseModel):
     """답변 입력 응답"""
+    status: str = Field(..., description="in_progress 또는 finished")
     session_id: str
-    question: str = Field("", description="다음 질문 (finished=True면 빈 문자열)")
-    current_index: int
-    total_ranges: int
-    finished: bool
-    tasks_collected: int = Field(0, description="수집된 태스크 수")
+    question: Optional[str] = Field(None, description="다음 질문 (finished 시 None)")
+    message: Optional[str] = Field(None, description="완료 메시지 (finished 시)")
+    meta: Optional[Dict[str, Any]] = Field(None, description="메타 정보")
     report: Optional[CanonicalReport] = Field(None, description="완료 시 보고서")
 
 
@@ -115,12 +117,20 @@ async def start_daily_report(request: DailyStartRequest):
         # 세션 업데이트
         session_manager.update_session(session_id, result["state"])
         
+        # 현재 시간대 가져오기
+        current_time_range = time_ranges[result["current_index"]] if result["current_index"] < len(time_ranges) else ""
+        
         return DailyStartResponse(
+            status="in_progress",
             session_id=session_id,
             question=result["question"],
-            current_index=result["current_index"],
-            total_ranges=result["total_ranges"],
-            finished=result["finished"]
+            meta={
+                "owner": request.owner,
+                "date": request.target_date.isoformat(),
+                "time_range": current_time_range,
+                "current_index": result["current_index"],
+                "total_ranges": result["total_ranges"]
+            }
         )
     
     except Exception as e:
@@ -128,7 +138,10 @@ async def start_daily_report(request: DailyStartRequest):
 
 
 @router.post("/answer", response_model=DailyAnswerResponse)
-async def answer_daily_question(request: DailyAnswerRequest):
+async def answer_daily_question(
+    request: DailyAnswerRequest,
+    db: Session = Depends(get_db)
+):
     """
     시간대 질문에 답변
     
@@ -155,9 +168,9 @@ async def answer_daily_question(request: DailyAnswerRequest):
         updated_context = result["state"]
         session_manager.update_session(request.session_id, updated_context)
         
-        # 완료 시 보고서 생성
-        report = None
+        # 완료 여부 확인
         if result["finished"]:
+            # 보고서 생성
             report = build_daily_report(
                 owner=updated_context.owner,
                 target_date=updated_context.target_date,
@@ -165,18 +178,47 @@ async def answer_daily_question(request: DailyAnswerRequest):
                 time_tasks=updated_context.time_tasks
             )
             
+            # 🔥 운영 DB에 저장 (PostgreSQL)
+            try:
+                report_dict = report.model_dump(mode='json')
+                report_create = DailyReportCreate(
+                    owner=report.owner,
+                    report_date=report.period_start,
+                    report_json=report_dict
+                )
+                db_report, is_created = DailyReportRepository.create_or_update(
+                    db, report_create
+                )
+                action = "생성" if is_created else "업데이트"
+                print(f"💾 운영 DB 저장 완료 ({action}): {report.owner} - {report.period_start}")
+            except Exception as db_error:
+                print(f"⚠️  운영 DB 저장 실패 (계속 진행): {str(db_error)}")
+                # DB 저장 실패해도 보고서는 반환 (사용자에게는 성공으로 표시)
+            
             # 세션 삭제
             session_manager.delete_session(request.session_id)
-        
-        return DailyAnswerResponse(
-            session_id=request.session_id,
-            question=result["question"],
-            current_index=result["current_index"],
-            total_ranges=result["total_ranges"],
-            finished=result["finished"],
-            tasks_collected=result["tasks_collected"],
-            report=report
-        )
+            
+            return DailyAnswerResponse(
+                status="finished",
+                session_id=request.session_id,
+                message="모든 시간대 입력이 완료되었습니다. 오늘 일일보고서를 정리했어요.",
+                report=report
+            )
+        else:
+            # 다음 질문 반환
+            current_time_range = updated_context.time_ranges[result["current_index"]] if result["current_index"] < len(updated_context.time_ranges) else ""
+            
+            return DailyAnswerResponse(
+                status="in_progress",
+                session_id=request.session_id,
+                question=result["question"],
+                meta={
+                    "time_range": current_time_range,
+                    "current_index": result["current_index"],
+                    "total_ranges": result["total_ranges"],
+                    "tasks_collected": result["tasks_collected"]
+                }
+            )
     
     except HTTPException:
         raise
