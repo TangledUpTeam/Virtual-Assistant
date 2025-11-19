@@ -18,7 +18,7 @@
        overflow: hidden;
        background: transparent;
        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-       pointer-events: none; /* 기본적으로 클릭 불가 */
+       /* pointer-events는 각 요소별로 CSS에서 제어 */
      }
      /* 나머지 스타일은 별도 CSS 파일로 분리됨 */
    </style>
@@ -789,8 +789,37 @@
                   mouseY <= bounds.y + bounds.height + verticalMargin;
          };
          
+         // 패널 위에 있는지 체크
+         const isMouseOverPanel = (clientX, clientY) => {
+           const chatPanel = document.getElementById('chat-panel');
+           const bsPanel = document.getElementById('brainstorming-panel');
+           
+           if (chatPanel && chatPanel.style.display !== 'none') {
+             const rect = chatPanel.getBoundingClientRect();
+             if (clientX >= rect.left && clientX <= rect.right && 
+                 clientY >= rect.top && clientY <= rect.bottom) {
+               return true;
+             }
+           }
+           
+           if (bsPanel && bsPanel.style.display !== 'none') {
+             const rect = bsPanel.getBoundingClientRect();
+             if (clientX >= rect.left && clientX <= rect.right && 
+                 clientY >= rect.top && clientY <= rect.bottom) {
+               return true;
+             }
+           }
+           
+           return false;
+         };
+         
          // Document 레벨 이벤트로 드래그 구현
          document.addEventListener('mousedown', (e) => {
+           // 패널 위에서는 드래그 시작하지 않음
+           if (isMouseOverPanel(e.clientX, e.clientY)) {
+             return;
+           }
+           
            if (isMouseOverCharacter(e.clientX, e.clientY)) {
              // 드래그 시작
              isDraggingCharacter = true;
@@ -835,14 +864,25 @@
         // 모델 준비된 후 인터랙션 제어 로직 세팅
         setupInteractionControls();
         
-        // 채팅/브레인스토밍 패널 초기화
-        setTimeout(() => {
+        // 채팅/브레인스토밍 패널 초기화 (모듈 로드 대기)
+        const initPanels = async () => {
+          // 모듈이 로드될 때까지 최대 5초 대기
+          let retries = 50;
+          while (retries > 0) {
+            if (typeof window.initChatPanel === 'function' && 
+                typeof window.initBrainstormingPanel === 'function') {
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries--;
+          }
+          
           try {
             if (typeof window.initChatPanel === 'function') {
               window.initChatPanel();
-              // 채팅 패널 초기화 완료
+              console.log('✅ 채팅 패널 초기화 완료');
             } else {
-              console.warn('⚠️  initChatPanel 함수를 찾을 수 없습니다. 임시 토글 사용');
+              console.error('❌ initChatPanel 함수를 찾을 수 없습니다.');
               // 임시: 채팅 토글 단축키 직접 등록
               const chatPanel = document.getElementById('chat-panel');
               if (chatPanel) {
@@ -851,10 +891,8 @@
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     isPanelVisible = !isPanelVisible;
                     chatPanel.style.display = isPanelVisible ? 'flex' : 'none';
-                    // 채팅 패널 토글
                   }
                 });
-                // 임시 채팅 토글 등록 완료
               }
             }
           } catch (error) {
@@ -864,14 +902,16 @@
           try {
             if (typeof window.initBrainstormingPanel === 'function') {
               window.initBrainstormingPanel();
-              // 브레인스토밍 패널 초기화 완료
+              console.log('✅ 브레인스토밍 패널 초기화 완료');
             } else {
               console.warn('⚠️  initBrainstormingPanel 함수를 찾을 수 없습니다.');
             }
           } catch (error) {
             console.error('❌ 브레인스토밍 패널 초기화 실패:', error);
           }
-        }, 100); // 100ms 대기 (모듈 로딩 시간)
+        };
+        
+        initPanels();
         
         // Activity Monitor 초기화
         setupActivityMonitorWithMotions();
@@ -914,10 +954,18 @@
       // 키보드로 크기 조절 및 종료: +/- 키, ESC 키
       // 주의: Cmd/Ctrl + Enter는 채팅 패널에서 처리
       window.addEventListener('keydown', (e) => {
-        // 채팅 입력창에 포커스가 있을 때는 크기 조절 비활성화
+        // 입력창에 포커스가 있을 때는 크기 조절 비활성화
         const chatInput = document.getElementById('chat-input');
-        if (document.activeElement === chatInput) {
-          return; // 입력창에 포커스가 있으면 무시
+        const bsInput = document.getElementById('bs-input');
+        if (document.activeElement === chatInput || document.activeElement === bsInput) {
+          // 입력창에 포커스가 있으면 ESC만 처리
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            if (ipcRenderer) {
+              ipcRenderer.send('va:request-quit');
+            }
+          }
+          return;
         }
         
         if (e.key === '+' || e.key === '=') {
@@ -983,20 +1031,21 @@
                  clientY <= rect.bottom;
         };
         
-        document.addEventListener('mousemove', (e) => {
+        // 초기 상태 설정 함수
+        const updateMouseState = (clientX, clientY) => {
           const wasOverChat = isOverChatPanel;
           const wasOverChar = isOverCharacter;
           const wasOverBs = isOverBsPanel;
           
           // 채팅 패널 체크 (우선순위 높음)
-          isOverChatPanel = checkIfOverChatPanel(e.clientX, e.clientY);
+          isOverChatPanel = checkIfOverChatPanel(clientX, clientY);
           
           // 브레인스토밍 패널 체크 (우선순위 높음)
-          isOverBsPanel = checkIfOverBsPanel(e.clientX, e.clientY);
+          isOverBsPanel = checkIfOverBsPanel(clientX, clientY);
           
           // 캐릭터 체크 (패널들이 아닐 때만)
           if (!isOverChatPanel && !isOverBsPanel) {
-            isOverCharacter = checkIfOverCharacter(e.clientX, e.clientY);
+            isOverCharacter = checkIfOverCharacter(clientX, clientY);
           } else {
             isOverCharacter = false;
           }
@@ -1007,7 +1056,32 @@
             const ignoreValue = !shouldAcceptClicks;
             ipcRenderer.send('va:set-ignore-mouse', ignoreValue);
           }
+        };
+        
+        // 마우스 이동 이벤트
+        document.addEventListener('mousemove', (e) => {
+          updateMouseState(e.clientX, e.clientY);
         });
+        
+        // 마우스다운 이벤트 (클릭 감지용)
+        document.addEventListener('mousedown', (e) => {
+          updateMouseState(e.clientX, e.clientY);
+        });
+        
+        // 마우스업 이벤트 (클릭 종료 감지용)
+        document.addEventListener('mouseup', (e) => {
+          updateMouseState(e.clientX, e.clientY);
+        });
+        
+        // 초기 상태 설정 (현재 마우스 위치 확인)
+        // 약간의 지연을 두어 DOM이 완전히 로드된 후 실행
+        setTimeout(() => {
+          // 초기에는 마우스 이벤트를 받을 수 있도록 설정
+          // (마우스가 이동하면 자동으로 상태가 업데이트됨)
+          if (ipcRenderer) {
+            ipcRenderer.send('va:set-ignore-mouse', false);
+          }
+        }, 1000);
       }
     }
 
