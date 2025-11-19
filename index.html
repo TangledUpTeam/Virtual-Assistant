@@ -4,7 +4,13 @@
   <meta charset="utf-8" />
   <title>Virtual Desk Assistant - Hiyori</title>
 
-   <!-- 배경 완전 투명 + 캐릭터만 클릭 가능 -->
+  <!-- CSS 파일 링크 -->
+  <link rel="stylesheet" href="renderer/styles/chat.css" />
+  <link rel="stylesheet" href="renderer/styles/tasks.css" />
+  <link rel="stylesheet" href="renderer/styles/brainstorming.css" />
+  <link rel="stylesheet" href="renderer/styles/live2d.css" />
+
+   <!-- 기본 스타일 (배경 완전 투명) -->
    <style>
      html, body {
        margin: 0;
@@ -14,324 +20,15 @@
        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
        pointer-events: none; /* 기본적으로 클릭 불가 */
      }
-     
-     /* ========================================
-      * 채팅 패널 (왼쪽 고정)
-      * ======================================== */
-     #chat-panel {
-       position: fixed;
-       left: 20px;
-       top: 5vh;
-       width: 350px;
-       height: 85vh;
-       display: flex;
-       flex-direction: column;
-       padding: 20px;
-       box-sizing: border-box;
-       pointer-events: auto !important; /* 🔥 채팅 패널은 무조건 클릭 가능 */
-       background: rgba(255, 250, 240, 0.95); /* 🔥 95% 불투명 아이보리 */
-       border-radius: 20px;
-       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-       backdrop-filter: blur(10px); /* 블러 효과 */
-       z-index: 9999 !important; /* 🔥 최상위 레이어 */
-       border: 2px solid rgba(200, 200, 200, 0.5);
-       transition: opacity 0.3s ease, transform 0.3s ease;
-       isolation: isolate; /* 새로운 stacking context 생성 */
-     }
-     
-     #chat-panel,
-     #chat-panel * {
-       pointer-events: auto !important; /* 🔥 모든 하위 요소도 클릭 가능 */
-       cursor: default !important;
-     }
-     
-     #chat-input,
-     #send-btn {
-       cursor: text !important;
-     }
-     
-     #send-btn {
-       cursor: pointer !important;
-     }
-     
-     #chat-panel h2 {
-       margin: 0 0 15px 0;
-       font-size: 20px;
-       font-weight: 700;
-       color: #333;
-       text-align: center;
-     }
-     
-     /* 메시지 컨테이너 */
-     #messages {
-       flex: 1;
-       overflow-y: auto;
-       padding: 15px;
-       background: rgba(245, 245, 240, 0.9); /* 🔥 90% 불투명 옅은 아이보리 */
-       border-radius: 12px;
-       margin-bottom: 15px;
-     }
-     
-     /* 스크롤바 스타일 */
-     #messages::-webkit-scrollbar {
-       width: 8px;
-     }
-     
-     #messages::-webkit-scrollbar-track {
-       background: rgba(0, 0, 0, 0.05);
-       border-radius: 4px;
-     }
-     
-     #messages::-webkit-scrollbar-thumb {
-       background: rgba(0, 0, 0, 0.2);
-       border-radius: 4px;
-     }
-     
-     #messages::-webkit-scrollbar-thumb:hover {
-       background: rgba(0, 0, 0, 0.3);
-     }
-     
-     /* 메시지 스타일 */
-     .message {
-       margin-bottom: 12px;
-       display: flex;
-       animation: fadeIn 0.3s ease-in;
-     }
-     
-     @keyframes fadeIn {
-       from { opacity: 0; transform: translateY(10px); }
-       to { opacity: 1; transform: translateY(0); }
-     }
-     
-     .message.user {
-       justify-content: flex-end;
-     }
-     
-     .message.assistant {
-       justify-content: flex-start;
-     }
-     
-     .message .bubble {
-       max-width: 75%;
-       padding: 12px 16px;
-       border-radius: 16px;
-       word-wrap: break-word;
-       font-size: 14px;
-       line-height: 1.5;
-       background: rgba(255, 250, 240, 0.8); /* 🔥 80% 불투명 아이보리 */
-       color: #333;
-       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-     }
-     
-     .message.user .bubble {
-       background: linear-gradient(135deg, rgba(100, 150, 255, 0.85), rgba(120, 170, 255, 0.85)); /* 🔥 85% 불투명 */
-       color: white;
-     }
-     
-     /* 입력 영역 */
-     #input-area {
-       display: flex;
-       gap: 10px;
-     }
-     
-     #chat-input {
-       flex: 1;
-       padding: 12px 16px;
-       border: 2px solid rgba(100, 150, 255, 0.3);
-       border-radius: 12px;
-       font-size: 14px;
-       background: rgba(255, 255, 255, 0.9); /* 🔥 90% 불투명 */
-       color: #333;
-       outline: none;
-       transition: all 0.2s;
-       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-     }
-     
-     #chat-input:focus {
-       border-color: rgba(100, 150, 255, 0.6);
-       box-shadow: 0 4px 12px rgba(100, 150, 255, 0.2);
-     }
-     
-     #send-btn {
-       padding: 12px 24px;
-       border: none;
-       border-radius: 12px;
-       background: linear-gradient(135deg, rgba(100, 150, 255, 0.9), rgba(80, 130, 235, 0.9)); /* 🔥 90% 불투명 */
-       color: white;
-       font-size: 14px;
-       font-weight: 600;
-       cursor: pointer;
-       transition: all 0.2s;
-       box-shadow: 0 4px 12px rgba(100, 150, 255, 0.3);
-     }
-     
-     #send-btn:hover:not(:disabled) {
-       transform: translateY(-2px);
-       box-shadow: 0 6px 16px rgba(100, 150, 255, 0.4);
-     }
-     
-     #send-btn:active:not(:disabled) {
-       transform: translateY(0);
-     }
-     
-    #send-btn:disabled {
-      background: rgba(150, 150, 150, 0.6);
-      cursor: not-allowed;
-      transform: none;
-    }
-    
-    /* ========================================
-     * 추천 업무 카드 UI
-     * ======================================== */
-    .task-recommendations-container {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-top: 8px;
-    }
-    
-    .task-guide {
-      padding: 10px 14px;
-      background: rgba(100, 150, 255, 0.1);
-      border-left: 3px solid rgba(100, 150, 255, 0.6);
-      border-radius: 8px;
-      font-size: 13px;
-      color: #555;
-    }
-    
-    .task-cards {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      max-height: 400px;
-      overflow-y: auto;
-      padding: 5px;
-    }
-    
-    .task-card {
-      background: rgba(255, 255, 255, 0.95);
-      border: 2px solid rgba(200, 200, 200, 0.3);
-      border-radius: 12px;
-      padding: 14px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      position: relative;
-    }
-    
-    .task-card:hover {
-      border-color: rgba(100, 150, 255, 0.5);
-      box-shadow: 0 4px 12px rgba(100, 150, 255, 0.2);
-      transform: translateY(-2px);
-    }
-    
-    .task-card.selected {
-      border-color: rgba(100, 150, 255, 0.8);
-      background: rgba(100, 150, 255, 0.1);
-      box-shadow: 0 4px 16px rgba(100, 150, 255, 0.3);
-    }
-    
-    .priority-badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    
-    .priority-high {
-      background: rgba(255, 100, 100, 0.15);
-      color: #d63031;
-      border: 1px solid rgba(255, 100, 100, 0.3);
-    }
-    
-    .priority-medium {
-      background: rgba(255, 180, 0, 0.15);
-      color: #e67e22;
-      border: 1px solid rgba(255, 180, 0, 0.3);
-    }
-    
-    .priority-low {
-      background: rgba(100, 200, 100, 0.15);
-      color: #27ae60;
-      border: 1px solid rgba(100, 200, 100, 0.3);
-    }
-    
-    .task-title {
-      font-size: 15px;
-      font-weight: 700;
-      color: #333;
-      margin-bottom: 6px;
-      line-height: 1.3;
-    }
-    
-    .task-description {
-      font-size: 13px;
-      color: #666;
-      line-height: 1.5;
-      margin-bottom: 10px;
-    }
-    
-    .task-meta {
-      display: flex;
-      gap: 12px;
-      font-size: 12px;
-      color: #888;
-    }
-    
-    .task-category,
-    .task-time {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    
-    .task-save-button {
-      align-self: center;
-      padding: 12px 32px;
-      border: none;
-      border-radius: 12px;
-      background: linear-gradient(135deg, rgba(100, 200, 100, 0.9), rgba(80, 180, 80, 0.9));
-      color: white;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: 0 4px 12px rgba(100, 200, 100, 0.3);
-      margin-top: 8px;
-    }
-    
-    .task-save-button:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(100, 200, 100, 0.4);
-    }
-    
-    .task-save-button:disabled {
-      background: rgba(150, 150, 150, 0.6);
-      cursor: not-allowed;
-      transform: none;
-    }
-    
-    /* ========================================
-     * Live2D 스테이지 (전체 화면)
-     * ======================================== */
-     #stage {
-       position: fixed;
-       inset: 0;
-       pointer-events: none; /* 🔥 배경은 클릭 불가 */
-       z-index: 1; /* 채팅창 아래 */
-     }
-     
-     /* canvas만 클릭 가능 (Live2D 캐릭터) */
-     #stage canvas {
-       pointer-events: auto !important;
-       cursor: move;
-       z-index: 10;
-     }
+     /* 나머지 스타일은 별도 CSS 파일로 분리됨 */
    </style>
 </head>
 
 <body>
+  <!-- 모듈 스크립트: 먼저 로드 (전역으로 export) -->
+  <script type="module" src="./renderer/chat/chatUI.js"></script>
+  <script type="module" src="./renderer/brainstorming/brainstormingService.js"></script>
+
   <!-- Live2D 스테이지 (배경, 전체 화면) -->
   <div id="stage"></div>
   
@@ -347,6 +44,21 @@
         autocomplete="off"
       />
       <button id="send-btn">전송</button>
+    </div>
+  </div>
+
+  <!-- 브레인스토밍 패널 (오른쪽 고정) -->
+  <div id="brainstorming-panel">
+    <h2>💡 브레인스토밍</h2>
+    <div id="bs-content"></div>
+    <div id="bs-input-area">
+      <input 
+        type="text" 
+        id="bs-input" 
+        placeholder="입력하세요..." 
+        autocomplete="off"
+      />
+      <button id="bs-submit-btn">전송</button>
     </div>
   </div>
 
@@ -371,14 +83,14 @@
     // Activity Monitor 설정
     const ACTIVITY_CONFIG = {
       dev: {
-        idleThresholdMs: 3 * 1000,        // 3초
-        longActiveThresholdMs: 10 * 1000, // 10초
+        idleThresholdMs: 3 * 1000,        // 3초 (테스트용)
+        longActiveThresholdMs: 10 * 1000, // 10초 (테스트용)
         checkIntervalMs: 1000,
       },
       prod: {
-        idleThresholdMs: 5 * 60 * 1000,      // 5분
-        longActiveThresholdMs: 50 * 60 * 1000, // 50분
-        checkIntervalMs: 2000,
+        idleThresholdMs: 10 * 60 * 1000,      // 10분
+        longActiveThresholdMs: 50 * 60 * 1000, // 50분 (5분 이하 휴식 허용)
+        checkIntervalMs: 5000,                   // 5초마다 체크
       }
     };
     
@@ -386,9 +98,7 @@
       const { mode, onIdle, onLongActive } = options;
       const config = ACTIVITY_CONFIG[mode];
       
-      console.log(`🔍 Activity Monitor 시작 (${mode} 모드)`);
-      console.log(`   - Idle 기준: ${config.idleThresholdMs / 1000}초`);
-      console.log(`   - 장시간 활동 기준: ${config.longActiveThresholdMs / 1000}초`);
+      // Activity Monitor 시작 (로그 제거)
       
       let lastInputAt = Date.now();
       let sessionStartAt = Date.now();
@@ -401,7 +111,7 @@
         lastInputAt = now;
         
         if (isIdle) {
-          console.log('✅ 활동 재개 - 새 세션 시작');
+          // 활동 재개
           isIdle = false;
           sessionStartAt = now;
           hasNotifiedLongActive = false;
@@ -416,7 +126,7 @@
         // Idle 체크
         if (!isIdle && timeSinceLastInput >= config.idleThresholdMs) {
           isIdle = true;
-          console.log(`😴 Idle 상태 진입 (${timeSinceLastInput / 1000}초 동안 입력 없음)`);
+          // Idle 상태 진입
           
           try {
             onIdle();
@@ -433,7 +143,7 @@
         if (!isIdle && !hasNotifiedLongActive) {
           if (currentSessionDuration >= config.longActiveThresholdMs) {
             hasNotifiedLongActive = true;
-            console.log(`⏰ 장시간 활동 감지 (${currentSessionDuration / 1000}초)`);
+            // 장시간 활동 감지
             
             try {
               onLongActive();
@@ -447,7 +157,7 @@
         if (mode === 'dev' && !isIdle && !hasNotifiedLongActive) {
           const remaining = (config.longActiveThresholdMs - currentSessionDuration) / 1000;
           if (remaining > 0 && Math.floor(remaining) % 2 === 0) {
-            console.log(`⏱️  장시간 활동까지 ${remaining.toFixed(0)}초 남음`);
+            // 장시간 활동 카운트다운 (로그 제거)
           }
         }
       }
@@ -458,15 +168,15 @@
         window.addEventListener(eventType, handleUserInput, { passive: true });
       });
       
-      console.log('👂 입력 이벤트 리스너 등록:', events.join(', '));
+      // 입력 이벤트 리스너 등록
       
       // 타이머 시작
       checkTimer = setInterval(checkActivity, config.checkIntervalMs);
-      console.log(`⏲️  ${config.checkIntervalMs}ms 간격으로 체크 시작`);
+      // 주기적 체크 시작
       
       // Cleanup 함수 반환
       return function cleanup() {
-        console.log('🧹 Activity Monitor 정리');
+        // Activity Monitor 정리
         events.forEach(eventType => {
           window.removeEventListener(eventType, handleUserInput);
         });
@@ -477,413 +187,47 @@
     }
     
     function setupActivityMonitorWithMotions() {
-      const mode = 'dev'; // 개발 모드
+      const mode = 'prod'; // 배포 모드: Idle 10분, 장시간 활동 50분
       
       activityMonitorCleanup = setupActivityMonitor({
         mode: mode,
         
         onIdle: () => {
-          console.log('🎭 [Idle 콜백 실행]');
-          
-          // 캐릭터 모션
+          // Idle 콜백: 캐릭터 모션
           if (model) {
             model.motion('Idle');
-            console.log('   캐릭터: Idle 모션 재생');
           }
           
-          // 채팅창에 메시지
-          addMessage('assistant', '조금 쉬고 계신가요? 😊');
+          // 채팅창에 메시지 (모듈 로드되었을 때만)
+          if (typeof window.addMessage === 'function') {
+            window.addMessage('assistant', '조금 쉬고 계신가요? 😊');
+          } else {
+            // 메시지 출력 (모듈 미로드 시)
+          }
         },
         
         onLongActive: () => {
-          console.log('🎭 [장시간 활동 콜백 실행]');
-          
-          // 캐릭터 모션
+          // 장시간 활동 콜백: 캐릭터 모션
           if (model) {
             model.motion('Tap@Body');
-            console.log('   캐릭터: Tap@Body 모션 재생');
           }
           
-          // 채팅창에 메시지
-          addMessage('assistant', '오래 일하셨네요! 잠깐 일어나서 스트레칭 어때요? 🤸‍♀️');
+          // 채팅창에 메시지 (모듈 로드되었을 때만)
+          if (typeof window.addMessage === 'function') {
+            window.addMessage('assistant', '오래 일하셨네요! 잠깐 일어나서 스트레칭 어때요? 🤸‍♀️');
+          } else {
+            // 메시지 출력 (모듈 미로드 시)
+          }
         }
       });
-    }
-    
-    /****************************************************************
-     * 채팅 서비스 (인라인)
-     ****************************************************************/
-    const API_BASE_URL = 'http://localhost:8000/api/v1';
-    
-    async function callChatModule(userText) {
-      console.log('📨 사용자 메시지:', userText);
-      
-      // "오늘 뭐할지 추천" 등의 키워드가 있으면 TodayPlan API 호출
-      if (userText.includes('오늘') && (userText.includes('추천') || userText.includes('뭐할'))) {
-        return await getTodayPlan();
-      }
-      
-      // 기본 응답 (추후 확장 가능)
-      return {
-        type: 'text',
-        data: '안녕하세요! "오늘 뭐할지 추천 좀"이라고 말씀해주시면 업무를 추천해드립니다. 😊'
-      };
-    }
-    
-    async function getTodayPlan() {
-      try {
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-        const owner = '김보험'; // 현재는 하드코딩 (추후 로그인 정보 사용)
-        
-        const response = await fetch(`${API_BASE_URL}/plan/today`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            owner: owner,
-            target_date: today
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API 호출 실패: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        console.log('🎯 추천 업무:', result);
-        
-        return {
-          type: 'task_recommendations',
-          data: {
-            tasks: result.tasks || [],
-            summary: result.summary || '',
-            owner: owner,
-            target_date: today
-          }
-        };
-      } catch (error) {
-        console.error('❌ API 호출 오류:', error);
-        return {
-          type: 'error',
-          data: '추천 업무를 가져오는 중 오류가 발생했습니다. 백엔드 서버가 실행 중인지 확인해주세요.'
-        };
-      }
-    }
-    
-    async function saveSelectedTasks(owner, targetDate, mainTasks) {
-      try {
-        const response = await fetch(`${API_BASE_URL}/daily/select_main_tasks`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            owner: owner,
-            target_date: targetDate,
-            main_tasks: mainTasks
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API 호출 실패: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        console.log('✅ 업무 저장 완료:', result);
-        
-        return {
-          success: true,
-          message: result.message || '업무가 저장되었습니다.',
-          saved_count: result.saved_count || 0
-        };
-      } catch (error) {
-        console.error('❌ 업무 저장 오류:', error);
-        return {
-          success: false,
-          message: '업무 저장에 실패했습니다.'
-        };
-      }
     }
 
     /****************************************************************
-     * 채팅 패널 UI 및 상태 관리 (인라인)
+     * 채팅 및 브레인스토밍 초기화 (모듈에서 처리)
+     * - renderer/chat/chatUI.js
+     * - renderer/brainstorming/brainstormingService.js
      ****************************************************************/
-    let messages = [];
-    let isPanelVisible = true;
-    let chatPanel = null;
-    let messagesContainer = null;
-    let chatInput = null;
-    let sendBtn = null;
-    let isChatPanelInitialized = false; // 🔥 중복 초기화 방지
-    
-    // 추천 업무 선택 상태
-    let selectedTasks = new Set();
-    let currentRecommendation = null; // { owner, target_date, tasks }
-
-    function initChatPanel() {
-      // 🔥 이미 초기화되었으면 무시
-      if (isChatPanelInitialized) {
-        console.log('⚠️  채팅 패널 이미 초기화됨 - 스킵');
-        return;
-      }
-      
-      console.log('💬 채팅 패널 초기화 중...');
-      
-      chatPanel = document.getElementById('chat-panel');
-      messagesContainer = document.getElementById('messages');
-      chatInput = document.getElementById('chat-input');
-      sendBtn = document.getElementById('send-btn');
-      
-      if (!chatPanel || !messagesContainer || !chatInput || !sendBtn) {
-        console.error('❌ 채팅 패널 요소를 찾을 수 없습니다.');
-        return;
-      }
-      
-      // 초기 메시지 추가
-      addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊');
-      
-      // 🔥 이벤트 리스너 등록 (once 옵션으로 중복 방지)
-      sendBtn.addEventListener('click', handleSendMessage);
-      
-      chatInput.addEventListener('keydown', handleChatInputKeydown);
-      
-      // Cmd/Ctrl + Enter로 패널 토글
-      window.addEventListener('keydown', handleGlobalKeydown);
-      
-      isChatPanelInitialized = true; // 🔥 초기화 완료 플래그
-      console.log('✅ 채팅 패널 초기화 완료');
-    }
-
-    // 🔥 이벤트 핸들러를 별도 함수로 분리 (중복 등록 방지)
-    function handleChatInputKeydown(e) {
-      // 한글 입력 중(composing)이면 무시
-      if (e.isComposing || e.keyCode === 229) {
-        return;
-      }
-      
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSendMessage();
-      }
-    }
-
-    function handleGlobalKeydown(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        togglePanel();
-      }
-    }
-
-    async function handleSendMessage() {
-      const text = chatInput.value.trim();
-      if (!text) return;
-      
-      // 🔥 전송 중이면 무시 (중복 전송 방지)
-      if (sendBtn.disabled) {
-        console.log('⚠️  이미 전송 중...');
-        return;
-      }
-      
-      addMessage('user', text);
-      
-      // 🔥 입력창 초기화 (IME 문제 해결)
-      chatInput.value = '';
-      chatInput.blur(); // 포커스 제거
-      setTimeout(() => {
-        chatInput.focus(); // 다시 포커스
-      }, 0);
-      
-      sendBtn.disabled = true;
-      sendBtn.textContent = '...';
-      
-      try {
-        const response = await callChatModule(text);
-        
-        // 응답 타입에 따라 처리
-        if (response.type === 'task_recommendations') {
-          addTaskRecommendations(response.data);
-        } else if (response.type === 'error') {
-          addMessage('assistant', response.data);
-        } else {
-          addMessage('assistant', response.data);
-        }
-      } catch (error) {
-        console.error('❌ 채팅 오류:', error);
-        addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
-      } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = '전송';
-      }
-    }
-
-    function addMessage(role, text) {
-      messages.push({ role, text });
-      
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message ${role}`;
-      
-      const bubble = document.createElement('div');
-      bubble.className = 'bubble';
-      bubble.textContent = text;
-      
-      messageDiv.appendChild(bubble);
-      messagesContainer.appendChild(messageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      
-      console.log(`💬 [${role}]: ${text}`);
-    }
-    
-    function addTaskRecommendations(data) {
-      const { tasks, summary, owner, target_date } = data;
-      
-      currentRecommendation = { owner, target_date, tasks };
-      selectedTasks.clear();
-      
-      messages.push({ role: 'assistant', type: 'task_recommendations', data });
-      
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'message assistant';
-      
-      const container = document.createElement('div');
-      container.className = 'task-recommendations-container';
-      
-      const summaryDiv = document.createElement('div');
-      summaryDiv.className = 'bubble';
-      summaryDiv.textContent = summary || '오늘의 추천 업무입니다!';
-      container.appendChild(summaryDiv);
-      
-      const guideDiv = document.createElement('div');
-      guideDiv.className = 'task-guide';
-      guideDiv.textContent = '📌 수행할 업무를 선택해주세요 (2~4개 권장)';
-      container.appendChild(guideDiv);
-      
-      const cardsContainer = document.createElement('div');
-      cardsContainer.className = 'task-cards';
-      
-      tasks.forEach((task, index) => {
-        const card = createTaskCard(task, index);
-        cardsContainer.appendChild(card);
-      });
-      
-      container.appendChild(cardsContainer);
-      
-      const saveButton = document.createElement('button');
-      saveButton.className = 'task-save-button';
-      saveButton.textContent = '선택 완료';
-      saveButton.disabled = true;
-      saveButton.addEventListener('click', handleSaveSelectedTasks);
-      container.appendChild(saveButton);
-      
-      messageDiv.appendChild(container);
-      messagesContainer.appendChild(messageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      
-      console.log(`🎯 추천 업무 ${tasks.length}개 표시`);
-    }
-    
-    function createTaskCard(task, index) {
-      const card = document.createElement('div');
-      card.className = 'task-card';
-      card.dataset.index = index;
-      
-      const priorityBadge = document.createElement('span');
-      priorityBadge.className = `priority-badge priority-${task.priority}`;
-      priorityBadge.textContent = {
-        'high': '높음',
-        'medium': '보통',
-        'low': '낮음'
-      }[task.priority] || '보통';
-      
-      const title = document.createElement('div');
-      title.className = 'task-title';
-      title.textContent = task.title;
-      
-      const description = document.createElement('div');
-      description.className = 'task-description';
-      description.textContent = task.description;
-      
-      const meta = document.createElement('div');
-      meta.className = 'task-meta';
-      meta.innerHTML = `
-        <span class="task-category">📁 ${task.category}</span>
-        <span class="task-time">⏰ ${task.expected_time}</span>
-      `;
-      
-      card.appendChild(priorityBadge);
-      card.appendChild(title);
-      card.appendChild(description);
-      card.appendChild(meta);
-      
-      card.addEventListener('click', () => {
-        toggleTaskSelection(card, index);
-      });
-      
-      return card;
-    }
-    
-    function toggleTaskSelection(card, index) {
-      if (selectedTasks.has(index)) {
-        selectedTasks.delete(index);
-        card.classList.remove('selected');
-      } else {
-        selectedTasks.add(index);
-        card.classList.add('selected');
-      }
-      
-      const saveButton = card.closest('.task-recommendations-container').querySelector('.task-save-button');
-      saveButton.disabled = selectedTasks.size === 0;
-      
-      console.log(`✅ 선택된 업무: ${selectedTasks.size}개`);
-    }
-    
-    async function handleSaveSelectedTasks(event) {
-      if (!currentRecommendation || selectedTasks.size === 0) {
-        return;
-      }
-      
-      const { owner, target_date, tasks } = currentRecommendation;
-      const selectedTasksList = Array.from(selectedTasks).map(index => tasks[index]);
-      
-      const saveButton = event.target;
-      saveButton.disabled = true;
-      saveButton.textContent = '저장 중...';
-      
-      try {
-        const result = await saveSelectedTasks(owner, target_date, selectedTasksList);
-        
-        if (result.success) {
-          addMessage('assistant', `✅ ${result.saved_count}개의 업무가 저장되었습니다! 금일 진행 업무 선택이 완료되었습니다.`);
-          
-          selectedTasks.clear();
-          currentRecommendation = null;
-          
-          saveButton.closest('.task-recommendations-container').style.opacity = '0.5';
-          saveButton.textContent = '저장 완료';
-        } else {
-          addMessage('assistant', `❌ 저장 실패: ${result.message}`);
-          saveButton.disabled = false;
-          saveButton.textContent = '선택 완료';
-        }
-      } catch (error) {
-        console.error('❌ 저장 오류:', error);
-        addMessage('assistant', '❌ 업무 저장 중 오류가 발생했습니다.');
-        saveButton.disabled = false;
-        saveButton.textContent = '선택 완료';
-      }
-    }
-
-    function togglePanel() {
-      isPanelVisible = !isPanelVisible;
-      
-      if (isPanelVisible) {
-        chatPanel.style.display = 'flex';
-        console.log('👁️ 채팅 패널 표시');
-      } else {
-        chatPanel.style.display = 'none';
-        console.log('🙈 채팅 패널 숨김');
-      }
-    }
+    // 모듈 스크립트에서 초기화됨 (아래 <script type="module"> 참고)
 
     /****************************************************************
      * 순차 로더
@@ -895,7 +239,7 @@
         const s = document.createElement('script');
         s.src = url;
         s.async = false;               // 로드 순서 보장(중요)
-        s.onload = () => { console.log('✅ 로드 성공:', url); resolve(); };
+        s.onload = () => resolve();
         s.onerror = () => { console.error('❌ 로드 실패:', url); reject(new Error(url)); };
         document.head.appendChild(s);
       });
@@ -917,7 +261,7 @@
           try { await loadScript(url); ok = true; break; } catch {}
         }
         if (!ok) throw new Error('Pixi.js 로드 실패');
-        console.log('PIXI.VERSION =', window.PIXI && PIXI.VERSION);
+        // PixiJS 로드 완료
 
         /******** 2) Live2D Cubism Core : 플러그인이 참조하는 런타임 ********/
         const coreCdn = [
@@ -929,7 +273,7 @@
           try { await loadScript(url); ok = true; break; } catch {}
         }
         if (!ok) throw new Error('Live2D Cubism Core 로드 실패');
-        console.log('Live2DCubismCore =', typeof window.Live2DCubismCore); // "object" 기대
+        // Live2DCubismCore 로드 완료
 
         /******** 3) pixi-live2d-display (Cubism4 빌드, 0.4.x) ********/
         const pluginCdn = [
@@ -946,15 +290,15 @@
         }
         if (!ok) throw new Error('pixi-live2d-display (cubism4) 로드 실패');
 
-        console.log('PIXI.live2d keys:', Object.keys(PIXI.live2d || {}));
+        // Live2D 플러그인 로드 완료
 
         /******** 4) Pixi 앱 & Live2D 모델 로드 ********/
-        // 🔥 전체 윈도우 크기로 앱 생성
+        // 전체 윈도우 크기로 앱 생성
         app = new PIXI.Application({ 
           backgroundAlpha: 0,
           width: window.innerWidth,
           height: window.innerHeight,
-          resizeTo: window // 🔥 window에 맞춰 리사이즈
+          resizeTo: window
         });
         
         // stage에 canvas 추가
@@ -962,7 +306,9 @@
         stageContainer.appendChild(app.view);
 
         const MODEL_URL = 'public/models/hiyori_free_ko/runtime/hiyori_free_t08.model3.json';
-        console.log('📦 모델 로딩:', MODEL_URL);
+        // Stage를 interactive로 설정
+        app.stage.interactive = true;
+        app.stage.hitArea = app.screen;
 
         model = await PIXI.live2d.Live2DModel.from(MODEL_URL);
 
@@ -976,7 +322,7 @@
            const canvasWidth = app.screen.width;
            const canvasHeight = app.screen.height;
            model.position.set(canvasWidth * 0.75, canvasHeight - 50);
-           console.log(`📍 캐릭터 위치: (${model.position.x}, ${model.position.y})`);
+           // 캐릭터 위치 설정 완료
          };
          updateModelPosition();
          
@@ -986,35 +332,111 @@
          });
          
          app.stage.addChild(model);
-         console.log('✅ 캐릭터가 화면에 추가되었습니다!');
+         // 캐릭터 화면에 추가 완료
 
-         // 상호작용: 탭 모션 (드래그가 아닐 때만)
-         model.interactive = true;
-         let clickStartPos = null;
-         model.on('pointerdown', (e) => {
-           clickStartPos = { x: e.data.global.x, y: e.data.global.y };
-         });
-         model.on('pointerup', (e) => {
-           if (!clickStartPos) return;
-           const dx = Math.abs(e.data.global.x - clickStartPos.x);
-           const dy = Math.abs(e.data.global.y - clickStartPos.y);
-           // 이동 거리가 5px 이하면 클릭으로 간주
-           if (dx < 5 && dy < 5) {
-             console.log('👆 캐릭터 클릭!');
-             model.motion?.('Tap');
+         // Document 레벨 드래그 구현
+         let isDraggingCharacter = false;
+         let dragStartMousePos = null;
+         let dragStartModelPos = null;
+         
+         // 캐릭터 바운딩 박스 체크 함수
+         const isMouseOverCharacter = (mouseX, mouseY) => {
+           const bounds = model.getBounds();
+           const actualWidth = bounds.width * 0.4; // 좌우 축소
+           const widthOffset = (bounds.width - actualWidth) / 2;
+           const verticalMargin = bounds.height * 0.05;
+           
+           return mouseX >= bounds.x + widthOffset && 
+                  mouseX <= bounds.x + widthOffset + actualWidth &&
+                  mouseY >= bounds.y - verticalMargin && 
+                  mouseY <= bounds.y + bounds.height + verticalMargin;
+         };
+         
+         // Document 레벨 이벤트로 드래그 구현
+         document.addEventListener('mousedown', (e) => {
+           if (isMouseOverCharacter(e.clientX, e.clientY)) {
+             // 드래그 시작
+             isDraggingCharacter = true;
+             dragStartMousePos = { x: e.clientX, y: e.clientY };
+             dragStartModelPos = { x: model.position.x, y: model.position.y };
+             e.preventDefault();
            }
-           clickStartPos = null;
+         });
+         
+         document.addEventListener('mousemove', (e) => {
+           if (isDraggingCharacter && dragStartMousePos) {
+             const dx = e.clientX - dragStartMousePos.x;
+             const dy = e.clientY - dragStartMousePos.y;
+             
+             model.position.x = dragStartModelPos.x + dx;
+             model.position.y = dragStartModelPos.y + dy;
+             
+             // 드래그 중
+           }
+         });
+         
+         document.addEventListener('mouseup', (e) => {
+           if (isDraggingCharacter) {
+             const movedDistance = Math.sqrt(
+               Math.pow(e.clientX - dragStartMousePos.x, 2) + 
+               Math.pow(e.clientY - dragStartMousePos.y, 2)
+             );
+             
+             // 5px 이하면 클릭으로 간주 → 탭 모션
+             if (movedDistance < 5) {
+               model.motion?.('Tap');
+             }
+             
+             isDraggingCharacter = false;
+             dragStartMousePos = null;
+             dragStartModelPos = null;
+           }
          });
 
-        console.log('🎉 준비 완료!');
+        // 초기화 완료
 
         // 모델 준비된 후 인터랙션 제어 로직 세팅
         setupInteractionControls();
         
-        // 채팅 패널 초기화
-        initChatPanel();
+        // 채팅/브레인스토밍 패널 초기화
+        setTimeout(() => {
+          try {
+            if (typeof window.initChatPanel === 'function') {
+              window.initChatPanel();
+              // 채팅 패널 초기화 완료
+            } else {
+              console.warn('⚠️  initChatPanel 함수를 찾을 수 없습니다. 임시 토글 사용');
+              // 임시: 채팅 토글 단축키 직접 등록
+              const chatPanel = document.getElementById('chat-panel');
+              if (chatPanel) {
+                let isPanelVisible = true;
+                window.addEventListener('keydown', (e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    isPanelVisible = !isPanelVisible;
+                    chatPanel.style.display = isPanelVisible ? 'flex' : 'none';
+                    // 채팅 패널 토글
+                  }
+                });
+                // 임시 채팅 토글 등록 완료
+              }
+            }
+          } catch (error) {
+            console.error('❌ 채팅 패널 초기화 실패:', error);
+          }
+          
+          try {
+            if (typeof window.initBrainstormingPanel === 'function') {
+              window.initBrainstormingPanel();
+              // 브레인스토밍 패널 초기화 완료
+            } else {
+              console.warn('⚠️  initBrainstormingPanel 함수를 찾을 수 없습니다.');
+            }
+          } catch (error) {
+            console.error('❌ 브레인스토밍 패널 초기화 실패:', error);
+          }
+        }, 100); // 100ms 대기 (모듈 로딩 시간)
         
-        // 🔥 Activity Monitor 초기화 (캐릭터 모션 연동)
+        // Activity Monitor 초기화
         setupActivityMonitorWithMotions();
 
       } catch (err) {
@@ -1036,6 +458,8 @@
      * - 채팅 패널은 별도 처리
      ****************************************************************/
     function setupInteractionControls() {
+      // setupInteractionControls 초기화
+      
       let isDragging = false;
       let lastClientX = 0;
       let lastClientY = 0;
@@ -1047,7 +471,7 @@
         let newScale = model.scale.x + delta * step;
         newScale = Math.max(0.1, Math.min(1.0, newScale));
         model.scale.set(newScale);
-        console.log('🔍 크기:', newScale.toFixed(2));
+        // 크기 조절
       };
 
       // 키보드로 크기 조절 및 종료: +/- 키, ESC 키
@@ -1067,45 +491,20 @@
           adjustScale(-1);
         } else if (e.key === 'Escape') {
           e.preventDefault();
-          console.log('⌨️  ESC 키 - 앱 종료');
+          // ESC 키 - 앱 종료
           if (ipcRenderer) {
             ipcRenderer.send('va:request-quit');
           }
         }
       });
 
-      // 캐릭터 드래그로 위치 이동
-      document.addEventListener('mousedown', (e) => {
-        // 캔버스가 아니거나 채팅 패널 영역이면 무시
-        if (e.target.tagName !== 'CANVAS') return;
-        
-        isDragging = true;
-        lastClientX = e.clientX;
-        lastClientY = e.clientY;
-        e.preventDefault();
-      });
-
-      document.addEventListener('mousemove', (e) => {
-        if (isDragging && model) {
-          const dx = e.clientX - lastClientX;
-          const dy = e.clientY - lastClientY;
-          lastClientX = e.clientX;
-          lastClientY = e.clientY;
-          
-          // 캐릭터 위치 이동
-          model.position.x += dx;
-          model.position.y += dy;
-        }
-      });
-
-      document.addEventListener('mouseup', () => {
-        isDragging = false;
-      });
+      // 캐릭터 드래그는 Document 레벨 이벤트로 처리
 
       // 마우스 이벤트 처리: 채팅 패널 vs 캐릭터
       if (ipcRenderer && model) {
         let isOverCharacter = false;
         let isOverChatPanel = false;
+        let isOverBsPanel = false;
         
         const checkIfOverCharacter = (clientX, clientY) => {
           if (!model) return false;
@@ -1135,37 +534,48 @@
                  clientY <= rect.bottom;
         };
         
+        // 브레인스토밍 패널 체크 함수
+        const checkIfOverBsPanel = (clientX, clientY) => {
+          const bsPanel = document.getElementById('brainstorming-panel');
+          if (!bsPanel || bsPanel.style.display === 'none') return false;
+          
+          const rect = bsPanel.getBoundingClientRect();
+          return clientX >= rect.left && 
+                 clientX <= rect.right && 
+                 clientY >= rect.top && 
+                 clientY <= rect.bottom;
+        };
+        
         document.addEventListener('mousemove', (e) => {
           const wasOverChat = isOverChatPanel;
           const wasOverChar = isOverCharacter;
+          const wasOverBs = isOverBsPanel;
           
           // 채팅 패널 체크 (우선순위 높음)
           isOverChatPanel = checkIfOverChatPanel(e.clientX, e.clientY);
           
-          // 캐릭터 체크 (채팅 패널이 아닐 때만)
-          if (!isOverChatPanel) {
+          // 브레인스토밍 패널 체크 (우선순위 높음)
+          isOverBsPanel = checkIfOverBsPanel(e.clientX, e.clientY);
+          
+          // 캐릭터 체크 (패널들이 아닐 때만)
+          if (!isOverChatPanel && !isOverBsPanel) {
             isOverCharacter = checkIfOverCharacter(e.clientX, e.clientY);
           } else {
             isOverCharacter = false;
           }
           
-          // 상태 변경 시에만 IPC 전송
-          if (wasOverChat !== isOverChatPanel || wasOverChar !== isOverCharacter) {
-            // 채팅 패널이나 캐릭터 위에 있으면 클릭 가능
-            const shouldAcceptClicks = isOverChatPanel || isOverCharacter;
-            ipcRenderer.send('va:set-ignore-mouse', !shouldAcceptClicks);
-            
-            if (isOverChatPanel) {
-              console.log('💬 채팅 패널 위');
-            } else if (isOverCharacter) {
-              console.log('🎭 캐릭터 위');
-            }
+          // 상태 변경 시 IPC 전송
+          if (wasOverChat !== isOverChatPanel || wasOverChar !== isOverCharacter || wasOverBs !== isOverBsPanel) {
+            const shouldAcceptClicks = isOverChatPanel || isOverBsPanel || isOverCharacter;
+            const ignoreValue = !shouldAcceptClicks;
+            ipcRenderer.send('va:set-ignore-mouse', ignoreValue);
           }
         });
       }
     }
 
-    window.addEventListener('DOMContentLoaded', init);
+    // 모듈 로딩을 기다리기 위해 onload 사용
+    window.addEventListener('load', init);
   </script>
 </body>
 </html>
