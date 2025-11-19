@@ -49,6 +49,7 @@ class ProcessedContent(BaseModel):
     text: str
     metadata: DocumentMetadata
     table_data: Optional[TableData] = None
+    translated_text: Optional[str] = None  # 영어 번역 텍스트
     
     class Config:
         use_enum_values = True
@@ -72,6 +73,8 @@ class ChunkMetadata(BaseModel):
     content_type: ContentType
     chunk_index: int
     total_chunks: Optional[int] = None
+    original_text: Optional[str] = None  # 원본 한국어 텍스트
+    translated_text: Optional[str] = None  # 영어 번역 텍스트
     
     class Config:
         use_enum_values = True
@@ -81,6 +84,7 @@ class DocumentChunk(BaseModel):
     """문서 청크"""
     text: str
     metadata: ChunkMetadata
+    embedding: Optional[List[float]] = None  # 임베딩 벡터
 
 
 class UploadResponse(BaseModel):
@@ -97,7 +101,7 @@ class QueryRequest(BaseModel):
     """질의응답 요청"""
     query: str
     top_k: Optional[int] = Field(default=3, ge=1, le=10)
-    similarity_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)  # 거리도 threshold
+    # similarity_threshold 제거: 동적 threshold가 항상 활성화됨
     collection_name: Optional[str] = None
 
 

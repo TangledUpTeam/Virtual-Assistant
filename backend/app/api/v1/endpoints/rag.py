@@ -26,11 +26,43 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# 전역 인스턴스 (재사용)
-pdf_processor = PDFProcessor()
-document_converter = DocumentConverter()
-vector_store = VectorStore()
-retriever = RAGRetriever()
+# 전역 인스턴스 (lazy loading)
+_pdf_processor = None
+_document_converter = None
+_vector_store = None
+_retriever = None
+
+def get_pdf_processor():
+    """PDF 프로세서 lazy loading"""
+    global _pdf_processor
+    if _pdf_processor is None:
+        _pdf_processor = PDFProcessor()
+        logger.info("PDFProcessor 인스턴스 생성")
+    return _pdf_processor
+
+def get_document_converter():
+    """문서 변환기 lazy loading"""
+    global _document_converter
+    if _document_converter is None:
+        _document_converter = DocumentConverter()
+        logger.info("DocumentConverter 인스턴스 생성")
+    return _document_converter
+
+def get_vector_store():
+    """벡터 저장소 lazy loading"""
+    global _vector_store
+    if _vector_store is None:
+        _vector_store = VectorStore()
+        logger.info("VectorStore 인스턴스 생성")
+    return _vector_store
+
+def get_retriever():
+    """RAG 검색기 lazy loading"""
+    global _retriever
+    if _retriever is None:
+        _retriever = RAGRetriever()
+        logger.info("RAGRetriever 인스턴스 생성")
+    return _retriever
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -63,14 +95,22 @@ async def upload_pdf(
         
         logger.info(f"파일 업로드 완료: {file.filename}")
         
+        # 인스턴스 lazy loading
+        pdf_processor = get_pdf_processor()
+        document_converter = get_document_converter()
+        vector_store = get_vector_store()
+        
         # PDF 처리 (동기)
         processed_doc = pdf_processor.process_pdf(str(upload_path))
         
         # 청킹
         chunks = document_converter.create_chunks(processed_doc)
         
-        # 벡터 저장
+        # 벡터 저장 (임베딩 재사용 가능)
         added_count = vector_store.add_document(processed_doc, chunks)
+        
+        # 임베딩과 함께 JSON 저장
+        pdf_processor.save_chunks_with_embeddings(processed_doc, chunks)
         
         # 처리된 파일 경로
         processed_file_path = str(
@@ -101,6 +141,8 @@ async def query_rag(request: QueryRequest):
     """
     RAG 기반 질의응답
     
+    동적 threshold가 항상 활성화되어 검색 결과에 따라 자동으로 조정됩니다.
+    
     Args:
         request: 질의응답 요청
         
@@ -108,7 +150,10 @@ async def query_rag(request: QueryRequest):
         QueryResponse: 질의응답 결과
     """
     try:
-        logger.info(f"질의응답 요청: {request.query}")
+        logger.info(f"질의응답 요청: {request.query} (동적 threshold 자동 적용)")
+        
+        # 인스턴스 lazy loading
+        retriever = get_retriever()
         
         response = retriever.query(request)
         
@@ -131,14 +176,19 @@ async def get_stats():
         dict: 시스템 통계
     """
     try:
+        # 인스턴스 lazy loading
+        vector_store = get_vector_store()
+        
         doc_count = vector_store.count_documents()
         
         stats = {
             "total_chunks": doc_count,
             "collection_name": rag_config.CHROMA_COLLECTION_NAME,
-            "embedding_model": rag_config.KOREAN_EMBEDDING_MODEL,
+            "embedding_model": rag_config.EMBEDDING_MODEL,
+            "translation_model": rag_config.TRANSLATION_MODEL,
             "llm_model": rag_config.OPENAI_MODEL,
             "top_k": rag_config.RAG_TOP_K,
+            "dynamic_threshold_range": f"{rag_config.RAG_MIN_SIMILARITY_THRESHOLD} ~ {rag_config.RAG_MAX_SIMILARITY_THRESHOLD}",
             "chunk_size": rag_config.RAG_CHUNK_SIZE,
             "chunk_overlap": rag_config.RAG_CHUNK_OVERLAP
         }
@@ -165,6 +215,9 @@ async def delete_document(document_id: str):
         dict: 삭제 결과
     """
     try:
+        # 인스턴스 lazy loading
+        vector_store = get_vector_store()
+        
         success = vector_store.delete_document(document_id)
         
         if success:
@@ -199,6 +252,9 @@ async def reset_collection():
         dict: 초기화 결과
     """
     try:
+        # 인스턴스 lazy loading
+        vector_store = get_vector_store()
+        
         vector_store.reset_collection()
         
         return {

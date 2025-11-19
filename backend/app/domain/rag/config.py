@@ -77,9 +77,12 @@ class RAGConfig:
     # RAG 전용 설정
     # ========================================
     
-    # 한국어 임베딩 모델
-    KOREAN_EMBEDDING_MODEL: str = "jhgan/ko-sroberta-multitask"
-    EMBEDDING_DIMENSION: int = 768
+    # OpenAI 임베딩 모델 (text-embedding-3-large)
+    EMBEDDING_MODEL: str = "text-embedding-3-large"
+    EMBEDDING_DIMENSION: int = 3072
+    
+    # 번역용 모델 (GPT-4o-mini)
+    TRANSLATION_MODEL: str = "gpt-4o-mini"
     
     # 청크 설정
     RAG_CHUNK_SIZE: int = 400
@@ -90,9 +93,10 @@ class RAGConfig:
     # 검색 설정
     RAG_TOP_K: int = 3
     RAG_MAX_TOP_K: int = 4
-    RAG_SIMILARITY_THRESHOLD: float = 0.25  # 거리도 threshold (0.0 ~ 1.0, 높을수록 유사도 높음)
-    # Cosine distance (0~2)를 similarity (0~1)로 변환: similarity = 1 - distance/2
-    # threshold 0.35 = distance 1.3 이하 (낮은 threshold로 더 많은 결과 포함)
+    RAG_MIN_SIMILARITY_THRESHOLD: float = 0.25  # 최소 threshold
+    RAG_MAX_SIMILARITY_THRESHOLD: float = 0.375  # 최대 threshold (min의 1.5배)
+    # 동적 threshold는 항상 활성화: 검색 결과에 따라 min~max 범위 내에서 자동 조정
+    # OpenAI 임베딩은 cosine similarity 사용 (0~1 범위, 높을수록 유사)
     
     # LangSmith 설정
     @property

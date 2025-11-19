@@ -12,6 +12,7 @@ import base64
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
+from datetime import datetime
 
 from .config import rag_config
 from .schemas import (
@@ -31,6 +32,31 @@ class PDFProcessor:
     
     def __init__(self):
         self.config = rag_config
+    
+    def save_chunks_with_embeddings(self, doc: ProcessedDocument, chunks: List[Any]):
+        """
+        청크와 임베딩을 함께 저장
+        
+        Args:
+            doc: 처리된 문서
+            chunks: DocumentChunk 리스트 (임베딩 포함)
+        """
+        chunks_data = []
+        for chunk in chunks:
+            chunk_dict = {
+                "text": chunk.text,
+                "metadata": chunk.metadata.model_dump(),
+                "embedding": chunk.embedding if hasattr(chunk, 'embedding') else None
+            }
+            
+            # 번역 텍스트 추가
+            if chunk.metadata.translated_text:
+                chunk_dict["translated_text"] = chunk.metadata.translated_text
+            
+            chunks_data.append(chunk_dict)
+        
+        # 문서와 함께 저장
+        self._save_processed_document(doc, chunks_with_embeddings=chunks_data)
         
     def process_pdf(self, pdf_path: str) -> ProcessedDocument:
         """
@@ -336,8 +362,14 @@ class PDFProcessor:
         logger.info(f"텍스트 파일 처리 완료: {len(content)} 문자")
         return processed_doc
     
-    def _save_processed_document(self, doc: ProcessedDocument):
-        """처리된 문서를 JSON 파일로 저장"""
+    def _save_processed_document(self, doc: ProcessedDocument, chunks_with_embeddings: Optional[List[Dict]] = None):
+        """
+        처리된 문서를 JSON 파일로 저장 (임베딩 포함)
+        
+        Args:
+            doc: 처리된 문서
+            chunks_with_embeddings: 임베딩이 포함된 청크 리스트
+        """
         try:
             output_path = self.config.PROCESSED_DIR / f"{Path(doc.filename).stem}.json"
             
@@ -349,6 +381,11 @@ class PDFProcessor:
                 if 'data' in file_path and 'internal_docs' not in file_path:
                     file_path = file_path.replace('data', 'internal_docs')
                     doc_dict['file_path'] = file_path
+            
+            # 임베딩 정보 추가
+            if chunks_with_embeddings:
+                doc_dict['chunks_with_embeddings'] = chunks_with_embeddings
+                logger.info(f"임베딩 포함하여 저장: {len(chunks_with_embeddings)}개 청크")
             
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(doc_dict, f, ensure_ascii=False, indent=2, default=str)
