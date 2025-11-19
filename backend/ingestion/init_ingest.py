@@ -79,10 +79,10 @@ def main():
     
     # === 1. 보고서 청크 ingestion ===
     report_chunk_files = [
-        "output/일일 업무 보고서_daily_chunks.json",
-        "output/주간 업무 보고서_weekly_chunks.json",
-        "output/월간 업무 보고서_monthly_chunks.json",
-        "output/실적 보고서 양식_performance_chunks.json"
+        "output/reports/일일 업무 보고서_daily_chunks.json",
+        "output/reports/주간 업무 보고서_weekly_chunks.json",
+        "output/reports/월간 업무 보고서_monthly_chunks.json",
+        "output/reports/실적 보고서 양식_performance_chunks.json"
     ]
     
     all_reports_chunks = []

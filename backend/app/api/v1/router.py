@@ -38,6 +38,8 @@ api_router.include_router(
 api_router.include_router(
     daily_router,
     tags=["Daily"]
+)
+
 # RAG 엔드포인트
 api_router.include_router(
     rag_router,

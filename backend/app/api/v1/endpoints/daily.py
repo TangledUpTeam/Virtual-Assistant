@@ -8,7 +8,7 @@ Created: 2025-11-18
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import date
 
 from app.domain.daily.fsm_state import DailyFSMContext
@@ -17,6 +17,7 @@ from app.domain.daily.task_parser import TaskParser
 from app.domain.daily.daily_fsm import DailyReportFSM
 from app.domain.daily.daily_builder import build_daily_report
 from app.domain.daily.session_manager import get_session_manager
+from app.domain.daily.main_tasks_store import get_main_tasks_store
 from app.llm.client import get_llm
 from app.domain.report.schemas import CanonicalReport
 
@@ -29,10 +30,6 @@ class DailyStartRequest(BaseModel):
     """일일보고서 작성 시작 요청"""
     owner: str = Field(..., description="작성자")
     target_date: date = Field(..., description="보고서 날짜")
-    main_tasks: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="금일 진행 업무 (TodayPlan에서 선택된 것)"
-    )
     time_ranges: List[str] = Field(
         default_factory=list,
         description="시간대 목록 (비어있으면 자동 생성)"
@@ -70,8 +67,10 @@ async def start_daily_report(request: DailyStartRequest):
     """
     일일보고서 작성 시작
     
-    금일 진행 업무(main_tasks)를 받아서 FSM 세션을 시작하고,
-    첫 번째 시간대 질문을 반환합니다.
+    저장소에서 금일 진행 업무(main_tasks)를 자동으로 불러와서
+    FSM 세션을 시작하고, 첫 번째 시간대 질문을 반환합니다.
+    
+    main_tasks는 /select_main_tasks로 미리 저장되어 있어야 합니다.
     """
     try:
         # 시간대 생성 (제공되지 않으면 기본값: 09:00~18:00, 60분 간격)
@@ -79,12 +78,24 @@ async def start_daily_report(request: DailyStartRequest):
         if not time_ranges:
             time_ranges = generate_time_slots()  # 기본값 사용
         
+        # 저장소에서 main_tasks 불러오기
+        store = get_main_tasks_store()
+        main_tasks = store.get(
+            owner=request.owner,
+            target_date=request.target_date
+        )
+        
+        # main_tasks가 없으면 빈 리스트로 설정 (경고 메시지 출력)
+        if main_tasks is None:
+            print(f"[WARNING] main_tasks가 저장되지 않음: {request.owner}, {request.target_date}")
+            main_tasks = []
+        
         # FSM 컨텍스트 생성
         context = DailyFSMContext(
             owner=request.owner,
             target_date=request.target_date,
             time_ranges=time_ranges,
-            today_main_tasks=request.main_tasks,
+            today_main_tasks=main_tasks,
             current_index=0,
             finished=False
         )
@@ -171,6 +182,63 @@ async def answer_daily_question(request: DailyAnswerRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"답변 처리 실패: {str(e)}")
+
+
+class SelectMainTasksRequest(BaseModel):
+    """금일 진행 업무 선택 요청"""
+    owner: str = Field(..., description="작성자")
+    target_date: date = Field(..., description="보고서 날짜")
+    main_tasks: List[Dict[str, Any]] = Field(
+        ...,
+        description="선택된 금일 진행 업무 리스트"
+    )
+
+
+class SelectMainTasksResponse(BaseModel):
+    """금일 진행 업무 선택 응답"""
+    success: bool
+    message: str
+    saved_count: int
+
+
+@router.post("/select_main_tasks", response_model=SelectMainTasksResponse)
+async def select_main_tasks(request: SelectMainTasksRequest):
+    """
+    금일 진행 업무 선택 및 저장
+    
+    사용자가 TodayPlan Chain에서 추천받은 업무 중 
+    실제로 수행할 업무를 선택하여 저장합니다.
+    
+    저장된 업무는 /daily/start 호출 시 자동으로 불러옵니다.
+    """
+    try:
+        if not request.main_tasks:
+            raise HTTPException(
+                status_code=400,
+                detail="최소 1개 이상의 업무를 선택해주세요."
+            )
+        
+        # 저장소에 저장
+        store = get_main_tasks_store()
+        store.save(
+            owner=request.owner,
+            target_date=request.target_date,
+            main_tasks=request.main_tasks
+        )
+        
+        return SelectMainTasksResponse(
+            success=True,
+            message="금일 진행 업무가 저장되었습니다.",
+            saved_count=len(request.main_tasks)
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"업무 저장 실패: {str(e)}"
+        )
 
 
 @router.get("/health")

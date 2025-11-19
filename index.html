@@ -174,15 +174,147 @@
        transform: translateY(0);
      }
      
-     #send-btn:disabled {
-       background: rgba(150, 150, 150, 0.6);
-       cursor: not-allowed;
-       transform: none;
-     }
-     
-     /* ========================================
-      * Live2D 스테이지 (전체 화면)
-      * ======================================== */
+    #send-btn:disabled {
+      background: rgba(150, 150, 150, 0.6);
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    /* ========================================
+     * 추천 업무 카드 UI
+     * ======================================== */
+    .task-recommendations-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    
+    .task-guide {
+      padding: 10px 14px;
+      background: rgba(100, 150, 255, 0.1);
+      border-left: 3px solid rgba(100, 150, 255, 0.6);
+      border-radius: 8px;
+      font-size: 13px;
+      color: #555;
+    }
+    
+    .task-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 5px;
+    }
+    
+    .task-card {
+      background: rgba(255, 255, 255, 0.95);
+      border: 2px solid rgba(200, 200, 200, 0.3);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    
+    .task-card:hover {
+      border-color: rgba(100, 150, 255, 0.5);
+      box-shadow: 0 4px 12px rgba(100, 150, 255, 0.2);
+      transform: translateY(-2px);
+    }
+    
+    .task-card.selected {
+      border-color: rgba(100, 150, 255, 0.8);
+      background: rgba(100, 150, 255, 0.1);
+      box-shadow: 0 4px 16px rgba(100, 150, 255, 0.3);
+    }
+    
+    .priority-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .priority-high {
+      background: rgba(255, 100, 100, 0.15);
+      color: #d63031;
+      border: 1px solid rgba(255, 100, 100, 0.3);
+    }
+    
+    .priority-medium {
+      background: rgba(255, 180, 0, 0.15);
+      color: #e67e22;
+      border: 1px solid rgba(255, 180, 0, 0.3);
+    }
+    
+    .priority-low {
+      background: rgba(100, 200, 100, 0.15);
+      color: #27ae60;
+      border: 1px solid rgba(100, 200, 100, 0.3);
+    }
+    
+    .task-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    
+    .task-description {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    
+    .task-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: #888;
+    }
+    
+    .task-category,
+    .task-time {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    .task-save-button {
+      align-self: center;
+      padding: 12px 32px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(100, 200, 100, 0.9), rgba(80, 180, 80, 0.9));
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(100, 200, 100, 0.3);
+      margin-top: 8px;
+    }
+    
+    .task-save-button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(100, 200, 100, 0.4);
+    }
+    
+    .task-save-button:disabled {
+      background: rgba(150, 150, 150, 0.6);
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    /* ========================================
+     * Live2D 스테이지 (전체 화면)
+     * ======================================== */
      #stage {
        position: fixed;
        inset: 0;
@@ -381,24 +513,97 @@
     /****************************************************************
      * 채팅 서비스 (인라인)
      ****************************************************************/
+    const API_BASE_URL = 'http://localhost:8000/api/v1';
+    
     async function callChatModule(userText) {
       console.log('📨 사용자 메시지:', userText);
       
-      // 1-2초 딜레이 시뮬레이션
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+      // "오늘 뭐할지 추천" 등의 키워드가 있으면 TodayPlan API 호출
+      if (userText.includes('오늘') && (userText.includes('추천') || userText.includes('뭐할'))) {
+        return await getTodayPlan();
+      }
       
-      // 더미 응답 목록
-      const dummyResponses = [
-        '안녕하세요! 무엇을 도와드릴까요? 😊',
-        '네, 알겠습니다. 제가 도와드리겠습니다!',
-        '흥미로운 질문이네요! 조금만 기다려주세요.',
-        '좋은 생각이에요! 그렇게 해보시는 건 어떨까요?',
-        '더 자세히 설명해주시면 더 정확하게 답변드릴 수 있을 것 같아요.',
-      ];
-      
-      const response = dummyResponses[Math.floor(Math.random() * dummyResponses.length)];
-      console.log('🤖 AI 응답:', response);
-      return response;
+      // 기본 응답 (추후 확장 가능)
+      return {
+        type: 'text',
+        data: '안녕하세요! "오늘 뭐할지 추천 좀"이라고 말씀해주시면 업무를 추천해드립니다. 😊'
+      };
+    }
+    
+    async function getTodayPlan() {
+      try {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const owner = '김보험'; // 현재는 하드코딩 (추후 로그인 정보 사용)
+        
+        const response = await fetch(`${API_BASE_URL}/plan/today`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            owner: owner,
+            target_date: today
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API 호출 실패: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('🎯 추천 업무:', result);
+        
+        return {
+          type: 'task_recommendations',
+          data: {
+            tasks: result.tasks || [],
+            summary: result.summary || '',
+            owner: owner,
+            target_date: today
+          }
+        };
+      } catch (error) {
+        console.error('❌ API 호출 오류:', error);
+        return {
+          type: 'error',
+          data: '추천 업무를 가져오는 중 오류가 발생했습니다. 백엔드 서버가 실행 중인지 확인해주세요.'
+        };
+      }
+    }
+    
+    async function saveSelectedTasks(owner, targetDate, mainTasks) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/daily/select_main_tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            owner: owner,
+            target_date: targetDate,
+            main_tasks: mainTasks
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API 호출 실패: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('✅ 업무 저장 완료:', result);
+        
+        return {
+          success: true,
+          message: result.message || '업무가 저장되었습니다.',
+          saved_count: result.saved_count || 0
+        };
+      } catch (error) {
+        console.error('❌ 업무 저장 오류:', error);
+        return {
+          success: false,
+          message: '업무 저장에 실패했습니다.'
+        };
+      }
     }
 
     /****************************************************************
@@ -411,6 +616,10 @@
     let chatInput = null;
     let sendBtn = null;
     let isChatPanelInitialized = false; // 🔥 중복 초기화 방지
+    
+    // 추천 업무 선택 상태
+    let selectedTasks = new Set();
+    let currentRecommendation = null; // { owner, target_date, tasks }
 
     function initChatPanel() {
       // 🔥 이미 초기화되었으면 무시
@@ -490,7 +699,15 @@
       
       try {
         const response = await callChatModule(text);
-        addMessage('assistant', response);
+        
+        // 응답 타입에 따라 처리
+        if (response.type === 'task_recommendations') {
+          addTaskRecommendations(response.data);
+        } else if (response.type === 'error') {
+          addMessage('assistant', response.data);
+        } else {
+          addMessage('assistant', response.data);
+        }
       } catch (error) {
         console.error('❌ 채팅 오류:', error);
         addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
@@ -515,6 +732,145 @@
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
       
       console.log(`💬 [${role}]: ${text}`);
+    }
+    
+    function addTaskRecommendations(data) {
+      const { tasks, summary, owner, target_date } = data;
+      
+      currentRecommendation = { owner, target_date, tasks };
+      selectedTasks.clear();
+      
+      messages.push({ role: 'assistant', type: 'task_recommendations', data });
+      
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message assistant';
+      
+      const container = document.createElement('div');
+      container.className = 'task-recommendations-container';
+      
+      const summaryDiv = document.createElement('div');
+      summaryDiv.className = 'bubble';
+      summaryDiv.textContent = summary || '오늘의 추천 업무입니다!';
+      container.appendChild(summaryDiv);
+      
+      const guideDiv = document.createElement('div');
+      guideDiv.className = 'task-guide';
+      guideDiv.textContent = '📌 수행할 업무를 선택해주세요 (2~4개 권장)';
+      container.appendChild(guideDiv);
+      
+      const cardsContainer = document.createElement('div');
+      cardsContainer.className = 'task-cards';
+      
+      tasks.forEach((task, index) => {
+        const card = createTaskCard(task, index);
+        cardsContainer.appendChild(card);
+      });
+      
+      container.appendChild(cardsContainer);
+      
+      const saveButton = document.createElement('button');
+      saveButton.className = 'task-save-button';
+      saveButton.textContent = '선택 완료';
+      saveButton.disabled = true;
+      saveButton.addEventListener('click', handleSaveSelectedTasks);
+      container.appendChild(saveButton);
+      
+      messageDiv.appendChild(container);
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      console.log(`🎯 추천 업무 ${tasks.length}개 표시`);
+    }
+    
+    function createTaskCard(task, index) {
+      const card = document.createElement('div');
+      card.className = 'task-card';
+      card.dataset.index = index;
+      
+      const priorityBadge = document.createElement('span');
+      priorityBadge.className = `priority-badge priority-${task.priority}`;
+      priorityBadge.textContent = {
+        'high': '높음',
+        'medium': '보통',
+        'low': '낮음'
+      }[task.priority] || '보통';
+      
+      const title = document.createElement('div');
+      title.className = 'task-title';
+      title.textContent = task.title;
+      
+      const description = document.createElement('div');
+      description.className = 'task-description';
+      description.textContent = task.description;
+      
+      const meta = document.createElement('div');
+      meta.className = 'task-meta';
+      meta.innerHTML = `
+        <span class="task-category">📁 ${task.category}</span>
+        <span class="task-time">⏰ ${task.expected_time}</span>
+      `;
+      
+      card.appendChild(priorityBadge);
+      card.appendChild(title);
+      card.appendChild(description);
+      card.appendChild(meta);
+      
+      card.addEventListener('click', () => {
+        toggleTaskSelection(card, index);
+      });
+      
+      return card;
+    }
+    
+    function toggleTaskSelection(card, index) {
+      if (selectedTasks.has(index)) {
+        selectedTasks.delete(index);
+        card.classList.remove('selected');
+      } else {
+        selectedTasks.add(index);
+        card.classList.add('selected');
+      }
+      
+      const saveButton = card.closest('.task-recommendations-container').querySelector('.task-save-button');
+      saveButton.disabled = selectedTasks.size === 0;
+      
+      console.log(`✅ 선택된 업무: ${selectedTasks.size}개`);
+    }
+    
+    async function handleSaveSelectedTasks(event) {
+      if (!currentRecommendation || selectedTasks.size === 0) {
+        return;
+      }
+      
+      const { owner, target_date, tasks } = currentRecommendation;
+      const selectedTasksList = Array.from(selectedTasks).map(index => tasks[index]);
+      
+      const saveButton = event.target;
+      saveButton.disabled = true;
+      saveButton.textContent = '저장 중...';
+      
+      try {
+        const result = await saveSelectedTasks(owner, target_date, selectedTasksList);
+        
+        if (result.success) {
+          addMessage('assistant', `✅ ${result.saved_count}개의 업무가 저장되었습니다! 금일 진행 업무 선택이 완료되었습니다.`);
+          
+          selectedTasks.clear();
+          currentRecommendation = null;
+          
+          saveButton.closest('.task-recommendations-container').style.opacity = '0.5';
+          saveButton.textContent = '저장 완료';
+        } else {
+          addMessage('assistant', `❌ 저장 실패: ${result.message}`);
+          saveButton.disabled = false;
+          saveButton.textContent = '선택 완료';
+        }
+      } catch (error) {
+        console.error('❌ 저장 오류:', error);
+        addMessage('assistant', '❌ 업무 저장 중 오류가 발생했습니다.');
+        saveButton.disabled = false;
+        saveButton.textContent = '선택 완료';
+      }
     }
 
     function togglePanel() {
