@@ -52,8 +52,8 @@ def process_report(pdf_path: str, service: ReportProcessingService):
     print(f"  - 타입별 청크: {stats['chunk_types']}")
     
     # 4. 파일 저장
-    output_dir = Path("output")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path("output/reports")
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     base_name = pdf_file.stem
     report_type = canonical_report.report_type
@@ -93,10 +93,10 @@ def main():
     
     # 처리할 보고서 목록
     reports = [
-        "Data/일일 업무 보고서.pdf",
-        "Data/주간 업무 보고서.pdf",
-        "Data/월간 업무 보고서.pdf",
-        "Data/실적 보고서 양식.pdf"
+        "Data/reports/일일 업무 보고서.pdf",
+        "Data/reports/주간 업무 보고서.pdf",
+        "Data/reports/월간 업무 보고서.pdf",
+        "Data/reports/실적 보고서 양식.pdf"
     ]
     
     success_count = 0

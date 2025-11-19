@@ -6,7 +6,7 @@
 처리 문서:
 - 일일 보고서 (backend/Data/mock_reports/daily/*.txt)
 - KPI 문서 (output/*_kpi_canonical.json)
-- 보고서 템플릿 (output/*_canonical.json)
+- 보고서 템플릿 (output/reports/*_canonical.json)
 
 플로우:
 1. 파일 스캔
