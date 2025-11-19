@@ -29,7 +29,7 @@ function createLoginWindow() {
   // 로그인 페이지 로드 (이미 로그인되어 있으면 자동으로 /start로 이동)
   loginWin.loadURL('http://localhost:8000/login');
 
-  // 개발자 도구 (디버깅용)
+  // 개발자 도구는 F12로 수동으로 열 수 있음
   // loginWin.webContents.openDevTools();
 
   loginWin.on('closed', () => {
@@ -103,9 +103,6 @@ function createCharacterWindow() {
 
   console.log('📦 캐릭터 로딩 중...');
 
-  // 기본은 클릭-스루
-  characterWin.setIgnoreMouseEvents(true);
-  
   // 단축키 (F12: 개발자 도구)
   characterWin.webContents.on('before-input-event', (event, input) => {
     // F12로 개발자 도구
@@ -116,6 +113,18 @@ function createCharacterWindow() {
 
   characterWin.webContents.on('did-finish-load', () => {
     console.log('✅ 캐릭터 로드 완료!');
+    // 개발자 도구는 F12로 수동으로 열 수 있음
+    // characterWin.webContents.openDevTools();
+    
+    // 페이지 로드 완료 후 마우스 이벤트 활성화
+    // (렌더러에서 동적으로 클릭-스루 영역 제어)
+    // 초기에는 마우스 이벤트를 받아서 렌더러에서 처리할 수 있도록 함
+    setTimeout(() => {
+      if (characterWin && !characterWin.isDestroyed()) {
+        characterWin.setIgnoreMouseEvents(false);
+        console.log('✅ 마우스 이벤트 활성화');
+      }
+    }, 1500); // 페이지 초기화 대기 (더 길게)
   });
 
   // 브라우저 콘솔 메시지를 터미널로 출력 (에러만)
@@ -137,7 +146,12 @@ function createCharacterWindow() {
 // 렌더러에서 클릭-스루 영역 정보 받기
 ipcMain.on('va:set-ignore-mouse', (_e, ignore) => {
   if (characterWin && !characterWin.isDestroyed()) {
-    characterWin.setIgnoreMouseEvents(ignore);
+    try {
+      characterWin.setIgnoreMouseEvents(ignore, { forward: true });
+      // 마우스 이벤트 상태 변경: ignore
+    } catch (error) {
+      console.error('❌ setIgnoreMouseEvents 오류:', error);
+    }
   }
 });
 
