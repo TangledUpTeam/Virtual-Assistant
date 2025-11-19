@@ -56,10 +56,12 @@ app.include_router(api_router, prefix=settings.API_PREFIX)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 PUBLIC_DIR = BASE_DIR / "public"
+RENDERER_DIR = BASE_DIR / "renderer"
 
 # 정적 파일 서빙
 app.mount("/public", StaticFiles(directory=str(PUBLIC_DIR)), name="public")
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.mount("/renderer", StaticFiles(directory=str(RENDERER_DIR)), name="renderer")
 
 
 # Health Check

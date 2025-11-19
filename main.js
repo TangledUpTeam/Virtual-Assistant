@@ -104,7 +104,7 @@ function createCharacterWindow() {
   console.log('📦 캐릭터 로딩 중...');
 
   // 기본은 클릭-스루
-  characterWin.setIgnoreMouseEvents(true, { forward: true });
+  characterWin.setIgnoreMouseEvents(true);
   
   // 단축키 (F12: 개발자 도구)
   characterWin.webContents.on('before-input-event', (event, input) => {
@@ -118,6 +118,13 @@ function createCharacterWindow() {
     console.log('✅ 캐릭터 로드 완료!');
   });
 
+  // 브라우저 콘솔 메시지를 터미널로 출력 (에러만)
+  characterWin.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    if (level >= 2) { // 2 = warning, 3 = error
+      console.log(`[Browser] ${message}`);
+    }
+  });
+
   characterWin.on('closed', () => {
     console.log('🎭 캐릭터 창 닫힘');
     characterWin = null;
@@ -127,10 +134,10 @@ function createCharacterWindow() {
   // characterWin.webContents.openDevTools();
 }
 
-// 렌더러에서 클릭-스루 영역 정보 받기 (마우스가 캐릭터 위에 있는지)
+// 렌더러에서 클릭-스루 영역 정보 받기
 ipcMain.on('va:set-ignore-mouse', (_e, ignore) => {
   if (characterWin && !characterWin.isDestroyed()) {
-    characterWin.setIgnoreMouseEvents(ignore, { forward: true });
+    characterWin.setIgnoreMouseEvents(ignore);
   }
 });
 
