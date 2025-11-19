@@ -5,6 +5,7 @@ from app.api.v1.endpoints.reports import router as reports_router
 from app.api.v1.endpoints.plan import router as plan_router
 from app.api.v1.endpoints.daily import router as daily_router
 from app.api.v1.endpoints.rag import router as rag_router
+from app.api.v1.endpoints.brainstorming import router as brainstorming_router
 
 api_router = APIRouter()
 
@@ -45,4 +46,11 @@ api_router.include_router(
     rag_router,
     prefix="/rag",
     tags=["RAG"]
+)
+
+# Brainstorming 엔드포인트
+api_router.include_router(
+    brainstorming_router,
+    prefix="/brainstorming",
+    tags=["Brainstorming"]
 )
