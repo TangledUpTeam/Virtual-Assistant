@@ -39,12 +39,13 @@ pydantic-settings==2.6.1
 openai==1.57.0
 tiktoken==0.8.0
 
-# LangChain
-langchain==0.3.0
-langchain-openai==0.2.0
-langchain-core==0.3.0
-langchain-community==0.3.0
-langgraph==0.2.0
+# LangChain (버전 호환성 맞춤)
+langchain>=0.3.0,<0.4.0
+langchain-openai>=0.2.0,<0.3.0
+langchain-core>=0.3.51,<0.4.0
+langchain-community>=0.3.0,<0.4.0
+langchain-text-splitters>=0.3.8,<0.4.0
+langgraph>=0.2.0,<0.3.0
 
 # ========================================
 # Vector Database
