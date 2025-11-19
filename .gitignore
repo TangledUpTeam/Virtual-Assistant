@@ -118,11 +118,3 @@ Desktop.ini
 *.bak
 *.swp
 *.swo
-
-# data files
-*.txt
-*.pdf 
-*.docx
-*.md
-package-lock.json
-package.json
