@@ -39,16 +39,30 @@ class RAGRetriever:
             os.environ["LANGCHAIN_PROJECT"] = self.config.LANGSMITH_PROJECT
             logger.info(f"LangSmith 추적 활성화: {self.config.LANGSMITH_PROJECT}")
         
-        # LangChain LLM 초기화
-        self.llm = ChatOpenAI(
-            model=self.config.OPENAI_MODEL,
-            temperature=self.config.OPENAI_TEMPERATURE,
-            max_tokens=self.config.OPENAI_MAX_TOKENS,
-            api_key=self.config.OPENAI_API_KEY
-        )
+        # Lazy loading: LLM을 실제 사용 시에만 로드
+        self._llm = None
+        self._rag_chain = None
+        self._smalltalk_chain = None
         
-        # 프롬프트 템플릿
-        self.prompt_template = ChatPromptTemplate.from_messages([
+        logger.info("RAGRetriever 초기화 완료 (LLM lazy loading)")
+    
+    @property
+    def llm(self):
+        """LLM lazy loading"""
+        if self._llm is None:
+            self._llm = ChatOpenAI(
+                model=self.config.OPENAI_MODEL,
+                temperature=self.config.OPENAI_TEMPERATURE,
+                max_tokens=self.config.OPENAI_MAX_TOKENS,
+                api_key=self.config.OPENAI_API_KEY
+            )
+            logger.info(f"LLM 로드 완료: {self.config.OPENAI_MODEL}")
+        return self._llm
+    
+    @property
+    def prompt_template(self):
+        """프롬프트 템플릿"""
+        return ChatPromptTemplate.from_messages([
             ("system", """당신은 문서 내용을 기반으로 정확하게 답변하는 AI 어시스턴트입니다.
 
 다음 규칙을 따라주세요:
@@ -65,43 +79,55 @@ class RAGRetriever:
 
 답변:""")
         ])
-        
-        # LangChain 체인 구성 (파이프 연산자 사용)
-        self.rag_chain = self._build_rag_chain()
-        
-        # Small talk용 LLM 프롬프트 (검색 불필요)
-        self.smalltalk_prompt = ChatPromptTemplate.from_messages([
+    
+    @property
+    def smalltalk_prompt(self):
+        """Small talk 프롬프트 템플릿"""
+        return ChatPromptTemplate.from_messages([
             ("system", """당신은 친근하고 도움이 되는 AI 어시스턴트입니다.
 일상적인 대화를 자연스럽게 나누고, 사용자에게 친절하게 응답하세요.
 한국어로 답변하세요."""),
             ("user", "{query}")
         ])
-        
-        # Small talk용 LLM 체인
-        self.smalltalk_chain = (
-            self.smalltalk_prompt
-            | self.llm
-            | StrOutputParser()
-        )
+    
+    @property
+    def rag_chain(self):
+        """RAG 체인 lazy loading"""
+        if self._rag_chain is None:
+            self._rag_chain = self._build_rag_chain()
+            logger.info("RAG 체인 구성 완료")
+        return self._rag_chain
+    
+    @property
+    def smalltalk_chain(self):
+        """Small talk 체인 lazy loading"""
+        if self._smalltalk_chain is None:
+            self._smalltalk_chain = (
+                self.smalltalk_prompt
+                | self.llm
+                | StrOutputParser()
+            )
+            logger.info("Small talk 체인 구성 완료")
+        return self._smalltalk_chain
     
     def _build_rag_chain(self):
         """LangChain 파이프 연산자(|)를 사용하여 RAG 체인 구성"""
         
-        # 1. 컨텍스트 검색 및 필터링
+        # 1. 컨텍스트 검색 및 동적 threshold 필터링
         @traceable(name="retrieve_and_filter")
         def retrieve_and_filter(inputs: Dict[str, Any]) -> Dict[str, Any]:
-            """문서 검색 및 threshold 기반 필터링"""
+            """문서 검색 및 동적 threshold 기반 필터링"""
             query = inputs["query"]
             top_k = inputs.get("top_k", self.config.RAG_TOP_K)
-            threshold = inputs.get("similarity_threshold", self.config.RAG_SIMILARITY_THRESHOLD)
             
-            logger.info(f"문서 검색 중: '{query}' (Top-{top_k}, Threshold: {threshold})")
+            logger.info(f"문서 검색 중: '{query}' (Top-{top_k})")
             
-            # 벡터 검색
-            results = self.vector_store.search(query, top_k * 2)  # threshold 필터링을 위해 더 많이 검색
+            # 벡터 검색 (더 많이 검색하여 동적 threshold 적용)
+            results = self.vector_store.search(query, top_k * 3)
             
-            # 결과 변환 및 threshold 필터링
+            # 결과 변환 및 동적 threshold 필터링
             retrieved_chunks = []
+            all_similarities = []
             
             # 검색 결과 확인
             if not results:
@@ -112,48 +138,63 @@ class RAGRetriever:
                 logger.warning("검색 결과 문서 리스트가 비어있습니다.")
             else:
                 doc_list = results['documents'][0]
-                dist_list = results.get('distances', [[]])[0] if results.get('distances') else []
+                similarity_list = results.get('distances', [[]])[0] if results.get('distances') else []
                 meta_list = results.get('metadatas', [[]])[0] if results.get('metadatas') else []
                 
-                logger.info(f"검색 결과: {len(doc_list)}개 문서, {len(dist_list)}개 거리, {len(meta_list)}개 메타데이터")
+                logger.info(f"검색 결과: {len(doc_list)}개 문서, {len(similarity_list)}개 유사도 점수")
                 
+                # 모든 유사도를 수집
                 for i in range(len(doc_list)):
-                    # 거리 처리 (ChromaDB는 기본적으로 L2 distance 사용)
-                    if i < len(dist_list):
-                        distance = float(dist_list[i])
-                        # L2 distance를 similarity score로 변환
-                        # L2 거리는 0~무한대 범위, 작을수록 유사
-                        # 지수 감쇠 함수 사용: similarity = exp(-distance / scale)
-                        # scale을 조정하여 적절한 유사도 범위 생성
-                        import math
-                        scale = 100.0  # 거리 100일 때 유사도 약 0.37
-                        similarity_score = math.exp(-distance / scale)
-                        similarity_score = max(0.0, min(1.0, similarity_score))  # 0~1 범위로 제한
+                    if i < len(similarity_list):
+                        similarity_score = float(similarity_list[i])
                     else:
-                        distance = 1.0
-                        similarity_score = 0.5  # 기본값
+                        similarity_score = 0.0
                     
-                    # Score를 터미널에 출력
-                    filename = meta_list[i].get('filename', 'Unknown') if i < len(meta_list) else 'Unknown'
-                    page_num = meta_list[i].get('page_number', '?') if i < len(meta_list) else '?'
-                    logger.info(f"  [{i+1}] 파일: {filename}, 페이지: {page_num}, 거리: {distance:.4f}, 유사도: {similarity_score:.4f}, threshold: {threshold}")
+                    all_similarities.append(similarity_score)
                     
-                    # Threshold 기반 필터링
-                    if similarity_score >= threshold:
-                        metadata = meta_list[i] if i < len(meta_list) else {}
-                        chunk = RetrievedChunk(
-                            text=doc_list[i],
-                            metadata=metadata,
-                            score=similarity_score
-                        )
-                        retrieved_chunks.append(chunk)
-                    else:
-                        logger.info(f"  [{i+1}] 필터링됨: 유사도 {similarity_score:.4f} < threshold {threshold}")
+                    metadata = meta_list[i] if i < len(meta_list) else {}
+                    chunk = RetrievedChunk(
+                        text=doc_list[i],
+                        metadata=metadata,
+                        score=similarity_score
+                    )
+                    retrieved_chunks.append(chunk)
+            
+            # 동적 threshold 계산
+            if all_similarities:
+                # 최고 점수와 평균 점수 계산
+                max_similarity = max(all_similarities)
+                avg_similarity = sum(all_similarities) / len(all_similarities)
+                
+                # 동적 threshold: 최고 점수와 평균의 중간값, min~max 범위 내로 제한
+                dynamic_threshold = (max_similarity + avg_similarity) / 2
+                dynamic_threshold = max(
+                    self.config.RAG_MIN_SIMILARITY_THRESHOLD,
+                    min(dynamic_threshold, self.config.RAG_MAX_SIMILARITY_THRESHOLD)
+                )
+                
+                logger.info(f"동적 threshold 계산: max={max_similarity:.4f}, avg={avg_similarity:.4f}, "
+                           f"threshold={dynamic_threshold:.4f} (범위: {self.config.RAG_MIN_SIMILARITY_THRESHOLD}~{self.config.RAG_MAX_SIMILARITY_THRESHOLD})")
+            else:
+                dynamic_threshold = self.config.RAG_MIN_SIMILARITY_THRESHOLD
+                logger.warning(f"유사도 없음, 기본 threshold 사용: {dynamic_threshold}")
+            
+            # 동적 threshold 기반 필터링
+            filtered_chunks = []
+            for chunk in retrieved_chunks:
+                filename = chunk.metadata.get('filename', 'Unknown')
+                page_num = chunk.metadata.get('page_number', '?')
+                
+                if chunk.score >= dynamic_threshold:
+                    filtered_chunks.append(chunk)
+                    logger.info(f"  ✓ 파일: {filename}, 페이지: {page_num}, 유사도: {chunk.score:.4f} >= {dynamic_threshold:.4f}")
+                else:
+                    logger.info(f"  ✗ 필터링: {filename}, 페이지: {page_num}, 유사도: {chunk.score:.4f} < {dynamic_threshold:.4f}")
             
             # 상위 k개만 선택
-            retrieved_chunks = retrieved_chunks[:top_k]
+            retrieved_chunks = filtered_chunks[:top_k]
             
-            logger.info(f"{len(retrieved_chunks)}개 청크 검색 완료 (threshold: {threshold}, 총 검색 결과: {len(results.get('documents', [[]])[0]) if results.get('documents') else 0}개)")
+            logger.info(f"{len(retrieved_chunks)}개 청크 최종 선택 (동적 threshold: {dynamic_threshold:.4f})")
             
             # 컨텍스트 구성
             context_parts = []
@@ -171,7 +212,7 @@ class RAGRetriever:
                 "context": context,
                 "retrieved_chunks": retrieved_chunks,
                 "top_k": top_k,
-                "similarity_threshold": threshold
+                "dynamic_threshold": dynamic_threshold
             }
         
         # 2. 답변 생성
@@ -332,11 +373,10 @@ class RAGRetriever:
             # 문서 검색 필요: RAG 실행
             logger.info(f"문서 검색 필요: '{request.query}' -> RAG 실행")
             
-            # LangChain 체인 실행
+            # LangChain 체인 실행 (동적 threshold는 자동 계산)
             result = self.rag_chain.invoke({
                 "query": request.query,
-                "top_k": request.top_k or self.config.RAG_TOP_K,
-                "similarity_threshold": request.similarity_threshold or self.config.RAG_SIMILARITY_THRESHOLD
+                "top_k": request.top_k or self.config.RAG_TOP_K
             })
             
             answer = result["answer"]
