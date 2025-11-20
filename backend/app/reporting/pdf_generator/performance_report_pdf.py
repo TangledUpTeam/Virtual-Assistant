@@ -129,7 +129,10 @@ class PerformanceReportPDFGenerator(BasePDFGenerator):
         if output_filename is None:
             output_filename = f"실적보고서_{report.owner}_{format_korean_date(report.period_start)}.pdf"
         
-        output_path = self.OUTPUT_DIR / output_filename
+        # 실적 보고서 전용 디렉토리에 저장
+        performance_dir = self.OUTPUT_DIR / "performance"
+        performance_dir.mkdir(parents=True, exist_ok=True)
+        output_path = performance_dir / output_filename
         pdf_bytes = self.merge_with_template(output_path)
         
         return pdf_bytes

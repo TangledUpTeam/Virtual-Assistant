@@ -10,12 +10,15 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from datetime import date
 from sqlalchemy.orm import Session
+from pathlib import Path
+import os
 
 from app.domain.monthly.chain import generate_monthly_report
 from app.domain.monthly.repository import MonthlyReportRepository
 from app.domain.monthly.schemas import MonthlyReportCreate, MonthlyReportResponse, MonthlyReportListResponse
 from app.domain.report.schemas import CanonicalReport
 from app.infrastructure.database.session import get_db
+from app.reporting.pdf_generator.monthly_report_pdf import MonthlyReportPDFGenerator
 
 
 router = APIRouter(prefix="/monthly", tags=["monthly_report"])
@@ -24,7 +27,8 @@ router = APIRouter(prefix="/monthly", tags=["monthly_report"])
 class MonthlyReportGenerateRequest(BaseModel):
     """월간 보고서 생성 요청"""
     owner: str = Field(..., description="작성자")
-    target_date: date = Field(..., description="기준 날짜 (해당 월의 아무 날짜)")
+    year: int = Field(..., description="연도")
+    month: int = Field(..., description="월 (1~12)")
 
 
 class MonthlyReportGenerateResponse(BaseModel):
@@ -45,11 +49,14 @@ async def generate_monthly(
     target_date가 속한 달의 1일~말일 일일보고서를 집계하여 월간 보고서를 생성하고 DB에 저장합니다.
     """
     try:
+        # target_date 생성 (해당 월의 1일)
+        target_date = date(request.year, request.month, 1)
+        
         # 1. 월간 보고서 생성
         report = generate_monthly_report(
             db=db,
             owner=request.owner,
-            target_date=request.target_date
+            target_date=target_date
         )
         
         # 2. DB에 저장
@@ -67,6 +74,24 @@ async def generate_monthly(
         
         action = "생성" if is_created else "업데이트"
         print(f"💾 월간 보고서 저장 완료 ({action}): {report.owner} - {report.period_start}~{report.period_end}")
+        
+        # 🔥 3. PDF 자동 생성 및 저장
+        try:
+            # PDF 저장 디렉토리 생성
+            pdf_dir = Path("output/report_result/monthly")
+            pdf_dir.mkdir(parents=True, exist_ok=True)
+            
+            # PDF 파일명 생성
+            pdf_filename = f"{report.owner}_{report.period_start}_{report.period_end}_월간보고서.pdf"
+            pdf_path = pdf_dir / pdf_filename
+            
+            # PDF 생성
+            pdf_generator = MonthlyReportPDFGenerator()
+            pdf_generator.generate(report, str(pdf_path))
+            
+            print(f"📄 월간 보고서 PDF 생성 완료: {pdf_path}")
+        except Exception as pdf_error:
+            print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
         
         return MonthlyReportGenerateResponse(
             success=True,

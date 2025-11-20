@@ -125,7 +125,10 @@ class WeeklyReportPDFGenerator(BasePDFGenerator):
         if output_filename is None:
             output_filename = f"주간보고서_{report.owner}_{format_korean_date(report.period_start)}.pdf"
         
-        output_path = self.OUTPUT_DIR / output_filename
+        # 주간 보고서 전용 디렉토리에 저장
+        weekly_dir = self.OUTPUT_DIR / "weekly"
+        weekly_dir.mkdir(parents=True, exist_ok=True)
+        output_path = weekly_dir / output_filename
         pdf_bytes = self.merge_with_template(output_path)
         
         return pdf_bytes

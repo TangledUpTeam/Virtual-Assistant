@@ -1,114 +1,324 @@
 /**
- * 추천 업무 서비스
- * plan.py + daily.py API 연동
+ * 업무 관련 API 호출 및 Intent Router
+ * 
+ * Intent 분류:
+ * 1. task_recommend - 오늘 추천 업무
+ * 2. report_daily - 일일 보고서
+ * 3. report_weekly - 주간 보고서
+ * 4. report_monthly - 월간 보고서
+ * 5. report_yearly - 실적 보고서
+ * 6. default - 일반 대화
  */
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE = 'http://localhost:8000/api/v1';
 
 /**
- * 채팅 모듈 호출 (메시지 처리)
- * @param {string} userText - 사용자 입력 텍스트
- * @returns {Promise<{type: string, data: any}>}
+ * Intent Router: 사용자 발화를 분석하여 적절한 기능으로 라우팅
  */
 export async function callChatModule(userText) {
-  console.log('📨 사용자 메시지:', userText);
+  console.log('📨 [Intent Router] 사용자 메시지:', userText);
   
-  // "오늘 뭐할지 추천" 등의 키워드가 있으면 TodayPlan API 호출
-  if (userText.includes('오늘') && (userText.includes('추천') || userText.includes('뭐할'))) {
+  const text = userText.toLowerCase().trim();
+  
+  // Intent 1: 추천 업무 요청
+  if (isTaskRecommendationIntent(text)) {
+    console.log('🎯 [Intent] task_recommend');
     return await getTodayPlan();
   }
   
-  // 기본 응답
+  // Intent 2: 일일 보고서
+  if (isDailyReportIntent(text)) {
+    console.log('📝 [Intent] report_daily (reportService.js로 위임)');
+    return {
+      type: 'daily_report_trigger',
+      data: '일일 보고서 작성을 시작합니다.'
+    };
+  }
+  
+  // Intent 3: 주간 보고서
+  if (isWeeklyReportIntent(text)) {
+    console.log('📊 [Intent] report_weekly');
+    return await generateWeeklyReport();
+  }
+  
+  // Intent 4: 월간 보고서
+  if (isMonthlyReportIntent(text)) {
+    console.log('📈 [Intent] report_monthly');
+    return await generateMonthlyReport();
+  }
+  
+  // Intent 5: 실적(연간) 보고서
+  if (isYearlyReportIntent(text)) {
+    console.log('📋 [Intent] report_yearly');
+    return await generateYearlyReport();
+  }
+  
+  // Intent 6: 일반 대화
+  console.log('💬 [Intent] default - 일반 대화');
   return {
     type: 'text',
-    data: '안녕하세요! "오늘 뭐할지 추천 좀"이라고 말씀해주시면 업무를 추천해드립니다. 😊'
+    data: `"${userText}" - 답변을 준비 중입니다! 😊\n\n도움말:\n• "오늘 뭐할지 추천 좀" - 업무 추천\n• "일일 보고서 작성" - 일일 보고서\n• "주간 보고서" - 주간 보고서\n• "월간 보고서" - 월간 보고서\n• "실적 보고서" - 연간 실적 보고서`
   };
 }
 
 /**
- * 오늘의 추천 업무 가져오기 (plan.py API)
- * @returns {Promise<{type: string, data: any}>}
+ * Intent 감지: 추천 업무
+ */
+function isTaskRecommendationIntent(text) {
+  const keywords = ['추천', '뭐할', '뭐해', '업무', '할일', 'todo', 'task'];
+  const triggerWords = ['추천', '뭐할', '계획'];
+  
+  return keywords.some(kw => text.includes(kw)) && 
+         triggerWords.some(tw => text.includes(tw));
+}
+
+/**
+ * Intent 감지: 일일 보고서
+ */
+function isDailyReportIntent(text) {
+  return (text.includes('일일') || text.includes('데일리') || text.includes('daily')) &&
+         (text.includes('보고서') || text.includes('작성') || text.includes('리포트'));
+}
+
+/**
+ * Intent 감지: 주간 보고서
+ */
+function isWeeklyReportIntent(text) {
+  return (text.includes('주간') || text.includes('위클리') || text.includes('weekly')) &&
+         (text.includes('보고서') || text.includes('작성') || text.includes('리포트') || text.includes('생성'));
+}
+
+/**
+ * Intent 감지: 월간 보고서
+ */
+function isMonthlyReportIntent(text) {
+  return (text.includes('월간') || text.includes('먼슬리') || text.includes('monthly')) &&
+         (text.includes('보고서') || text.includes('작성') || text.includes('리포트') || text.includes('생성'));
+}
+
+/**
+ * Intent 감지: 실적(연간) 보고서
+ */
+function isYearlyReportIntent(text) {
+  return (text.includes('실적') || text.includes('연간') || text.includes('yearly') || text.includes('annual')) &&
+         (text.includes('보고서') || text.includes('작성') || text.includes('리포트') || text.includes('생성'));
+}
+
+/**
+ * 오늘의 추천 업무 가져오기
+ * 
+ * 우선순위:
+ * 1순위: 익일 업무 계획 데이터
+ * 2순위: 전날 미종결 업무
+ * 3순위: VectorDB에서 최근 1주 업무 참고
  */
 export async function getTodayPlan() {
   try {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const owner = '김보험'; // 현재는 하드코딩 (추후 로그인 정보 사용)
+    console.log('🔄 [API] /plan/today 호출 중...');
     
-    const response = await fetch(`${API_BASE_URL}/plan/today`, {
+    const response = await fetch(`${API_BASE}/plan/today`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        owner: owner,
-        target_date: today
+        owner: 'junkyeong'
       })
     });
     
     if (!response.ok) {
-      throw new Error(`API 호출 실패: ${response.status}`);
+      throw new Error(`API 오류: ${response.status}`);
     }
     
-    const result = await response.json();
-    console.log('🎯 추천 업무:', result);
+    const data = await response.json();
+    console.log('✅ [API] 추천 업무 받음:', data);
     
     return {
       type: 'task_recommendations',
       data: {
-        tasks: result.tasks || [],
-        summary: result.summary || '',
-        owner: owner,
-        target_date: today
+        tasks: data.recommended_tasks || [],
+        summary: data.summary || '오늘의 추천 업무입니다!',
+        owner: data.owner || 'junkyeong',
+        target_date: data.target_date || new Date().toISOString().split('T')[0]
       }
     };
   } catch (error) {
-    console.error('❌ API 호출 오류:', error);
+    console.error('❌ [API] 추천 업무 가져오기 실패:', error);
     return {
       type: 'error',
-      data: '추천 업무를 가져오는 중 오류가 발생했습니다. 백엔드 서버가 실행 중인지 확인해주세요.'
+      data: '추천 업무를 가져오는데 실패했습니다. 😢'
     };
   }
 }
 
 /**
- * 선택한 업무 저장 (daily.py API)
- * @param {string} owner - 소유자
- * @param {string} targetDate - 날짜 (YYYY-MM-DD)
- * @param {Array<string>} mainTasks - 선택한 업무 제목 리스트
- * @returns {Promise<{success: boolean, message: string, saved_count: number}>}
+ * 주간 보고서 생성
  */
-export async function saveSelectedTasks(owner, targetDate, mainTasks) {
+async function generateWeeklyReport() {
   try {
-    const response = await fetch(`${API_BASE_URL}/daily/select_main_tasks`, {
+    console.log('🔄 [API] /weekly_report/generate 호출 중...');
+    
+    const response = await fetch(`${API_BASE}/weekly_report/generate`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        owner: owner,
-        target_date: targetDate,
-        main_tasks: mainTasks
+        owner: 'junkyeong',
+        start_date: getMonday(new Date())
       })
     });
     
     if (!response.ok) {
-      throw new Error(`API 호출 실패: ${response.status}`);
+      throw new Error(`API 오류: ${response.status}`);
     }
     
-    const result = await response.json();
-    console.log('✅ 업무 저장 완료:', result);
+    const data = await response.json();
+    console.log('✅ [API] 주간 보고서 생성 완료');
     
     return {
-      success: true,
-      message: result.message || '업무가 저장되었습니다.',
-      saved_count: result.saved_count || 0
+      type: 'text',
+      data: `📊 주간 보고서가 생성되었습니다!\n\n기간: ${data.start_date} ~ ${data.end_date}\n완료 업무: ${data.total_tasks || 0}개`
     };
   } catch (error) {
-    console.error('❌ 업무 저장 오류:', error);
+    console.error('❌ [API] 주간 보고서 생성 실패:', error);
     return {
-      success: false,
-      message: '업무 저장에 실패했습니다.'
+      type: 'text',
+      data: '주간 보고서 생성 중 오류가 발생했습니다. 😢'
     };
   }
 }
 
+/**
+ * 월간 보고서 생성
+ */
+async function generateMonthlyReport() {
+  try {
+    console.log('🔄 [API] /monthly_report/generate 호출 중...');
+    
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    
+    const response = await fetch(`${API_BASE}/monthly_report/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        owner: 'junkyeong',
+        year: year,
+        month: month
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ [API] 월간 보고서 생성 완료');
+    
+    return {
+      type: 'text',
+      data: `📈 월간 보고서가 생성되었습니다!\n\n기간: ${year}년 ${month}월\n완료 업무: ${data.total_tasks || 0}개`
+    };
+  } catch (error) {
+    console.error('❌ [API] 월간 보고서 생성 실패:', error);
+    return {
+      type: 'text',
+      data: '월간 보고서 생성 중 오류가 발생했습니다. 😢'
+    };
+  }
+}
+
+/**
+ * 실적(연간) 보고서 생성
+ */
+async function generateYearlyReport() {
+  try {
+    console.log('🔄 [API] /performance_report/generate 호출 중...');
+    
+    const year = new Date().getFullYear();
+    
+    const response = await fetch(`${API_BASE}/performance_report/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        owner: 'junkyeong',
+        year: year
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ [API] 실적 보고서 생성 완료');
+    
+    return {
+      type: 'text',
+      data: `📋 ${year}년 실적 보고서가 생성되었습니다!\n\n총 업무: ${data.total_tasks || 0}개\n총 근무일: ${data.total_days || 0}일`
+    };
+  } catch (error) {
+    console.error('❌ [API] 실적 보고서 생성 실패:', error);
+    return {
+      type: 'text',
+      data: '실적 보고서 생성 중 오류가 발생했습니다. 😢'
+    };
+  }
+}
+
+/**
+ * 선택한 업무 저장 (금일 진행 업무로 등록)
+ */
+export async function saveSelectedTasks(owner, targetDate, tasks) {
+  try {
+    console.log('🔄 [API] /daily/select_main_tasks 호출 중...');
+    
+    const response = await fetch(`${API_BASE}/daily/select_main_tasks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        owner: owner,
+        target_date: targetDate,
+        selected_tasks: tasks
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ [API] 업무 저장 완료:', data);
+    
+    return {
+      success: true,
+      saved_count: tasks.length,
+      data: data
+    };
+  } catch (error) {
+    console.error('❌ [API] 업무 저장 실패:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+/**
+ * 유틸: 이번 주 월요일 날짜 구하기
+ */
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d.setDate(diff));
+  return monday.toISOString().split('T')[0];
+}

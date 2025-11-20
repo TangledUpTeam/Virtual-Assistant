@@ -23,7 +23,7 @@ class BasePDFGenerator:
     
     # 기본 템플릿 경로
     TEMPLATE_DIR = Path("backend/Data/reports")
-    OUTPUT_DIR = Path("backend/output_reports")
+    OUTPUT_DIR = Path("backend/output/report_result")
     
     def __init__(self, template_filename: str):
         """

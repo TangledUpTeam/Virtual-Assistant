@@ -8,11 +8,13 @@ Created: 2025-11-18
 """
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import date
+from sqlalchemy.orm import Session
 
 from app.domain.planner.schemas import TodayPlanRequest, TodayPlanResponse
 from app.domain.planner.today_plan_chain import TodayPlanGenerator
 from app.domain.planner.tools import YesterdayReportTool
 from app.domain.search.retriever import UnifiedRetriever
+from app.infrastructure.database.session import get_db
 from app.infrastructure.vector_store import get_unified_collection
 from app.llm.client import get_llm
 from app.core.config import settings
@@ -21,17 +23,26 @@ from app.core.config import settings
 router = APIRouter(prefix="/plan", tags=["plan"])
 
 
-def get_today_plan_generator() -> TodayPlanGenerator:
+def get_today_plan_generator(db: Session = Depends(get_db)) -> TodayPlanGenerator:
     """TodayPlanGenerator 의존성 주입"""
-    collection = get_unified_collection()
-    retriever = UnifiedRetriever(
-        collection=collection,
-        openai_api_key=settings.OPENAI_API_KEY
-    )
-    retriever_tool = YesterdayReportTool(retriever)
+    # PostgreSQL에서 전날 데이터 조회
+    retriever_tool = YesterdayReportTool(db)
+    
+    # VectorDB에서 유사 업무 패턴 검색 (선택적)
+    vector_retriever = None
+    try:
+        collection = get_unified_collection()
+        vector_retriever = UnifiedRetriever(
+            collection=collection,
+            openai_api_key=settings.OPENAI_API_KEY
+        )
+    except Exception as e:
+        print(f"[WARNING] VectorDB 초기화 실패 (추천 기능 제한): {e}")
+        # VectorDB가 없어도 작동하도록 None으로 설정
+    
     llm_client = get_llm(model="gpt-4o-mini", temperature=0.7)
     
-    return TodayPlanGenerator(retriever_tool, llm_client)
+    return TodayPlanGenerator(retriever_tool, llm_client, vector_retriever)
 
 
 @router.post("/today", response_model=TodayPlanResponse)

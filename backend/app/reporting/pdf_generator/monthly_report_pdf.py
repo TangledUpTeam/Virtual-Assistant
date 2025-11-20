@@ -125,7 +125,10 @@ class MonthlyReportPDFGenerator(BasePDFGenerator):
         if output_filename is None:
             output_filename = f"월간보고서_{report.owner}_{월}.pdf"
         
-        output_path = self.OUTPUT_DIR / output_filename
+        # 월간 보고서 전용 디렉토리에 저장
+        monthly_dir = self.OUTPUT_DIR / "monthly"
+        monthly_dir.mkdir(parents=True, exist_ok=True)
+        output_path = monthly_dir / output_filename
         pdf_bytes = self.merge_with_template(output_path)
         
         return pdf_bytes

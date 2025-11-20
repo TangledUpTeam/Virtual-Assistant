@@ -10,12 +10,15 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from datetime import date
 from sqlalchemy.orm import Session
+from pathlib import Path
+import os
 
 from app.domain.performance.chain import generate_performance_report
 from app.domain.performance.repository import PerformanceReportRepository
 from app.domain.performance.schemas import PerformanceReportCreate, PerformanceReportResponse, PerformanceReportListResponse
 from app.domain.report.schemas import CanonicalReport
 from app.infrastructure.database.session import get_db
+from app.reporting.pdf_generator.performance_report_pdf import PerformanceReportPDFGenerator
 
 
 router = APIRouter(prefix="/performance", tags=["performance_report"])
@@ -24,8 +27,7 @@ router = APIRouter(prefix="/performance", tags=["performance_report"])
 class PerformanceReportGenerateRequest(BaseModel):
     """실적 보고서 생성 요청"""
     owner: str = Field(..., description="작성자")
-    period_start: date = Field(..., description="시작일")
-    period_end: date = Field(..., description="종료일")
+    year: int = Field(..., description="연도")
 
 
 class PerformanceReportGenerateResponse(BaseModel):
@@ -46,12 +48,16 @@ async def generate_performance(
     지정된 기간의 일일보고서를 집계하여 KPI 중심의 실적 보고서를 생성하고 DB에 저장합니다.
     """
     try:
+        # 기간 설정 (해당 연도의 1월 1일 ~ 12월 31일)
+        period_start = date(request.year, 1, 1)
+        period_end = date(request.year, 12, 31)
+        
         # 1. 실적 보고서 생성
         report = generate_performance_report(
             db=db,
             owner=request.owner,
-            period_start=request.period_start,
-            period_end=request.period_end
+            period_start=period_start,
+            period_end=period_end
         )
         
         # 2. DB에 저장
@@ -69,6 +75,24 @@ async def generate_performance(
         
         action = "생성" if is_created else "업데이트"
         print(f"💾 실적 보고서 저장 완료 ({action}): {report.owner} - {report.period_start}~{report.period_end}")
+        
+        # 🔥 3. PDF 자동 생성 및 저장
+        try:
+            # PDF 저장 디렉토리 생성
+            pdf_dir = Path("output/report_result/performance")
+            pdf_dir.mkdir(parents=True, exist_ok=True)
+            
+            # PDF 파일명 생성
+            pdf_filename = f"{report.owner}_{report.period_start}_{report.period_end}_실적보고서.pdf"
+            pdf_path = pdf_dir / pdf_filename
+            
+            # PDF 생성
+            pdf_generator = PerformanceReportPDFGenerator()
+            pdf_generator.generate(report, str(pdf_path))
+            
+            print(f"📄 실적 보고서 PDF 생성 완료: {pdf_path}")
+        except Exception as pdf_error:
+            print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
         
         return PerformanceReportGenerateResponse(
             success=True,

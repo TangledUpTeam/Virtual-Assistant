@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <title>Virtual Desk Assistant - Hiyori</title>
 
-  <!-- CSS 파일 링크 -->
+  <!-- CSS 파일 링크 (순서 중요: live2d가 먼저, 패널들이 나중) -->
+  <link rel="stylesheet" href="renderer/styles/live2d.css" />
   <link rel="stylesheet" href="renderer/styles/chat.css" />
   <link rel="stylesheet" href="renderer/styles/tasks.css" />
   <link rel="stylesheet" href="renderer/styles/brainstorming.css" />
-  <link rel="stylesheet" href="renderer/styles/live2d.css" />
 
    <!-- 기본 스타일 (배경 완전 투명) -->
    <style>
@@ -27,6 +27,7 @@
 <body>
   <!-- 모듈 스크립트: 먼저 로드 (전역으로 export) -->
   <script type="module" src="./renderer/chat/chatUI.js"></script>
+  <script type="module" src="./renderer/tasks/reportChatUI.js"></script>
   <script type="module" src="./renderer/brainstorming/brainstormingService.js"></script>
 
   <!-- Live2D 스테이지 (배경, 전체 화면) -->
@@ -59,6 +60,58 @@
         autocomplete="off"
       />
       <button id="bs-submit-btn">전송</button>
+    </div>
+  </div>
+
+  <!-- 보고서 & 업무 패널 (Ctrl+Shift+R로 토글) -->
+  <div id="report-panel" style="pointer-events: auto !important; z-index: 9998 !important;">
+    <h2>📝 보고서 & 업무</h2>
+    
+    <!-- 🔥 날짜 설정 패널 -->
+    <div id="date-settings-panel" style="padding: 12px; background: rgba(240, 240, 240, 0.95); border-bottom: 1px solid rgba(0,0,0,0.1); display: none;">
+      <div style="margin-bottom: 8px; font-size: 13px; font-weight: 600; color: #333;">📅 보고서 기간 설정</div>
+      
+      <!-- 일일 보고서 날짜 -->
+      <div id="daily-date-input" class="date-input-group" style="display: none;">
+        <label style="font-size: 12px; color: #555;">일일 보고서 날짜:</label>
+        <input type="date" id="daily-target-date" style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ddd; margin-top: 4px;">
+      </div>
+      
+      <!-- 주간 보고서 날짜 -->
+      <div id="weekly-date-input" class="date-input-group" style="display: none;">
+        <label style="font-size: 12px; color: #555;">주간 보고서 기준 날짜 (해당 주의 아무 날짜):</label>
+        <input type="date" id="weekly-target-date" style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ddd; margin-top: 4px;">
+      </div>
+      
+      <!-- 월간 보고서 년월 -->
+      <div id="monthly-date-input" class="date-input-group" style="display: none;">
+        <label style="font-size: 12px; color: #555;">월간 보고서 년월:</label>
+        <div style="display: flex; gap: 8px; margin-top: 4px;">
+          <input type="number" id="monthly-year" placeholder="년도" min="2020" max="2099" style="flex: 1; padding: 6px; border-radius: 6px; border: 1px solid #ddd;">
+          <input type="number" id="monthly-month" placeholder="월" min="1" max="12" style="flex: 1; padding: 6px; border-radius: 6px; border: 1px solid #ddd;">
+        </div>
+      </div>
+      
+      <!-- 실적 보고서 년도 -->
+      <div id="yearly-date-input" class="date-input-group" style="display: none;">
+        <label style="font-size: 12px; color: #555;">실적 보고서 년도:</label>
+        <input type="number" id="yearly-year" placeholder="년도" min="2020" max="2099" style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ddd; margin-top: 4px;">
+      </div>
+      
+      <button id="apply-date-btn" style="width: 100%; margin-top: 8px; padding: 8px; border: none; border-radius: 6px; background: linear-gradient(135deg, rgba(100, 150, 255, 0.9), rgba(80, 130, 235, 0.9)); color: white; font-size: 13px; font-weight: 600; cursor: pointer;">적용</button>
+      <button id="close-date-btn" style="width: 100%; margin-top: 6px; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: white; color: #666; font-size: 13px; font-weight: 600; cursor: pointer;">닫기</button>
+    </div>
+    
+    <div id="report-messages"></div>
+    <div id="report-input-area" style="pointer-events: auto !important;">
+      <input 
+        type="text" 
+        id="report-input" 
+        placeholder="메시지를 입력하세요..." 
+        autocomplete="off"
+        style="pointer-events: auto !important; cursor: text !important;"
+      />
+      <button id="report-send-btn" style="pointer-events: auto !important; cursor: pointer !important;">전송</button>
     </div>
   </div>
 
@@ -226,445 +279,9 @@
      * 채팅 및 브레인스토밍 초기화 (모듈에서 처리)
      * - renderer/chat/chatUI.js
      * - renderer/brainstorming/brainstormingService.js
+     * 
+     * ⚠️ 중복 로직 제거됨 - 모든 채팅 로직은 chatUI.js에서 처리
      ****************************************************************/
-    let messages = [];
-    let isPanelVisible = true;
-    let chatPanel = null;
-    let messagesContainer = null;
-    let chatInput = null;
-    let sendBtn = null;
-    let isChatPanelInitialized = false; // 🔥 중복 초기화 방지
-    
-    // 추천 업무 선택 상태
-    let selectedTasks = new Set();
-    let currentRecommendation = null; // { owner, target_date, tasks }
-    
-    // 🔥 일일보고서 FSM 모드 상태
-    let chatMode = 'normal'; // 'normal' 또는 'daily_fsm'
-    let dailySessionId = null;
-    let dailyOwner = '김보험'; // TODO: 실제 로그인 사용자로 변경
-
-    function initChatPanel() {
-      // 🔥 이미 초기화되었으면 무시
-      if (isChatPanelInitialized) {
-        console.log('⚠️  채팅 패널 이미 초기화됨 - 스킵');
-        return;
-      }
-      
-      console.log('💬 채팅 패널 초기화 중...');
-      
-      chatPanel = document.getElementById('chat-panel');
-      messagesContainer = document.getElementById('messages');
-      chatInput = document.getElementById('chat-input');
-      sendBtn = document.getElementById('send-btn');
-      
-      if (!chatPanel || !messagesContainer || !chatInput || !sendBtn) {
-        console.error('❌ 채팅 패널 요소를 찾을 수 없습니다.');
-        return;
-      }
-      
-      // 초기 메시지 추가
-      addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊');
-      
-      // 🔥 이벤트 리스너 등록 (once 옵션으로 중복 방지)
-      sendBtn.addEventListener('click', handleSendMessage);
-      
-      chatInput.addEventListener('keydown', handleChatInputKeydown);
-      
-      // Cmd/Ctrl + Enter로 패널 토글
-      window.addEventListener('keydown', handleGlobalKeydown);
-      
-      isChatPanelInitialized = true; // 🔥 초기화 완료 플래그
-      console.log('✅ 채팅 패널 초기화 완료');
-    }
-
-    // 🔥 이벤트 핸들러를 별도 함수로 분리 (중복 등록 방지)
-    function handleChatInputKeydown(e) {
-      // 한글 입력 중(composing)이면 무시
-      if (e.isComposing || e.keyCode === 229) {
-        return;
-      }
-      
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSendMessage();
-      }
-    }
-
-    function handleGlobalKeydown(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        togglePanel();
-      }
-    }
-
-    async function handleSendMessage() {
-      const text = chatInput.value.trim();
-      if (!text) return;
-      
-      // 🔥 전송 중이면 무시 (중복 전송 방지)
-      if (sendBtn.disabled) {
-        console.log('⚠️  이미 전송 중...');
-        return;
-      }
-      
-      addMessage('user', text);
-      
-      // 🔥 입력창 초기화 (IME 문제 해결)
-      chatInput.value = '';
-      chatInput.blur(); // 포커스 제거
-      setTimeout(() => {
-        chatInput.focus(); // 다시 포커스
-      }, 0);
-      
-      sendBtn.disabled = true;
-      sendBtn.textContent = '...';
-      
-      try {
-        // 🔥 모드에 따라 분기 처리
-        if (chatMode === 'normal' && isDailyStartTrigger(text)) {
-          // 일일보고서 입력 시작
-          await handleDailyStart();
-        } else if (chatMode === 'daily_fsm') {
-          // FSM 답변 처리
-          await handleDailyAnswer(text);
-        } else {
-          // 일반 챗봇 처리
-          const response = await callChatModule(text);
-          
-          // 응답 타입에 따라 처리
-          if (response.type === 'task_recommendations') {
-            addTaskRecommendations(response.data);
-          } else if (response.type === 'error') {
-            addMessage('assistant', response.data);
-          } else {
-            addMessage('assistant', response.data);
-          }
-        }
-      } catch (error) {
-        console.error('❌ 채팅 오류:', error);
-        addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
-      } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = '전송';
-      }
-    }
-
-    function addMessage(role, text) {
-      messages.push({ role, text });
-      
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message ${role}`;
-      
-      const bubble = document.createElement('div');
-      bubble.className = 'bubble';
-      bubble.textContent = text;
-      
-      messageDiv.appendChild(bubble);
-      messagesContainer.appendChild(messageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      
-      console.log(`💬 [${role}]: ${text}`);
-    }
-    
-    // 🔥 일일보고서 입력 트리거 감지
-    function isDailyStartTrigger(text) {
-      const t = text.replace(/\s+/g, '').toLowerCase();
-      return (
-        t.includes('일일보고서입력할래') ||
-        t.includes('일일보고서작성할래') ||
-        t.includes('오늘보고서입력') ||
-        t.includes('일일보고서입력') ||
-        t.includes('보고서작성할래')
-      );
-    }
-    
-    // 🔥 일일보고서 FSM 시작
-    async function handleDailyStart() {
-      console.log('📝 일일보고서 FSM 시작...');
-      
-      try {
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-        
-        const response = await fetch(`${API_BASE_URL}/daily/start`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            owner: dailyOwner,
-            target_date: today
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API 호출 실패: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        console.log('✅ FSM 시작 완료:', result);
-        
-        // FSM 모드로 전환
-        chatMode = 'daily_fsm';
-        dailySessionId = result.session_id;
-        
-        // Placeholder 변경
-        chatInput.placeholder = '해당 시간대에 했던 업무를 자유롭게 적어주세요...';
-        
-        // 첫 질문 출력
-        addMessage('assistant', result.question);
-        
-      } catch (error) {
-        console.error('❌ FSM 시작 오류:', error);
-        addMessage('assistant', '일일보고서를 시작하는 중 오류가 발생했습니다. 😢');
-      }
-    }
-    
-    // 🔥 일일보고서 FSM 답변 처리
-    async function handleDailyAnswer(answer) {
-      console.log('📝 FSM 답변 전송:', answer);
-      
-      try {
-        const response = await fetch(`${API_BASE_URL}/daily/answer`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            session_id: dailySessionId,
-            answer: answer
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API 호출 실패: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        console.log('✅ FSM 답변 처리 완료:', result);
-        
-        if (result.status === 'finished') {
-          // 완료 처리
-          addMessage('assistant', result.message || '일일보고서 작성이 완료되었습니다! 🙌');
-          
-          // 보고서 요약 출력
-          if (result.report && result.report.tasks) {
-            addReportSummary(result.report);
-          }
-          
-          // 모드 초기화
-          chatMode = 'normal';
-          dailySessionId = null;
-          chatInput.placeholder = '메시지를 입력하세요...';
-          
-        } else {
-          // 다음 질문 출력
-          addMessage('assistant', result.question);
-        }
-        
-      } catch (error) {
-        console.error('❌ FSM 답변 오류:', error);
-        addMessage('assistant', '답변 처리 중 오류가 발생했습니다. 😢');
-      }
-    }
-    
-    // 🔥 보고서 요약 출력
-    function addReportSummary(report) {
-      const summaryLines = [];
-      
-      // 📋 예정 업무 (plans)
-      if (report.plans && report.plans.length > 0) {
-        summaryLines.push('📋 오늘 예정했던 업무:');
-        report.plans.forEach((plan, index) => {
-          summaryLines.push(`  ${index + 1}. ${plan}`);
-        });
-        summaryLines.push('');
-      }
-      
-      // ✅ 실제 완료 업무 (tasks)
-      if (report.tasks && report.tasks.length > 0) {
-        summaryLines.push('✅ 실제 완료한 업무:');
-        const tasks = report.tasks.slice(0, 5);
-        tasks.forEach((task, index) => {
-          const timeInfo = task.time_start && task.time_end ? ` (${task.time_start}~${task.time_end})` : '';
-          summaryLines.push(`  ${index + 1}. ${task.title}${timeInfo}`);
-        });
-        if (report.tasks.length > 5) {
-          summaryLines.push(`  ... 외 ${report.tasks.length - 5}개 업무`);
-        }
-        summaryLines.push('');
-      }
-      
-      // ⚠️ 미종결 업무 (issues)
-      if (report.issues && report.issues.length > 0) {
-        summaryLines.push('⚠️ 미종결 업무:');
-        report.issues.forEach((issue, index) => {
-          summaryLines.push(`  ${index + 1}. ${issue}`);
-        });
-        summaryLines.push('');
-      }
-      
-      // 📈 완료율
-      const metadata = report.metadata || {};
-      if (metadata.completion_rate) {
-        summaryLines.push(`📈 예정 업무 완료율: ${metadata.completion_rate}`);
-      }
-      
-      const summaryText = summaryLines.join('\n');
-      addMessage('assistant', summaryText);
-    }
-    
-    function addTaskRecommendations(data) {
-      const { tasks, summary, owner, target_date } = data;
-      
-      currentRecommendation = { owner, target_date, tasks };
-      selectedTasks.clear();
-      
-      messages.push({ role: 'assistant', type: 'task_recommendations', data });
-      
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'message assistant';
-      
-      const container = document.createElement('div');
-      container.className = 'task-recommendations-container';
-      
-      const summaryDiv = document.createElement('div');
-      summaryDiv.className = 'bubble';
-      summaryDiv.textContent = summary || '오늘의 추천 업무입니다!';
-      container.appendChild(summaryDiv);
-      
-      const guideDiv = document.createElement('div');
-      guideDiv.className = 'task-guide';
-      guideDiv.textContent = '📌 수행할 업무를 선택해주세요 (2~4개 권장)';
-      container.appendChild(guideDiv);
-      
-      const cardsContainer = document.createElement('div');
-      cardsContainer.className = 'task-cards';
-      
-      tasks.forEach((task, index) => {
-        const card = createTaskCard(task, index);
-        cardsContainer.appendChild(card);
-      });
-      
-      container.appendChild(cardsContainer);
-      
-      const saveButton = document.createElement('button');
-      saveButton.className = 'task-save-button';
-      saveButton.textContent = '선택 완료';
-      saveButton.disabled = true;
-      saveButton.addEventListener('click', handleSaveSelectedTasks);
-      container.appendChild(saveButton);
-      
-      messageDiv.appendChild(container);
-      messagesContainer.appendChild(messageDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      
-      console.log(`🎯 추천 업무 ${tasks.length}개 표시`);
-    }
-    
-    function createTaskCard(task, index) {
-      const card = document.createElement('div');
-      card.className = 'task-card';
-      card.dataset.index = index;
-      
-      const priorityBadge = document.createElement('span');
-      priorityBadge.className = `priority-badge priority-${task.priority}`;
-      priorityBadge.textContent = {
-        'high': '높음',
-        'medium': '보통',
-        'low': '낮음'
-      }[task.priority] || '보통';
-      
-      const title = document.createElement('div');
-      title.className = 'task-title';
-      title.textContent = task.title;
-      
-      const description = document.createElement('div');
-      description.className = 'task-description';
-      description.textContent = task.description;
-      
-      const meta = document.createElement('div');
-      meta.className = 'task-meta';
-      meta.innerHTML = `
-        <span class="task-category">📁 ${task.category}</span>
-        <span class="task-time">⏰ ${task.expected_time}</span>
-      `;
-      
-      card.appendChild(priorityBadge);
-      card.appendChild(title);
-      card.appendChild(description);
-      card.appendChild(meta);
-      
-      card.addEventListener('click', () => {
-        toggleTaskSelection(card, index);
-      });
-      
-      return card;
-    }
-    
-    function toggleTaskSelection(card, index) {
-      if (selectedTasks.has(index)) {
-        selectedTasks.delete(index);
-        card.classList.remove('selected');
-      } else {
-        selectedTasks.add(index);
-        card.classList.add('selected');
-      }
-      
-      const saveButton = card.closest('.task-recommendations-container').querySelector('.task-save-button');
-      saveButton.disabled = selectedTasks.size === 0;
-      
-      console.log(`✅ 선택된 업무: ${selectedTasks.size}개`);
-    }
-    
-    async function handleSaveSelectedTasks(event) {
-      if (!currentRecommendation || selectedTasks.size === 0) {
-        return;
-      }
-      
-      const { owner, target_date, tasks } = currentRecommendation;
-      const selectedTasksList = Array.from(selectedTasks).map(index => tasks[index]);
-      
-      const saveButton = event.target;
-      saveButton.disabled = true;
-      saveButton.textContent = '저장 중...';
-      
-      try {
-        const result = await saveSelectedTasks(owner, target_date, selectedTasksList);
-        
-        if (result.success) {
-          addMessage('assistant', `✅ ${result.saved_count}개의 업무가 저장되었습니다! 금일 진행 업무 선택이 완료되었습니다.`);
-          
-          selectedTasks.clear();
-          currentRecommendation = null;
-          
-          saveButton.closest('.task-recommendations-container').style.opacity = '0.5';
-          saveButton.textContent = '저장 완료';
-        } else {
-          addMessage('assistant', `❌ 저장 실패: ${result.message}`);
-          saveButton.disabled = false;
-          saveButton.textContent = '선택 완료';
-        }
-      } catch (error) {
-        console.error('❌ 저장 오류:', error);
-        addMessage('assistant', '❌ 업무 저장 중 오류가 발생했습니다.');
-        saveButton.disabled = false;
-        saveButton.textContent = '선택 완료';
-      }
-    }
-
-    function togglePanel() {
-      isPanelVisible = !isPanelVisible;
-      
-      if (isPanelVisible) {
-        chatPanel.style.display = 'flex';
-        console.log('👁️ 채팅 패널 표시');
-      } else {
-        chatPanel.style.display = 'none';
-        console.log('🙈 채팅 패널 숨김');
-      }
-    }
-    // 모듈 스크립트에서 초기화됨 (아래 <script type="module"> 참고)
 
     /****************************************************************
      * 순차 로더
@@ -789,29 +406,49 @@
                   mouseY <= bounds.y + bounds.height + verticalMargin;
          };
          
-         // 패널 위에 있는지 체크
-         const isMouseOverPanel = (clientX, clientY) => {
-           const chatPanel = document.getElementById('chat-panel');
-           const bsPanel = document.getElementById('brainstorming-panel');
-           
-           if (chatPanel && chatPanel.style.display !== 'none') {
-             const rect = chatPanel.getBoundingClientRect();
-             if (clientX >= rect.left && clientX <= rect.right && 
-                 clientY >= rect.top && clientY <= rect.bottom) {
-               return true;
-             }
-           }
-           
-           if (bsPanel && bsPanel.style.display !== 'none') {
-             const rect = bsPanel.getBoundingClientRect();
-             if (clientX >= rect.left && clientX <= rect.right && 
-                 clientY >= rect.top && clientY <= rect.bottom) {
-               return true;
-             }
-           }
-           
-           return false;
-         };
+        // 패널 위에 있는지 체크
+        const isMouseOverPanel = (clientX, clientY) => {
+          const chatPanel = document.getElementById('chat-panel');
+          const bsPanel = document.getElementById('brainstorming-panel');
+          const reportPanel = document.getElementById('report-panel');
+          const modal = document.querySelector('.custom-task-modal'); // 🔥 모달 추가
+          
+          // 🔥 모달 체크 (최우선순위)
+          if (modal) {
+            const rect = modal.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right && 
+                clientY >= rect.top && clientY <= rect.bottom) {
+              return true;
+            }
+          }
+          
+          if (chatPanel && chatPanel.style.display !== 'none') {
+            const rect = chatPanel.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right && 
+                clientY >= rect.top && clientY <= rect.bottom) {
+              return true;
+            }
+          }
+          
+          if (bsPanel && bsPanel.style.display !== 'none') {
+            const rect = bsPanel.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right && 
+                clientY >= rect.top && clientY <= rect.bottom) {
+              return true;
+            }
+          }
+          
+          // 보고서 패널 체크
+          if (reportPanel && reportPanel.style.display !== 'none') {
+            const rect = reportPanel.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right && 
+                clientY >= rect.top && clientY <= rect.bottom) {
+              return true;
+            }
+          }
+          
+          return false;
+        };
          
          // Document 레벨 이벤트로 드래그 구현
          document.addEventListener('mousedown', (e) => {
@@ -870,7 +507,8 @@
           let retries = 50;
           while (retries > 0) {
             if (typeof window.initChatPanel === 'function' && 
-                typeof window.initBrainstormingPanel === 'function') {
+                typeof window.initBrainstormingPanel === 'function' &&
+                typeof window.initReportPanel === 'function') {
               break;
             }
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -897,6 +535,17 @@
             }
           } catch (error) {
             console.error('❌ 채팅 패널 초기화 실패:', error);
+          }
+          
+          try {
+            if (typeof window.initReportPanel === 'function') {
+              window.initReportPanel();
+              console.log('✅ 보고서 패널 초기화 완료');
+            } else {
+              console.warn('⚠️  initReportPanel 함수를 찾을 수 없습니다.');
+            }
+          } catch (error) {
+            console.error('❌ 보고서 패널 초기화 실패:', error);
           }
           
           try {
@@ -990,6 +639,8 @@
         let isOverCharacter = false;
         let isOverChatPanel = false;
         let isOverBsPanel = false;
+        let isOverReportPanel = false; // 🔥 보고서 패널 상태 변수 추가
+        let isOverModal = false; // 🔥 모달 상태 변수 추가
         
         const checkIfOverCharacter = (clientX, clientY) => {
           if (!model) return false;
@@ -1031,11 +682,40 @@
                  clientY <= rect.bottom;
         };
         
+        // 🔥 보고서 패널 체크 함수 추가!
+        const checkIfOverReportPanel = (clientX, clientY) => {
+          const reportPanel = document.getElementById('report-panel');
+          if (!reportPanel || reportPanel.style.display === 'none') return false;
+          
+          const rect = reportPanel.getBoundingClientRect();
+          return clientX >= rect.left && 
+                 clientX <= rect.right && 
+                 clientY >= rect.top && 
+                 clientY <= rect.bottom;
+        };
+        
+        // 🔥 모달 체크 함수 추가 (동적으로 생성되는 요소)
+        const checkIfOverModal = (clientX, clientY) => {
+          const modal = document.querySelector('.custom-task-modal');
+          if (!modal) return false;
+          
+          const rect = modal.getBoundingClientRect();
+          return clientX >= rect.left && 
+                 clientX <= rect.right && 
+                 clientY >= rect.top && 
+                 clientY <= rect.bottom;
+        };
+        
         // 초기 상태 설정 함수
         const updateMouseState = (clientX, clientY) => {
           const wasOverChat = isOverChatPanel;
           const wasOverChar = isOverCharacter;
           const wasOverBs = isOverBsPanel;
+          const wasOverReport = isOverReportPanel;
+          const wasOverModal = isOverModal; // 🔥 추가
+          
+          // 🔥 모달 체크 (최우선순위 - 가장 위에 표시됨)
+          isOverModal = checkIfOverModal(clientX, clientY);
           
           // 채팅 패널 체크 (우선순위 높음)
           isOverChatPanel = checkIfOverChatPanel(clientX, clientY);
@@ -1043,16 +723,19 @@
           // 브레인스토밍 패널 체크 (우선순위 높음)
           isOverBsPanel = checkIfOverBsPanel(clientX, clientY);
           
-          // 캐릭터 체크 (패널들이 아닐 때만)
-          if (!isOverChatPanel && !isOverBsPanel) {
+          // 🔥 보고서 패널 체크 (우선순위 높음)
+          isOverReportPanel = checkIfOverReportPanel(clientX, clientY);
+          
+          // 캐릭터 체크 (패널들과 모달이 아닐 때만)
+          if (!isOverChatPanel && !isOverBsPanel && !isOverReportPanel && !isOverModal) {
             isOverCharacter = checkIfOverCharacter(clientX, clientY);
           } else {
             isOverCharacter = false;
           }
           
           // 상태 변경 시 IPC 전송
-          if (wasOverChat !== isOverChatPanel || wasOverChar !== isOverCharacter || wasOverBs !== isOverBsPanel) {
-            const shouldAcceptClicks = isOverChatPanel || isOverBsPanel || isOverCharacter;
+          if (wasOverChat !== isOverChatPanel || wasOverChar !== isOverCharacter || wasOverBs !== isOverBsPanel || wasOverReport !== isOverReportPanel || wasOverModal !== isOverModal) {
+            const shouldAcceptClicks = isOverChatPanel || isOverBsPanel || isOverReportPanel || isOverCharacter || isOverModal; // 🔥 모달 추가
             const ignoreValue = !shouldAcceptClicks;
             ipcRenderer.send('va:set-ignore-mouse', ignoreValue);
           }

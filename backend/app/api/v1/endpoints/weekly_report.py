@@ -10,12 +10,15 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from datetime import date
 from sqlalchemy.orm import Session
+from pathlib import Path
+import os
 
 from app.domain.weekly.chain import generate_weekly_report
 from app.domain.weekly.repository import WeeklyReportRepository
 from app.domain.weekly.schemas import WeeklyReportCreate, WeeklyReportResponse, WeeklyReportListResponse
 from app.domain.report.schemas import CanonicalReport
 from app.infrastructure.database.session import get_db
+from app.reporting.pdf_generator.weekly_report_pdf import WeeklyReportPDFGenerator
 
 
 router = APIRouter(prefix="/weekly", tags=["weekly_report"])
@@ -67,6 +70,24 @@ async def generate_weekly(
         
         action = "생성" if is_created else "업데이트"
         print(f"💾 주간 보고서 저장 완료 ({action}): {report.owner} - {report.period_start}~{report.period_end}")
+        
+        # 🔥 3. PDF 자동 생성 및 저장
+        try:
+            # PDF 저장 디렉토리 생성
+            pdf_dir = Path("output/report_result/weekly")
+            pdf_dir.mkdir(parents=True, exist_ok=True)
+            
+            # PDF 파일명 생성
+            pdf_filename = f"{report.owner}_{report.period_start}_{report.period_end}_주간보고서.pdf"
+            pdf_path = pdf_dir / pdf_filename
+            
+            # PDF 생성
+            pdf_generator = WeeklyReportPDFGenerator()
+            pdf_generator.generate(report, str(pdf_path))
+            
+            print(f"📄 주간 보고서 PDF 생성 완료: {pdf_path}")
+        except Exception as pdf_error:
+            print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
         
         return WeeklyReportGenerateResponse(
             success=True,

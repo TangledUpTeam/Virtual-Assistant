@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import date
 from sqlalchemy.orm import Session
+from pathlib import Path
+import os
 
 from app.domain.daily.fsm_state import DailyFSMContext
 from app.domain.daily.time_slots import generate_time_slots
@@ -24,6 +26,7 @@ from app.domain.daily.schemas import DailyReportCreate
 from app.llm.client import get_llm
 from app.domain.report.schemas import CanonicalReport
 from app.infrastructure.database.session import get_db
+from app.reporting.pdf_generator.daily_report_pdf import DailyReportPDFGenerator
 
 
 router = APIRouter(prefix="/daily", tags=["daily"])
@@ -191,6 +194,25 @@ async def answer_daily_question(
                 )
                 action = "생성" if is_created else "업데이트"
                 print(f"💾 운영 DB 저장 완료 ({action}): {report.owner} - {report.period_start}")
+                
+                # 🔥 PDF 자동 생성 및 저장
+                try:
+                    # PDF 저장 디렉토리 생성
+                    pdf_dir = Path("output/report_result/daily")
+                    pdf_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # PDF 파일명 생성
+                    pdf_filename = f"{report.owner}_{report.period_start}_일일보고서.pdf"
+                    pdf_path = pdf_dir / pdf_filename
+                    
+                    # PDF 생성
+                    pdf_generator = DailyReportPDFGenerator()
+                    pdf_generator.generate(report, str(pdf_path))
+                    
+                    print(f"📄 일일 보고서 PDF 생성 완료: {pdf_path}")
+                except Exception as pdf_error:
+                    print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
+                    
             except Exception as db_error:
                 print(f"⚠️  운영 DB 저장 실패 (계속 진행): {str(db_error)}")
                 # DB 저장 실패해도 보고서는 반환 (사용자에게는 성공으로 표시)
@@ -234,6 +256,10 @@ class SelectMainTasksRequest(BaseModel):
         ...,
         description="선택된 금일 진행 업무 리스트"
     )
+    append: bool = Field(
+        default=False,
+        description="True면 기존 업무에 추가, False면 덮어쓰기"
+    )
 
 
 class SelectMainTasksResponse(BaseModel):
@@ -265,7 +291,8 @@ async def select_main_tasks(request: SelectMainTasksRequest):
         store.save(
             owner=request.owner,
             target_date=request.target_date,
-            main_tasks=request.main_tasks
+            main_tasks=request.main_tasks,
+            append=request.append  # 🔥 append 모드 전달
         )
         
         return SelectMainTasksResponse(
@@ -280,6 +307,47 @@ async def select_main_tasks(request: SelectMainTasksRequest):
         raise HTTPException(
             status_code=500,
             detail=f"업무 저장 실패: {str(e)}"
+        )
+
+
+class GetMainTasksRequest(BaseModel):
+    """금일 진행 업무 조회 요청"""
+    owner: str = Field(..., description="작성자")
+    target_date: date = Field(..., description="보고서 날짜")
+
+
+class GetMainTasksResponse(BaseModel):
+    """금일 진행 업무 조회 응답"""
+    success: bool
+    main_tasks: List[Dict[str, Any]]
+    count: int
+
+
+@router.post("/get_main_tasks", response_model=GetMainTasksResponse)
+async def get_main_tasks(request: GetMainTasksRequest):
+    """
+    저장된 금일 진행 업무 조회
+    """
+    try:
+        store = get_main_tasks_store()
+        main_tasks = store.get(
+            owner=request.owner,
+            target_date=request.target_date
+        )
+        
+        if main_tasks is None:
+            main_tasks = []
+        
+        return GetMainTasksResponse(
+            success=True,
+            main_tasks=main_tasks,
+            count=len(main_tasks)
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"업무 조회 실패: {str(e)}"
         )
 
 
