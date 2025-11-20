@@ -1,0 +1,9 @@
+# MCP 모듈 필수 패키지
+# Google API 클라이언트 라이브러리
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0
+
+# 기본 의존성
+google-auth>=2.23.0
+
