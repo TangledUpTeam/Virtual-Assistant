@@ -98,6 +98,17 @@ function createCharacterWindow() {
     }
   });
 
+  // 개발 모드: 캐시 + localStorage 완전 삭제
+  characterWin.webContents.session.clearCache().then(() => {
+    console.log('🔄 캐시 삭제 완료');
+  });
+  
+  characterWin.webContents.session.clearStorageData({
+    storages: ['localstorage']
+  }).then(() => {
+    console.log('🗑️  localStorage 삭제 완료');
+  });
+  
   // 메인 페이지 로드 (캐릭터 화면)
   characterWin.loadURL('http://localhost:8000/main');
 
@@ -105,9 +116,13 @@ function createCharacterWindow() {
 
   // 단축키 (F12: 개발자 도구)
   characterWin.webContents.on('before-input-event', (event, input) => {
-    // F12로 개발자 도구
+    // F12로 개발자 도구 (별도 창으로 열기)
     if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
-      characterWin.webContents.toggleDevTools();
+      if (characterWin.webContents.isDevToolsOpened()) {
+        characterWin.webContents.closeDevTools();
+      } else {
+        characterWin.webContents.openDevTools({ mode: 'detach' });
+      }
     }
   });
 

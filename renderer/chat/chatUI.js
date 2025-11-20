@@ -3,7 +3,8 @@
  * 채팅 패널의 상태와 UI 인터랙션 처리
  */
 
-import { callChatModule, saveSelectedTasks } from '../tasks/taskService.js';
+import { sendChatMessage } from './chatbotService.js';
+import { getTodayPlan, saveSelectedTasks } from '../tasks/taskService.js';
 
 let messages = [];
 let isPanelVisible = true;
@@ -107,15 +108,19 @@ async function handleSendMessage() {
   sendBtn.textContent = '...';
   
   try {
-    const response = await callChatModule(text);
-    
-    // 응답 타입에 따라 처리
-    if (response.type === 'task_recommendations') {
-      addTaskRecommendations(response.data);
-    } else if (response.type === 'error') {
-      addMessage('assistant', response.data);
+    // "오늘 뭐할지 추천" 등의 키워드가 있으면 업무 추천 API 호출
+    if (text.includes('오늘') && (text.includes('추천') || text.includes('뭐할'))) {
+      const response = await getTodayPlan();
+      
+      if (response.type === 'task_recommendations') {
+        addTaskRecommendations(response.data);
+      } else {
+        addMessage('assistant', response.data);
+      }
     } else {
-      addMessage('assistant', response.data);
+      // 그 외 모든 메시지는 Chatbot API로 전달
+      const assistantMessage = await sendChatMessage(text);
+      addMessage('assistant', assistantMessage);
     }
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
