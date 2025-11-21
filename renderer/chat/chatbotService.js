@@ -3,6 +3,8 @@
  * backend/app/domain/chatbot 모듈과 통신
  */
 
+import { isHRQuestion, queryHRDocument } from './hrService.js';
+
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const SESSION_KEY = 'chatbot_session_id';
 
@@ -47,6 +49,19 @@ export async function getOrCreateSession() {
  */
 export async function sendChatMessage(userMessage) {
   try {
+    // HR 관련 질문이면 RAG API로 라우팅
+    if (isHRQuestion(userMessage)) {
+      console.log('🔍 HR 질문 감지 - RAG 모듈로 라우팅');
+      const ragResponse = await queryHRDocument(userMessage);
+      
+      if (ragResponse.type === 'error') {
+        throw new Error(ragResponse.data);
+      }
+      
+      return ragResponse.data; // RAG 답변 반환
+    }
+    
+    // 일반 질문은 기존 챗봇 API 사용
     let sessionId = await getOrCreateSession();
     
     console.log('📨 챗봇 메시지 전송:', userMessage);
