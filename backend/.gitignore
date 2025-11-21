@@ -58,6 +58,9 @@ chroma/
 # Ephemeral sessions (임시 세션 데이터)
 **/ephemeral/
 
+# Chatbot sessions (채팅 세션 데이터 - 로컬에만 저장)
+**/chatbot/data/sessions/
+
 # 하지만 브레인스토밍 임베딩 JSON은 Git에 포함
 !backend/app/domain/brainstorming/data/
 !backend/app/domain/brainstorming/data/embeddings/

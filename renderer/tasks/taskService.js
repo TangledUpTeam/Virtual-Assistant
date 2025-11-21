@@ -1,29 +1,9 @@
 /**
  * 추천 업무 서비스
- * plan.py + daily.py API 연동
+ * plan.py + daily.py API 통합
  */
 
 const API_BASE_URL = 'http://localhost:8000/api/v1';
-
-/**
- * 채팅 모듈 호출 (메시지 처리)
- * @param {string} userText - 사용자 입력 텍스트
- * @returns {Promise<{type: string, data: any}>}
- */
-export async function callChatModule(userText) {
-  console.log('📨 사용자 메시지:', userText);
-  
-  // "오늘 뭐할지 추천" 등의 키워드가 있으면 TodayPlan API 호출
-  if (userText.includes('오늘') && (userText.includes('추천') || userText.includes('뭐할'))) {
-    return await getTodayPlan();
-  }
-  
-  // 기본 응답
-  return {
-    type: 'text',
-    data: '안녕하세요! "오늘 뭐할지 추천 좀"이라고 말씀해주시면 업무를 추천해드립니다. 😊'
-  };
-}
 
 /**
  * 오늘의 추천 업무 가져오기 (plan.py API)

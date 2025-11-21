@@ -148,9 +148,14 @@ class RAGCLI:
                 progress.update(task2, completed=True)
                 
                 # 3. 임베딩 및 저장
-                task3 = progress.add_task("[cyan]벡터 DB 저장 중...", total=None)
+                task3 = progress.add_task("[cyan]임베딩 생성 및 저장 중...", total=None)
                 added_count = self.vector_store.add_document(processed_doc, chunks)
                 progress.update(task3, completed=True)
+                
+                # 4. 임베딩을 포함한 JSON 저장
+                task4 = progress.add_task("[cyan]JSON 파일 저장 중...", total=None)
+                self.pdf_processor.save_chunks_with_embeddings(processed_doc, chunks)
+                progress.update(task4, completed=True)
             
             # 결과 출력
             if show_header:
@@ -283,9 +288,11 @@ class RAGCLI:
         
         stats_table.add_row("저장된 청크 수", str(doc_count))
         stats_table.add_row("컬렉션 이름", self.config.CHROMA_COLLECTION_NAME)
-        stats_table.add_row("임베딩 모델", self.config.KOREAN_EMBEDDING_MODEL)
+        stats_table.add_row("임베딩 모델", self.config.EMBEDDING_MODEL)
+        stats_table.add_row("번역 모델", self.config.TRANSLATION_MODEL)
         stats_table.add_row("LLM 모델", self.config.OPENAI_MODEL)
         stats_table.add_row("Top-K", str(self.config.RAG_TOP_K))
+        stats_table.add_row("동적 Threshold 범위", f"{self.config.RAG_MIN_SIMILARITY_THRESHOLD} ~ {self.config.RAG_MAX_SIMILARITY_THRESHOLD}")
         
         console.print(stats_table)
     
