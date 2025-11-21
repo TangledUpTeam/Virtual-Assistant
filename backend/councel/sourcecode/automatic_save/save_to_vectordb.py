@@ -1,222 +1,320 @@
 """
 Vector DB 저장 스크립트
-생성날짜: 2025.11.18
-설명: rogers/embedding 폴더의 임베딩 파일들을 ChromaDB에 저장
+생성날짜: 2025.11.21
+설명: adler/embeddings 폴더의 OpenAI 임베딩 파일들을 ChromaDB에 저장
 """
 
 import os
 import json
 import sys
+import shutil
+import time
+import gc
 from pathlib import Path
 from typing import List, Dict, Any
 import chromadb
 from chromadb.config import Settings
+from tqdm import tqdm
 
 # Vector DB 매니저
 class VectorDBManager:
+
     def __init__(self, db_path: str):
 
         # 경로 설정
-        self.db_path = Path(db_path) # Vector DB 저장 경로
-        self.db_path.mkdir(parents=True, exist_ok=True) # 경로가 없으면 폴더 생성
+        self.db_path = Path(db_path)
         
         # ChromaDB 클라이언트 초기화
-        self.client = chromadb.PersistentClient( # PersistentClient: 파일을 영구적으로 저장
-            path=str(self.db_path), # 경로
-            settings=Settings( # 세팅
-                anonymized_telemetry=False, # 중복 추적 방지
-                allow_reset=True # 컬렉션 재생성 허용, 개발/테스트 단계에서만 True
-            )
-        )
+        self.client = None
+        self._initialize_client()
     
-    # 임베딩 파일 로드
-    # 밑에 있는 주석은 디버깅 과정에서만 남겨놓고 나중에 삭제 예정
+    # Chroma DB 클라이언트 초기화
+    def _initialize_client(self):
+
+        try:
+            # DB 폴더 생성
+            self.db_path.mkdir(parents=True, exist_ok=True)
+            
+            # ChromaDB 클라이언트 생성
+            self.client = chromadb.PersistentClient(
+                path=str(self.db_path),
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True
+                )
+            )
+            
+        except Exception as e:
+            raise Exception(f"ChromaDB 초기화 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
+    
+    # 임베딩 파일 로드 함수
+    # 예외처리 print문은 배포 전 삭제 예정
     def load_embedding_file(self, filepath: Path) -> List[Dict[str, Any]]:
 
         try:
             with open(filepath, 'r', encoding='utf-8') as file:
-                data = json.load(file) # Json 파일 로드 후 data에 저장
+                data = json.load(file)
             return data
         except FileNotFoundError:
-            print(f"[ERROR] 파일을 찾을 수 없습니다: {filepath}")
+            print(f"파일을 찾을 수 없습니다")
             raise
         except json.JSONDecodeError as e:
-            print(f"[ERROR] JSON 파싱 오류: {filepath} - {e}")
+            print(f"JSON 파싱 오류: {e}")
             raise
         except Exception as e:
-            print(f"[ERROR] 파일 로드 오류: {filepath} - {e}")
+            print(f"파일 로드 오류: {e}")
             raise
     
-    # 컬렉션 생성 또는 재생성
-    def create_or_reset_collection(self, collection_name: str):
+    # 컬렉션 생성 또는 이미 존재할 경우 가져오기
+    # print문은 배포 전 삭제 예정
+    def create_or_get_collection(self, collection_name: str):
 
         try:
-            
-            try:
-                self.client.delete_collection(name=collection_name) # 기존 컬렉션이 있으면 삭제
-            except Exception:
-                pass  # 컬렉션이 없으면 무시
-            
-            # 새 컬렉션 생성
-            collection = self.client.create_collection(
-                name=collection_name, # 컬렉션 이름은 매개변수로 전달해준 이름 사용
-                metadata={"hnsw:space": "cosine"}  # 코사인 유사도 사용
-            )
-
+            # 기존 컬렉션이 있는지 확인
+            collection = self.client.get_collection(name=collection_name)
+            print(f"기존 컬렉션이 존재합니다.")
             return collection
-        
-        except Exception as e:
-            print(f"[ERROR] 컬렉션 생성 오류: {collection_name} - {e}") # 이 부분도 나중에 삭제 예정
-            raise
+            
+        except Exception:
+            # 컬렉션이 없으면 새로 생성
+            try:
+                collection = self.client.create_collection(
+                    name=collection_name,
+                    metadata={"hnsw:space": "cosine"}  # 코사인 유사도 사용
+                )
+                print(f"새 컬렉션 '{collection_name}' 생성 완료")
+                return collection
+                
+            except Exception as e:
+                print(f"컬렉션 생성 오류: {e}")
+                raise
     
-    # 컬렉션 저장 함수
-    def save_to_collection(self, collection_name: str, data: List[Dict[str, Any]]):
+    # 데이터를 컬렉션에 배치 단위로 저장하는 함수
+    # collection_name: 컬렉션 이름
+    # data: 저장할 데이터 리스트
+    # batch_size: 배치 크기
+    def save_to_collection(self, collection_name: str, data: List[Dict[str, Any]], 
+                          batch_size: int = 1000) -> int:
 
         try:
-            # 컬렉션 생성/재생성
-            collection = self.create_or_reset_collection(collection_name)
+            # 컬렉션 생성 또는 기존 컬렉션 가져오기
+            collection = self.create_or_get_collection(collection_name)
+            
+            # 기존 데이터가 있고 skip_existing이 True면 건너뛰기
+            existing_count = collection.count()
+
+            # 기존 ID 목록 가져오기 (중복 방지)
+            existing_ids = set()
+            if existing_count > 0:
+                try:
+                    # 모든 기존 ID 가져오기
+                    existing_data = collection.get()
+                    existing_ids = set(existing_data['ids'])
+                except Exception as e:
+                    print(f"기존 ID 확인 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
             
             # 데이터 준비
-            ids = [] # id
-            embeddings = [] # 임베딩 데이터
-            documents = [] # 문서 데이터
-            metadatas = [] # 메타데이터 
+            ids = []
+            embeddings = []
+            documents = []
+            metadatas = []
+            skipped_count = 0
             
+            print(f"\n데이터 준비 중...")
             for item in data:
-
-                # 각 리스트에 데이터 추가
+                # 이미 존재하는 ID는 건너뛰기
+                if item['id'] in existing_ids:
+                    skipped_count += 1
+                    continue
+                
                 ids.append(item['id'])
                 embeddings.append(item['embedding'])
                 documents.append(item['text'])
                 
                 # 메타데이터 처리 (ChromaDB는 list를 지원하지 않으므로 변환)
                 metadata = item['metadata'].copy()
-                if 'tags' in metadata and isinstance(metadata['tags'], list): # tags가 리스트 형태면 문자열로 변환
-                    metadata['tags'] = ', '.join(metadata['tags'])  # 리스트를 문자열로 변환
+                if 'tags' in metadata and isinstance(metadata['tags'], list):
+                    metadata['tags'] = ', '.join(metadata['tags'])
                 metadatas.append(metadata)
             
-            # 배치로 저장 (ChromaDB는 한 번에 많은 데이터를 처리할 수 있음)
-            batch_size = 1000
-            total_batches = (len(ids) + batch_size - 1) // batch_size # 배치 수 계산
+            if not ids:
+                print(f"\n저장할 새로운 데이터가 없습니다. 모든 데이터가 이미 존재합니다.") # 배포 전 삭제 예정
+                return 0
             
-            for i in range(0, len(ids), batch_size):
-                batch_num = i // batch_size + 1
-                end_idx = min(i + batch_size, len(ids)) # 끝 인덱스
+            # 배치로 저장
+            total_items = len(ids)
+            
+            successful_batches = 0
+            failed_batches = 0
+            
+            for i in tqdm(range(0, total_items, batch_size), desc="저장 진행률"):
+                end_idx = min(i + batch_size, total_items)
                 
-                # 컬렉션에 앞에서 저장한 데이터들 추가
-                collection.add(
-                    ids=ids[i:end_idx],
-                    embeddings=embeddings[i:end_idx],
-                    documents=documents[i:end_idx],
-                    metadatas=metadatas[i:end_idx]
-                )
+                try:
+                    # 컬렉션에 데이터 추가
+                    collection.add(
+                        ids=ids[i:end_idx],
+                        embeddings=embeddings[i:end_idx],
+                        documents=documents[i:end_idx],
+                        metadatas=metadatas[i:end_idx]
+                    )
+                    successful_batches += 1
+                    
+                except Exception as e:
+                    print(f"\n배치 저장 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
+                    failed_batches += 1
             
-            return collection
+            print(f"\n배치 저장 완료:")
+            print(f"  - 저장된 항목: {total_items}개")
+            
+            return total_items
         
         except Exception as e:
-            print(f"[ERROR] 데이터 저장 오류: {collection_name} - {e}") # 나중에 삭제 예정
+            print(f"데이터 저장 오류: {e}")
             raise
     
     # 컬렉션 검증 함수
-    # 상태 및 무결성 보장 역할
-    def verify_collection(self, collection_name: str):
+    def verify_collection(self, collection_name: str) -> Dict[str, Any]:
 
         try:
-            collection = self.client.get_collection(name=collection_name) # 컬렉션 이름으로 해당 컬렉션 가져오기
-            count = collection.count() # 컬렉션 안에 있는 데이터 개수 가지고 오기
+            collection = self.client.get_collection(name=collection_name) # 컬렉션 가져오기
+            count = collection.count() # 컬렉션 개수
+            
+            result = {
+                'name': collection_name,
+                'count': count,
+                'metadata': collection.metadata
+            }
             
             # 샘플 데이터 조회
-            sample = collection.peek(limit=1) # 컬렉션 안에 있는 데이터들 중 하나 샘플로 가지고오기
-            if sample['ids']: # ids가 있으면 샘플 아이디 출력
-                print(f"  샘플 ID: {sample['ids'][0]}") # 나중에 삭제 예정
+            if count > 0:
+                sample = collection.peek(limit=1)
+                if sample['ids']:
+                    result['sample_id'] = sample['ids'][0]
             
-            return count
+            return result
         
         except Exception as e:
-            print(f"[ERROR] 컬렉션 검증 오류: {collection_name} - {e}") # 나중에 삭제 예정
+            print(f"컬렉션 검증 오류: {e}")
             raise
 
-
+# 메인 함수
+# 예외처리 print문 및 쓸데없는 print문은 배포 전 삭제 예정
 def main():
-
+    
+    print("=" * 60)
+    print("Vector DB 저장 스크립트")
+    print("=" * 60)
+    
     # 경로 설정 (sourcecode/automatic_save 기준)
-    base_dir = Path(__file__).parent.parent.parent # councel 폴더
-    embedding_dir = base_dir / "dataset" / "rogers" / "embedding"
+    base_dir = Path(__file__).parent.parent.parent
+    embedding_dir = base_dir / "dataset" / "adler" / "embeddings"
     vector_db_dir = base_dir / "vector_db"
+    
+    # 컬렉션 이름
+    collection_name = "vector_adler"
     
     # 입력 디렉토리 확인
     if not embedding_dir.exists():
-        print(f"[ERROR] 오류: 입력 디렉토리가 존재하지 않습니다: {embedding_dir}") # 나중에 삭제 예정
-        sys.exit(1) # 오류 발생시 종료
+        print(f"오류: 입력 디렉토리가 존재하지 않습니다")
+        sys.exit(1)
     
+    # 임베딩 파일 목록 가져오기
+    embedding_files = sorted(embedding_dir.glob("*_embeddings.json"))
+    
+    if not embedding_files:
+        print(f"오류: 임베딩 파일을 찾을 수 없습니다")
+        sys.exit(1)
+
     try:
         # Vector DB 매니저 초기화
+        print(f"\n{'='*60}")
         db_manager = VectorDBManager(str(vector_db_dir))
         
-        # 임베딩 파일 매핑
-        file_mappings = []
+        # 모든 임베딩 파일의 데이터를 하나로 합치기
+        print(f"\n{'='*60}")
+        print("임베딩 파일 로드 중...")
+        print(f"{'='*60}")
         
-        # 파일명에 'phr'이 포함되면 의미기반, 아니면 문단기반 
-        # 의미 기반 컬렉션명: semantic_vec / 문단 기반 컬렉션명: paragraph_vec
-        for emb_file in embedding_dir.glob("*.json"):
-
-            # 파일명에 phr이 포함되어있는지 확인
-            if "phr" in emb_file.stem.lower():
-                collection_name = "semantic_vec"
-                file_type = "의미기반"
-            else:
-                collection_name = "paragraph_vec"
-                file_type = "문단기반"
-            
-            # 파일 매핑 리스트에 추가
-            file_mappings.append({
-                "file": emb_file, # 임베딩 파일
-                "collection": collection_name, # 컬렉션 이름
-                "type": file_type # 파일 타입
-            })
+        all_data = []
+        file_stats = []
         
-        # 파일 매핑이 실패할 경우
-        if not file_mappings:
-            print("[ERROR] 오류: 임베딩 파일을 찾을 수 없습니다.") # 나중에 삭제 예정
-            sys.exit(1) # 오류 발생시 종료
+        for emb_file in embedding_files:
+            
+            try:
+                data = db_manager.load_embedding_file(emb_file)
+                all_data.extend(data)
+                file_stats.append({
+                    'file': emb_file.name,
+                    'count': len(data),
+                    'status': '성공'
+                })
+                
+            except Exception as e:
+                file_stats.append({
+                    'file': emb_file.name,
+                    'count': 0,
+                    'status': f'실패: {e}'
+                })
+                print(f"로드 실패: {e}")
         
-        # 각 파일 처리
-        results = {}
+        # 로드 결과 요약
         
-        for mapping in file_mappings:
-            
-            # 데이터 로드
-            data = db_manager.load_embedding_file(mapping['file'])
-            
-            # Vector DB에 저장
-            db_manager.save_to_collection(mapping['collection'], data)
-            
-            # 결과 저장
-            results[mapping['collection']] = len(data)
+        if not all_data:
+            print("오류: 로드된 데이터가 없습니다.")
+            sys.exit(1)
+        
+        # Vector DB에 저장
+        print(f"\n{'='*60}")
+        print(f"Vector DB에 저장 중")
+        print(f"{'='*60}")
+        
+        total_saved = db_manager.save_to_collection(
+            collection_name=collection_name,
+            data=all_data,
+            batch_size=1000
+        )
         
         # 검증
+        print(f"\n{'='*60}")
+        print("컬렉션 검증 중...")
+        print(f"{'='*60}")
         
-        # 만들어진 컬렉션 검증
-        for collection_name in results.keys():
-            db_manager.verify_collection(collection_name)
+        verification = db_manager.verify_collection(collection_name)
+        
+        print(f"\n컬렉션 정보:")
+        print(f"  - 이름: {verification['name']}")
+        print(f"  - 저장된 항목 수: {verification['count']}개")
+        print(f"  - 메타데이터: {verification['metadata']}")
+        if 'sample_id' in verification:
+            print(f"  - 샘플 ID: {verification['sample_id']}")
         
         # 최종 결과
-        for collection_name, count in results.items():
-            print(f"  - {collection_name}: {count}개 항목") # 나중에 삭제 예정, 임시로 확인용도
+        print(f"\n{'='*60}")
+        print("전체 작업 완료!")
+        print(f"{'='*60}")
+        print(f"총 삽입된 벡터 개수: {total_saved}개")
+        print(f"컬렉션 이름: {collection_name}")
+        print(f"DB 저장 위치: {vector_db_dir}")
+        print(f"{'='*60}")
         
-    # 작업 중단 시 예외처리    
+        # 파일별 상세 결과
+        # 나중에 아예 삭제할 예정
+        print(f"\n파일별 처리 결과:")
+        for stat in file_stats:
+            status_symbol = "✓" if stat['status'] == '성공' else "✗"
+            print(f"  {status_symbol} {stat['file']}: {stat['count']}개 ({stat['status']})")
+        
     except KeyboardInterrupt:
-        print("\n\n작업이 사용자에 의해 중단되었습니다.") # 나중에 삭제 예정
+        print("\n\n작업이 사용자에 의해 중단되었습니다.")
         sys.exit(1)
     
-    # 예외처리
     except Exception as e:
-        print(f"\n[ERROR] 치명적 오류 발생: {e}") # 나중에 삭제 예정
-        import traceback # 예외 추적
-        traceback.print_exc() # 예외 추적 결과 출력
+        print(f"\n치명적 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
-
+# 메인 호출
 if __name__ == "__main__":
     main()
-

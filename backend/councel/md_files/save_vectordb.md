@@ -15,19 +15,19 @@
 
 # Rules
 
-임베딩 파일은 모델별 차원 수와 일치해야 합니다.
+- DB 연결이 실패하면 에러 메시지를 출력하고 중단합니다.
 
-DB 연결이 실패하면 에러 메시지를 출력하고 중단합니다.
+- 이미 동일한 컬렉션/ID가 존재하면 덮어쓴다.(존재하지 않을 경우에 생성을 진행한다.)
 
-이미 동일한 컬렉션/ID가 존재하면 덮어쓰거나 skip 옵션을 제공합니다.
+- 배치 삽입 시 memory 효율을 고려합니다.
 
-배치 삽입 시 memory 효율을 고려합니다.
+- Vector DB에 삽입 후, 인덱스가 자동으로 생성되도록 합니다(Chroma는 컬렉션 내 자동).
 
-Vector DB에 삽입 후, 인덱스가 자동으로 생성되도록 합니다(FAISS는 add_with_ids, Chroma는 컬렉션 내 자동).
+- py파일 저장은 ``backend/councel/sourcecode/automatic_save/save_vectordb.py``에 저장한다.
+
+- 컬렉션은 ``backend/councel/vector_db`` 폴더 안에 저장한다.
 
 # Output Format
-
-저장 성공 여부
 
 총 삽입된 벡터 개수
 

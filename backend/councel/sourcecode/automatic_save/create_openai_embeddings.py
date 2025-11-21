@@ -21,7 +21,7 @@ ENV_FILE = PROJECT_ROOT / ".env"
 if ENV_FILE.exists():
     load_dotenv(ENV_FILE)
 else:
-    print(f"⚠ 경고: .env 파일을 찾을 수 없습니다: {ENV_FILE}")
+    print(f"경고: .env 파일을 찾을 수 없습니다") # env파일이 있는지 없는지 확인하기 위해 남겨놓음
 
 # 기본 경로 설정 (sourcecode/automatic_save 기준)
 BASE_DIR = Path(__file__).parent.parent.parent
@@ -36,6 +36,7 @@ BATCH_SIZE = 100  # OpenAI API는 한 번에 여러 텍스트 처리 가능
 
 
 # 청크 파일 로드 함수
+# 예외처리 print문은 배포 전 삭제 예정
 def load_chunks(file_path: str) -> List[Dict[str, Any]]:
 
     try:
@@ -43,13 +44,13 @@ def load_chunks(file_path: str) -> List[Dict[str, Any]]:
             chunks = json.load(f)
         return chunks
     except FileNotFoundError:
-        print(f"✗ 파일을 찾을 수 없습니다")
+        print(f"파일을 찾을 수 없습니다")
         return []
     except json.JSONDecodeError as e:
-        print(f"✗ JSON 파싱 오류: {e}")
+        print(f"JSON 파싱 오류: {e}")
         return []
     except Exception as e:
-        print(f"✗ 파일 로드 중 오류 발생: {e}")
+        print(f"파일 로드 중 오류 발생: {e}")
         return []
 
 # 임베딩 파일 생성 함수
@@ -81,14 +82,14 @@ def create_embeddings(chunks: List[Dict[str, Any]], model_name: str) -> List[Lis
                 embeddings.extend(batch_embeddings)
                 
             except Exception as e:
-                print(f"\n✗ 배치 {i//BATCH_SIZE + 1} 처리 중 오류: {e}")
+                print(f"\n배치 {i//BATCH_SIZE + 1} 처리 중 오류: {e}") # 배포 전 삭제 예정
                 # 오류 발생 시 빈 임베딩으로 채우기
                 embeddings.extend([[] for _ in batch_texts])
         
         return embeddings
         
     except Exception as e:
-        print(f"✗ 임베딩 생성 중 오류 발생: {e}")
+        print(f"임베딩 생성 중 오류 발생: {e}") # 배포 전 삭제 예정
         return []
 
 # 생성된 임베딩 파일을 JSON 파일로 저장하는 함수
@@ -114,10 +115,11 @@ def save_embeddings(chunks: List[Dict[str, Any]], embeddings: List[List[float]],
         return True
         
     except Exception as e:
-        print(f"✗ 파일 저장 중 오류 발생: {e}")
+        print(f"파일 저장 중 오류 발생: {e}") # 배포 전 삭제 예정
         return False
 
 # 메인 함수
+# 쓸데 없는 print문 및 예외처리 print문은 나중에 삭제 예정
 def main():
 
     print("=" * 60)
@@ -127,20 +129,18 @@ def main():
     # API 키 확인
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        print("✗ 오류: OPENAI_API_KEY가 설정되지 않았습니다.")
-        print(f"   프로젝트 루트의 .env 파일에 OPENAI_API_KEY를 설정해주세요.")
-        print(f"   .env 파일 위치: {ENV_FILE}")
+        print("오류: OPENAI_API_KEY가 설정되지 않았습니다.")
         return
 
     # 청크 파일 목록 가져오기
     if not CHUNK_DIR.exists():
-        print(f"✗ 오류: 입력 디렉토리가 존재하지 않습니다: {CHUNK_DIR}")
+        print(f"오류: 입력 디렉토리가 존재하지 않습니다")
         return
     
     chunk_files = sorted(CHUNK_DIR.glob("*_chunks.json"))
     
     if not chunk_files:
-        print(f"✗ 오류: 청크 파일을 찾을 수 없습니다: {CHUNK_DIR}")
+        print(f"오류: 청크 파일을 찾을 수 없습니다")
         return
     
     # 각 파일 처리
@@ -148,16 +148,13 @@ def main():
     total_failed = 0
     
     for chunk_file in chunk_files:
-        print(f"\n{'='*60}")
-        print(f"처리 중: {chunk_file.name}")
-        print(f"{'='*60}")
         
         try:
             # 1. 청크 파일 로드
             chunks = load_chunks(str(chunk_file))
             
             if not chunks:
-                print(f"✗ 건너뛰기: 청크 데이터가 없습니다.")
+                print(f"건너뛰기: 청크 데이터가 없습니다.") # 배포 전 삭제 예정
                 total_failed += 1
                 continue
             
@@ -165,7 +162,7 @@ def main():
             embeddings = create_embeddings(chunks, MODEL_NAME)
             
             if not embeddings or len(embeddings) != len(chunks):
-                print(f"✗ 건너뛰기: 임베딩 생성 실패")
+                print(f"건너뛰기: 임베딩 생성 실패") # 배포 전 삭제 예정
                 total_failed += 1
                 continue
             
@@ -176,15 +173,16 @@ def main():
             # 4. 결과 저장
             if save_embeddings(chunks, embeddings, str(output_path)):
                 total_processed += 1
-                print(f"✓ 완료: {output_filename}")
+                print(f"완료: {output_filename}") # 배포 전 삭제 예정
             else:
                 total_failed += 1
                 
         except Exception as e:
-            print(f"✗ 파일 처리 중 예외 발생: {e}")
+            print(f"파일 처리 중 예외 발생: {e}") # 예외처리 print문은 배포 전 삭제 예정
             total_failed += 1
     
     # 최종 결과 출력
+    # 배포 전 삭제 예정
     print(f"\n{'='*60}")
     print("전체 작업 완료!")
     print(f"{'='*60}")
@@ -193,7 +191,6 @@ def main():
     print(f"저장 위치: {OUTPUT_DIR}")
     print(f"{'='*60}")
 
-
+# 호출
 if __name__ == "__main__":
     main()
-
