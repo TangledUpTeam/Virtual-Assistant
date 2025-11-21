@@ -1,7 +1,8 @@
 """
 청크 파일 생성 스크립트
 생성날짜: 2025.11.18
-설명: rogers/original 폴더의 모든 파일을 의미 단위로 청킹하여 JSON 배열 형태로 저장
+수정날짜: 2025.11.19 - Adler PDF 처리 추가
+설명: PDF 파일을 의미 단위로 청킹하여 개별 JSON 파일로 저장
 """
 
 import os
@@ -10,12 +11,13 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 import tiktoken
+import fitz  # PyMuPDF
 
-
+# 청크파일을 만드는 클래스
 class ChunkCreator:
 
     # 초기화
-    def __init__(self, max_tokens: int = 500, overlap_ratio: float = 0.1):
+    def __init__(self, max_tokens: int = 500, overlap_ratio: float = 0.2):
         self.max_tokens = max_tokens # 청크당 최대 토큰 수
         self.overlap_ratio = overlap_ratio # Overlap 비율
         self.encoding = tiktoken.get_encoding("cl100k_base") # 토큰 인코딩 모델
@@ -24,43 +26,190 @@ class ChunkCreator:
     def count_tokens(self, text: str) -> int:
         return len(self.encoding.encode(text))
     
-    # 파일명에서 메타데이터 추출
-    def extract_metadata_from_filename(self, filename: str) -> Dict[str, Any]:
+    # PDF에서 텍스트 추출(PyMuPDF(fitz)를 사용)
+    def extract_text_from_pdf(self, pdf_path: Path) -> str:
 
-        # 파일당 메타데이터 추출 예시
-        # rogers_theory_1.md -> type: theory
-        # rogers_example_1.md -> type: example
-        # rogers_information_1.md -> type: information
-        # rogers_techniques_1.md -> type: techniques
+        doc = fitz.open(pdf_path) # pdf 파일 열기
+        full_text = [] # 전체 텍스트를 저장할 리스트
         
-        parts = filename.replace('.md', '').split('_')
-        file_type = parts[1] if len(parts) > 1 else "unknown"
+        # 페이지 수만큼 반복하면서 리스트에 텍스트 저장
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            text = page.get_text()
+            full_text.append(text)
+        
+        doc.close()
+        
+        # 전체 텍스트 결합
+        combined_text = '\n'.join(full_text)
+        
+        # 하이픈으로 끝나는 단어 복원 (예: "coun-\nseling" → "counseling")
+        combined_text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', combined_text)
+        
+        return combined_text
+    
+    # PDF 텍스트 정제화
+    # 정제화 규칙
+    # 1. 페이지 번호 제거
+    # 2. 표/그래프 특수문자 제거
+    # 3. 참고문헌 섹션 제거
+    # 4. URL, 이메일 제거
+    # 5. 한글 제거
+    # 6. 반복되는 특수문자 제거
+    # 7. 과도한 공백 정리
+    # 8. 앞뒤 공백 제거
+    def clean_pdf_text(self, text: str) -> str:
+
+        # 1. 페이지 번호 패턴 제거
+        text = re.sub(r'^\s*\d+\s*$', '', text, flags=re.MULTILINE)  # 숫자만 있는 줄
+        text = re.sub(r'^Page\s+\d+', '', text, flags=re.MULTILINE | re.IGNORECASE) # Page 번호 제거
+        text = re.sub(r'^-\s*\d+\s*-$', '', text, flags=re.MULTILINE) # 하이픈으로 끝나는 단어 복원
+        text = re.sub(r'^\[\d+\]$', '', text, flags=re.MULTILINE) # 대괄호에 둘러싸인 숫자 제거
+        
+        # 2. 표/그래프 특수문자 제거
+        table_chars = ['│', '─', '┼', '├', '┤', '┬', '┴', '┌', '┐', '└', '┘', '║', '═', '╔', '╗', '╚', '╝', '╠', '╣', '╦', '╩', '╬']
+        for char in table_chars:
+            text = text.replace(char, '')
+        
+        # 3. 참고문헌 섹션 제거 (References, Bibliography 이후)
+        ref_patterns = [
+            r'\n\s*References\s*\n.*',
+            r'\n\s*Bibliography\s*\n.*',
+            r'\n\s*참고문헌\s*\n.*',
+            r'\n\s*REFERENCES\s*\n.*',
+            r'\n\s*BIBLIOGRAPHY\s*\n.*'
+        ]
+        for pattern in ref_patterns:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.DOTALL)
+        
+        # 4. URL 제거
+        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+        
+        # 5. 이메일 주소 제거
+        text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', text)
+        
+        # 6. 한글 제거
+        text = re.sub(r'[가-힣]+', '', text)
+        
+        # 7. 반복되는 특수문자 제거 (3개 이상 연속)
+        # 예: ====, ----, ...., ****, ####, ____ 등
+        text = re.sub(r'([=\-_.*#~`+]{3,})', '', text)
+        
+        # 8. 반복되는 짧은 줄 제거 (헤더/푸터 가능성)
+        lines = text.split('\n')
+        line_counts = {}
+        for line in lines:
+            stripped = line.strip()
+            if len(stripped) > 0 and len(stripped) < 50:  # 50자 이하의 짧은 줄만
+                line_counts[stripped] = line_counts.get(stripped, 0) + 1
+        
+        # 3번 이상 반복되는 짧은 줄 제거
+        repeated_lines = {line for line, count in line_counts.items() if count >= 3}
+        lines = [line for line in lines if line.strip() not in repeated_lines]
+        text = '\n'.join(lines)
+        
+        # 9. 과도한 공백 정리
+        text = re.sub(r'\n{3,}', '\n\n', text)  # 3개 이상의 연속 줄바꿈을 2개로
+        text = re.sub(r' {2,}', ' ', text)  # 2개 이상의 연속 공백을 1개로
+        text = re.sub(r'\t+', ' ', text)  # 탭을 공백으로
+        
+        # 10. 앞뒤 공백 제거
+        text = text.strip()
+        
+        return text
+    
+    # ==================== Adler 관련 메서드 ====================
+    
+    # Adler 파일명에서 메타데이터 추출
+    def extract_metadata_adler(self, filename: str) -> Dict[str, Any]:
+
+        # 확장자 제거
+        clean_name = filename.replace('.md', '').replace('.pdf', '')
+        parts = clean_name.split('_')
+        
+        file_category = parts[1] if len(parts) > 1 else "unknown"
+        
+        # 메타데이터
+        metadata = {
+            "author": "Adler",
+            "source": filename,
+            "category": file_category,
+            "topic": "individual psychology",
+            "tags": ["아들러"]
+        }
+        
+        # 카테고리별 추가 태그
+        if file_category == "case":
+            metadata["tags"].extend(["사례연구", "상담"])
+        elif file_category == "theory":
+            metadata["tags"].extend(["이론", "개인심리학"])
+        elif file_category == "interventions":
+            metadata["tags"].extend(["개입기법", "치료"])
+        elif file_category == "qna":
+            metadata["tags"].extend(["질의응답", "FAQ"])
+        elif file_category == "tone":
+            metadata["tags"].extend(["어조", "성격"])
+        
+        return metadata
+    
+    # ==================== Rogers 관련 메서드 ====================
+    
+    # Rogers 파일명에서 메타데이터 추출
+    def extract_metadata_rogers(self, filename: str) -> Dict[str, Any]:
+
+        # 확장자 제거
+        clean_name = filename.replace('.md', '').replace('.pdf', '')
+        parts = clean_name.split('_')
+        
+        file_category = parts[1] if len(parts) > 1 else "unknown"
         
         metadata = {
             "psychologist": "Carl Rogers",
             "source": filename,
-            "type": file_type,
+            "type": file_category,
             "topic": "client-centered therapy",
             "tags": ["상담", "인간중심"]
         }
         
         # 타입별 추가 태그
-        if file_type == "theory":
+        if file_category == "theory":
             metadata["tags"].extend(["이론", "개념"])
-        elif file_type == "example":
+        elif file_category == "example":
             metadata["tags"].extend(["사례", "예시"])
-        elif file_type == "information":
+        elif file_category == "information":
             metadata["tags"].extend(["정보", "배경"])
-        elif file_type == "techniques":
+        elif file_category == "techniques":
             metadata["tags"].extend(["기법", "실습"])
-            
+        
         return metadata
     
+    # 파일명에서 메타데이터 추출
+    def extract_metadata_from_filename(self, filename: str, file_type: str = "auto") -> Dict[str, Any]:
+
+        # 확장자 제거
+        clean_name = filename.replace('.md', '').replace('.pdf', '')
+        parts = clean_name.split('_')
+        
+        # 심리학자 구분
+        psychologist = parts[0] if len(parts) > 0 else "unknown"
+        
+        # Adler 파일 처리
+        if psychologist.lower() == "adler":
+            return self.extract_metadata_adler(filename)
+        # Rogers 파일 처리
+        elif psychologist.lower() == "rogers":
+            return self.extract_metadata_rogers(filename)
+        # 기타
+        else:
+            return {
+                "source": filename,
+                "type": "unknown",
+                "tags": []
+            }
+    
+    # 마크다운 파일을 의미 단위로 분할하는 코드
     def split_by_sections(self, content: str) -> List[Tuple[str, str]]:
-        """
-        마크다운 파일을 의미 단위(섹션)로 분할
-        Returns: List of (section_title, section_content)
-        """
+
         lines = content.split('\n')
         sections = []
         current_title = ""
@@ -93,8 +242,9 @@ class ChunkCreator:
         
         return sections
     
+    # 청크 간 Overlap 추가(20%)
     def add_overlap(self, chunks: List[str]) -> List[str]:
-        """청크 간 10% overlap 추가"""
+
         if len(chunks) <= 1:
             return chunks
         
@@ -121,11 +271,9 @@ class ChunkCreator:
         
         return overlapped_chunks
     
+    # 큰 섹션 -> 토큰 제한에 맞춰 분할(문단 단위로 분할)
     def split_large_section(self, section_content: str) -> List[str]:
-        """
-        큰 섹션을 토큰 제한에 맞춰 분할
-        문단 단위로 분할하여 의미를 유지
-        """
+
         token_count = self.count_tokens(section_content)
         
         if token_count <= self.max_tokens:
@@ -186,12 +334,18 @@ class ChunkCreator:
         
         return chunks
     
+    # 파일을 의미 단위로 청크 분할
     def process_file(self, filepath: Path, metadata: Dict[str, Any]) -> List[str]:
-        """
-        파일을 의미 단위로 청크 분할
-        """
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
+
+        # 파일 확장자 확인
+        if filepath.suffix.lower() == '.pdf':
+            # PDF 처리
+            content = self.extract_text_from_pdf(filepath)
+            content = self.clean_pdf_text(content)
+        else:
+            # 마크다운 처리
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
         
         # 섹션별로 분할
         sections = self.split_by_sections(content)
@@ -216,15 +370,18 @@ class ChunkCreator:
         
         return all_chunks
     
-    def create_chunk_objects(self, chunks: List[str], metadata: Dict[str, Any], 
-                            start_id: int) -> List[Dict[str, Any]]:
-        """청크 텍스트를 JSON 객체로 변환"""
-        total_chunks = len(chunks)
-        chunk_objects = []
+    # 청크 파일 생성
+    def create_chunk_objects(self, chunks: List[str], metadata: Dict[str, Any], base_id: str) -> List[Dict[str, Any]]:
+
+        total_chunks = len(chunks) # 청크 개수
+        chunk_objects = [] # 청크 객체를 저장할 리스트
         
+        # 청크 개수만큼 반복하면서 청크 생성
         for idx, chunk_text in enumerate(chunks, start=1):
+
+            # 청크 객체 생성(Format)
             chunk_obj = {
-                "id": f"rogers_{start_id + idx - 1:03d}",
+                "id": f"{base_id}_{idx:03d}",
                 "text": chunk_text.strip(),
                 "metadata": {
                     **metadata,
@@ -232,61 +389,99 @@ class ChunkCreator:
                     "total_chunks": total_chunks
                 }
             }
-            chunk_objects.append(chunk_obj)
+            chunk_objects.append(chunk_obj) # 청크 객체 저장
         
         return chunk_objects
     
+    # 단일 파일을 처리하여 개별 json 파일로 저장
+    def process_single_file(self, filepath: Path, output_dir: Path) -> int:
+        
+        # 메타데이터 추출
+        metadata = self.extract_metadata_from_filename(filepath.name)
+        
+        # 파일을 의미 단위로 청크 분할
+        chunks = self.process_file(filepath, metadata)
+        
+        # 베이스 ID 생성 (파일명에서 확장자 제거)
+        base_id = filepath.stem  # 예: "adler_theory_1"
+        
+        # 청크 객체 생성
+        chunk_objects = self.create_chunk_objects(chunks, metadata, base_id)
+        
+        # 개별 JSON 파일로 저장
+        output_filename = f"{filepath.stem}_chunks.json"
+        output_path = output_dir / output_filename
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(chunk_objects, f, ensure_ascii=False, indent=2)
+        
+        # 각 청크의 토큰 수 출력
+        for i, chunk in enumerate(chunks, start=1):
+            token_count = self.count_tokens(chunk)
+
+        return len(chunk_objects)
+    
+    # 디렉토리 내 모든 파일 처리
+    # 한개의 파일로 할건지 개별 파일로 할건지 선택
     def process_directory(self, input_dir: Path, output_dir: Path, 
-                         output_filename: str = "rogers_chunks_phrasing.json"):
-        """디렉토리 내 모든 파일을 처리하여 청크 파일 생성"""
+                         file_pattern: str = "*.md", save_individually: bool = False):
+
         # 출력 디렉토리 생성
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # 모든 마크다운 파일 가져오기
-        md_files = sorted(input_dir.glob("*.md"))
+        # 파일 가져오기
+        files = sorted(input_dir.glob(file_pattern))
         
-        all_chunk_objects = []
-        current_id = 1
+        # 파일이 없으면 빈 리스트 리턴
+        if len(files) == 0:
+            return []
         
-        print(f"총 {len(md_files)}개 파일 처리 시작...\n")
-        
-        for md_file in md_files:
-            print(f"처리 중: {md_file.name}")
+        # 개별 파일로 저장하는 경우
+        if save_individually:
+            # 개별 파일로 저장
+            total_chunks = 0
+            for file in files:
+                chunk_count = self.process_single_file(file, output_dir) # 단일 파일 처리
+                total_chunks += chunk_count # 청크 개수 추가
+
+            return total_chunks
+        else:
+            # 단일 파일로 저장 (기존 방식)
+            all_chunk_objects = []
+            current_id = 1
             
-            # 메타데이터 추출
-            metadata = self.extract_metadata_from_filename(md_file.name)
+            for file in files:
+                print(f"처리 중: {file.name}")
+                
+                # 메타데이터 추출
+                metadata = self.extract_metadata_from_filename(file.name)
+                
+                # 파일을 의미 단위로 청크 분할
+                chunks = self.process_file(file, metadata)
+                
+                # 청크 객체 생성
+                base_id = f"rogers_{current_id:03d}"
+                chunk_objects = self.create_chunk_objects(chunks, metadata, base_id)
+                all_chunk_objects.extend(chunk_objects)
+                
+                current_id += len(chunk_objects)
+                
+                # 각 청크의 토큰 수 출력
+                for i, chunk in enumerate(chunks, start=1):
+                    token_count = self.count_tokens(chunk)
             
-            # 파일을 의미 단위로 청크 분할
-            chunks = self.process_file(md_file, metadata)
+            # JSON 파일로 저장
+            output_filename = "chunks_combined.json"
+            output_path = output_dir / output_filename
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(all_chunk_objects, f, ensure_ascii=False, indent=2)
             
-            # 청크 객체 생성
-            chunk_objects = self.create_chunk_objects(chunks, metadata, current_id)
-            all_chunk_objects.extend(chunk_objects)
+            # 통계 출력
+            self.print_statistics(all_chunk_objects)
             
-            current_id += len(chunk_objects)
-            
-            # 각 청크의 토큰 수 출력
-            for i, chunk in enumerate(chunks, start=1):
-                token_count = self.count_tokens(chunk)
-                print(f"  청크 {i}: {token_count} tokens")
-            
-            print(f"  -> 총 {len(chunk_objects)}개 청크 생성\n")
-        
-        # JSON 파일로 저장
-        output_path = output_dir / output_filename
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(all_chunk_objects, f, ensure_ascii=False, indent=2)
-        
-        print(f"{'='*50}")
-        print(f"완료! 총 {len(all_chunk_objects)}개 청크 생성")
-        print(f"저장 위치: {output_path}")
-        print(f"{'='*50}")
-        
-        # 통계 출력
-        self.print_statistics(all_chunk_objects)
-        
-        return all_chunk_objects
+            return all_chunk_objects
     
+    # 청크 생성 통계 
     def print_statistics(self, chunk_objects: List[Dict[str, Any]]):
         """청크 생성 통계 출력"""
         print("\n[청크 생성 통계]")
@@ -314,7 +509,71 @@ class ChunkCreator:
         print(f"    - 최소: {min_tokens} tokens")
 
 
+# ==================== Adler 관련 main 함수 ====================
+
 def main():
+    """
+    Adler PDF 파일 처리
+    5개 카테고리 디렉토리의 모든 PDF 파일을 개별 JSON으로 저장
+    """
+    # 경로 설정
+    base_dir = Path(__file__).parent.parent.parent
+    adler_base_dir = base_dir / "dataset" / "adler"
+    output_dir = adler_base_dir / "chunkfiles"
+    
+    # 청크 생성기 초기화
+    creator = ChunkCreator(max_tokens=500, overlap_ratio=0.1)
+    
+    # 5개 카테고리 디렉토리
+    categories = ["case", "theory", "interventions", "qna", "tone"]
+    
+    print("="*60)
+    print("Adler PDF 청크 파일 생성 시작")
+    print("="*60)
+    print()
+    
+    total_files = 0
+    total_chunks = 0
+    
+    for category in categories:
+        input_dir = adler_base_dir / category
+        
+        if not input_dir.exists():
+            print(f"{category} 디렉토리가 존재하지 않습니다: {input_dir}")
+            continue
+        
+        print(f"\n{'='*60}")
+        print(f"[{category.upper()}] 카테고리 처리 중...")
+        print(f"{'='*60}\n")
+        
+        # PDF 파일 처리 (개별 저장)
+        chunk_count = creator.process_directory(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            file_pattern="*.pdf",
+            save_individually=True
+        )
+        
+        # 파일 개수 세기
+        pdf_files = list(input_dir.glob("*.pdf"))
+        total_files += len(pdf_files)
+        total_chunks += chunk_count if isinstance(chunk_count, int) else 0
+    
+    print("\n" + "="*60)
+    print("전체 작업 완료!")
+    print("="*60)
+    print(f"총 처리 파일: {total_files}개")
+    print(f"총 생성 청크: {total_chunks}개")
+    print(f"저장 위치: {output_dir}")
+    print("="*60)
+
+
+# ==================== Rogers 관련 main 함수 ====================
+
+def main_rogers():
+    """
+    Rogers 마크다운 파일 처리 (기존 방식)
+    """
     # 경로 설정
     base_dir = Path(__file__).parent.parent.parent
     input_dir = base_dir / "dataset" / "rogers" / "original"
@@ -323,10 +582,18 @@ def main():
     # 청크 생성기 초기화
     creator = ChunkCreator(max_tokens=500, overlap_ratio=0.1)
     
-    # 처리 실행
-    creator.process_directory(input_dir, output_dir, "rogers_chunks_phrasing.json")
+    # 처리 실행 (단일 파일로 저장)
+    creator.process_directory(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        file_pattern="*.md",
+        save_individually=False
+    )
 
 
+# main을 실행하면 새로 만든거 
+# main_rogers을 실행하면 기존 방식
 if __name__ == "__main__":
-    main()
+    main()  # Adler PDF 처리
+    # main_rogers()  # Rogers 마크다운 처리
 
