@@ -450,7 +450,7 @@ class VectorStore:
                     metadatas.append({})
                 
                 # Internal cosine similarity 직접 계산
-                if embeddings_list and i < len(embeddings_list):
+                if embeddings_list is not None and i < len(embeddings_list):
                     doc_embedding = embeddings_list[i]
                     similarity = self.calculate_cosine_similarity(query_embedding, doc_embedding)
                     similarities.append(similarity)
