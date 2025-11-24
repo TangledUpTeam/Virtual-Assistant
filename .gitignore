@@ -118,3 +118,7 @@ Desktop.ini
 *.bak
 *.swp
 *.swo
+
+# Adler chunk files & embeddings ignore
+backend/councle/adler/chunkfiles/
+backend/councle/adler/embeddings/
