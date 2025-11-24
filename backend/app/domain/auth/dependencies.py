@@ -48,8 +48,12 @@ def get_current_user(
     token = None
     if credentials:
         token = credentials.credentials
+        print(f"🔑 Auth Debug: Authorization Header found")
     elif access_token:
         token = access_token
+        print(f"🍪 Auth Debug: Cookie access_token found: {access_token[:10]}...")
+    else:
+        print(f"❌ Auth Debug: No token found in Header or Cookie")
     
     if not token:
         raise HTTPException(
@@ -93,5 +97,5 @@ def get_current_user_optional(
         return get_current_user(request, credentials, access_token, db)
     except Exception as e:
         # 모든 예외를 잡아서 None 반환 (게스트 모드)
-        print(f"ℹ️  사용자 인증 실패 (게스트 모드): {type(e).__name__}")
+        print(f"ℹ️  사용자 인증 실패 (게스트 모드): {type(e).__name__} - {str(e)}")
         return None
