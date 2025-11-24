@@ -120,5 +120,6 @@ Desktop.ini
 *.swo
 
 # Adler chunk files & embeddings ignore
-backend/councle/adler/chunkfiles/
-backend/councle/adler/embeddings/
+backend/councel/adler/chunkfiles/
+backend/councel/adler/embeddings/
+backend/councel/vector_db/
