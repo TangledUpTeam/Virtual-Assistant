@@ -10,10 +10,10 @@ from pathlib import Path
 # 프로젝트 루트를 Python 경로에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from app.domain.rag.vector_store import VectorStore
-from app.domain.rag.retriever import RAGRetriever
-from app.domain.rag.config import rag_config
-from app.domain.rag.utils import get_logger
+from .vector_store import VectorStore
+from .retriever import RAGRetriever
+from .config import rag_config
+from .utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -34,7 +34,7 @@ def check_vector_store():
         if doc_count == 0:
             print("⚠ 경고: 저장된 문서가 없습니다!")
             print("   먼저 파일을 업로드하세요:")
-            print("   python -m app.domain.rag.cli upload <파일경로>")
+            print("   python -m app.domain.rag.HR.cli upload <파일경로>")
             return False
         
         # 테스트 검색
@@ -79,7 +79,7 @@ def check_rag_query():
             print(f"\n질문: {query}")
             print("-" * 60)
             
-            from app.domain.rag.schemas import QueryRequest
+            from .schemas import QueryRequest
             request = QueryRequest(query=query)
             response = retriever.query(request)
             

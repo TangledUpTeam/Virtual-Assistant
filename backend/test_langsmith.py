@@ -2,8 +2,8 @@
 LangSmith 추적 테스트 스크립트
 """
 
-from app.domain.rag.retriever import RAGRetriever
-from app.domain.rag.schemas import QueryRequest
+from app.domain.rag.HR.retriever import RAGRetriever
+from app.domain.rag.HR.schemas import QueryRequest
 
 def test_langsmith():
     print("=" * 80)
