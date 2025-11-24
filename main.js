@@ -114,7 +114,11 @@ function createCharacterWindow() {
 
   console.log('📦 캐릭터 로딩 중...');
 
-  // 단축키 (F12: 개발자 도구)
+  // 🔥 개발자 도구 자동 열기 (detach 모드)
+  characterWin.webContents.openDevTools({ mode: 'detach' });
+  console.log('🛠️ 개발자 도구 열림 (detach 모드)');
+
+  // 단축키 (F12, Ctrl+Shift+I: 개발자 도구 토글)
   characterWin.webContents.on('before-input-event', (event, input) => {
     // F12로 개발자 도구 (별도 창으로 열기)
     if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
@@ -128,8 +132,6 @@ function createCharacterWindow() {
 
   characterWin.webContents.on('did-finish-load', () => {
     console.log('✅ 캐릭터 로드 완료!');
-    // 개발자 도구는 F12로 수동으로 열 수 있음
-    // characterWin.webContents.openDevTools();
     
     // 페이지 로드 완료 후 마우스 이벤트 활성화
     // (렌더러에서 동적으로 클릭-스루 영역 제어)
@@ -166,6 +168,25 @@ ipcMain.on('va:set-ignore-mouse', (_e, ignore) => {
       // 마우스 이벤트 상태 변경: ignore
     } catch (error) {
       console.error('❌ setIgnoreMouseEvents 오류:', error);
+    }
+  }
+});
+
+// 보고서 패널 열릴 때 alwaysOnTop 제어
+ipcMain.on('va:report-panel-toggle', (_e, isOpen) => {
+  if (characterWin && !characterWin.isDestroyed()) {
+    try {
+      if (isOpen) {
+        // 보고서 패널 열릴 때: alwaysOnTop 끄기
+        characterWin.setAlwaysOnTop(false);
+        console.log('📝 보고서 패널 열림 → alwaysOnTop: false');
+      } else {
+        // 보고서 패널 닫힐 때: alwaysOnTop 켜기
+        characterWin.setAlwaysOnTop(true);
+        console.log('📝 보고서 패널 닫힘 → alwaysOnTop: true');
+      }
+    } catch (error) {
+      console.error('❌ setAlwaysOnTop 오류:', error);
     }
   }
 });
