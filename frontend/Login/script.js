@@ -1,24 +1,31 @@
 // API Base URL
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 
-// 세션 스토리지 키 (앱 종료 시 자동 삭제)
-const STORAGE_KEYS = {
-    ACCESS_TOKEN: 'access_token',
-    REFRESH_TOKEN: 'refresh_token',
-    USER: 'user'
-};
+/**
+ * 쿠키에서 값 가져오기
+ */
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        return decodeURIComponent(parts.pop().split(';').shift());
+    }
+    return null;
+}
 
-// localStorage 대신 sessionStorage 사용
-const storage = sessionStorage;
+/**
+ * 쿠키 삭제
+ */
+function deleteCookie(name) {
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+}
 
 /**
  * Google 로그인
  */
 async function loginWithGoogle() {
     try {
-        // 기존 로그인 정보 삭제 (강제 로그아웃)
-        logout(false);
-        
+        console.log('🔵 Google 로그인 시작');
         showLoading('google-btn');
         
         // 백엔드에서 Google OAuth URL 가져오기
@@ -26,6 +33,7 @@ async function loginWithGoogle() {
         const data = await response.json();
         
         if (data.authorization_url) {
+            console.log('🔵 Google OAuth URL로 이동:', data.authorization_url);
             // 현재 창에서 리다이렉트 (Electron & 브라우저 공통)
             window.location.href = data.authorization_url;
         } else {
@@ -43,15 +51,14 @@ async function loginWithGoogle() {
  */
 async function loginWithKakao() {
     try {
-        // 기존 로그인 정보 삭제 (강제 로그아웃)
-        logout(false);
-        
+        console.log('🟡 Kakao 로그인 시작');
         showLoading('kakao-btn');
         
         const response = await fetch(`${API_BASE_URL}/auth/kakao/login`);
         const data = await response.json();
         
         if (data.authorization_url) {
+            console.log('🟡 Kakao OAuth URL로 이동:', data.authorization_url);
             // 현재 창에서 리다이렉트
             window.location.href = data.authorization_url;
         } else {
@@ -69,15 +76,14 @@ async function loginWithKakao() {
  */
 async function loginWithNaver() {
     try {
-        // 기존 로그인 정보 삭제 (강제 로그아웃)
-        logout(false);
-        
+        console.log('🟢 Naver 로그인 시작');
         showLoading('naver-btn');
         
         const response = await fetch(`${API_BASE_URL}/auth/naver/login`);
         const data = await response.json();
         
         if (data.authorization_url) {
+            console.log('🟢 Naver OAuth URL로 이동:', data.authorization_url);
             // 현재 창에서 리다이렉트
             window.location.href = data.authorization_url;
         } else {
@@ -119,19 +125,24 @@ async function handleOAuthCallback() {
 
 
 /**
- * 로그인 여부 확인
+ * 로그인 여부 확인 (쿠키에서)
+ * 
+ * 참고: access_token은 HttpOnly 쿠키라서 JavaScript에서 읽을 수 없음
+ * 대신 logged_in 플래그 쿠키를 확인
  */
 function isLoggedIn() {
-    return !!storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    const loggedIn = getCookie('logged_in');
+    return loggedIn === 'true';
 }
 
 /**
- * 로그아웃
+ * 로그아웃 (쿠키 삭제)
  */
 function logout(redirect = true) {
-    storage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-    storage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-    storage.removeItem(STORAGE_KEYS.USER);
+    deleteCookie('access_token');
+    deleteCookie('refresh_token');
+    deleteCookie('user');
+    deleteCookie('logged_in');
     
     if (redirect) {
         window.location.href = '/';
@@ -164,6 +175,9 @@ function hideLoading(buttonClass) {
  * 페이지 로드 시 실행
  */
 window.addEventListener('DOMContentLoaded', () => {
+    console.log('📄 Login 페이지 로드');
+    console.log('🍪 현재 쿠키:', document.cookie);
+    
     // OAuth 에러 처리
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('error')) {
@@ -172,9 +186,15 @@ window.addEventListener('DOMContentLoaded', () => {
     
     // 이미 로그인 되어있으면 시작 페이지로 리다이렉트
     // (단, 명시적으로 로그인 페이지를 요청한 경우는 제외)
+    const loggedIn = getCookie('logged_in');
+    console.log('✅ logged_in 쿠키:', loggedIn);
+    console.log('ℹ️  참고: access_token은 HttpOnly 쿠키라서 JavaScript에서 읽을 수 없습니다.');
+    
     if (isLoggedIn() && !urlParams.has('logout')) {
         console.log('✅ 이미 로그인됨 - /start로 이동');
         window.location.href = '/start';
         return;
     }
+    
+    console.log('🔐 로그인 필요');
 });

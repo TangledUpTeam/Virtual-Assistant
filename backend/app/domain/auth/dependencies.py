@@ -1,20 +1,27 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request, Cookie
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.infrastructure.database import get_db
 from app.domain.user.models import User
 
-# Bearer Token 스킴
-security = HTTPBearer()
+# Bearer Token 스킴 (Optional로 변경)
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    access_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ) -> User:
     """
     현재 인증된 사용자 가져오기
+    
+    토큰을 다음 순서로 확인:
+    1. Authorization 헤더 (Bearer Token)
+    2. 쿠키 (access_token)
     
     FastAPI 엔드포인트에서 사용:
     @app.get("/me")
@@ -22,7 +29,9 @@ def get_current_user(
         return current_user
     
     Args:
-        credentials: Bearer Token
+        request: FastAPI Request 객체
+        credentials: Bearer Token (Optional)
+        access_token: 쿠키의 access_token (Optional)
         db: 데이터베이스 세션
     
     Returns:
@@ -35,7 +44,19 @@ def get_current_user(
     from app.domain.auth.service import AuthService
     from app.domain.user.service import UserService
     
-    token = credentials.credentials
+    # 토큰 추출 (Authorization 헤더 우선, 없으면 쿠키)
+    token = None
+    if credentials:
+        token = credentials.credentials
+    elif access_token:
+        token = access_token
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     # 토큰에서 사용자 ID 추출
     auth_service = AuthService(db)
@@ -55,7 +76,9 @@ def get_current_user(
 
 
 def get_current_user_optional(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    access_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ) -> User | None:
     """
@@ -67,6 +90,8 @@ def get_current_user_optional(
         User 객체 또는 None
     """
     try:
-        return get_current_user(credentials, db)
-    except HTTPException:
+        return get_current_user(request, credentials, access_token, db)
+    except Exception as e:
+        # 모든 예외를 잡아서 None 반환 (게스트 모드)
+        print(f"ℹ️  사용자 인증 실패 (게스트 모드): {type(e).__name__}")
         return None
