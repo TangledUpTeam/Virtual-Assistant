@@ -1,0 +1,25 @@
+# Tool Layer Dependencies
+# Google Drive, Gmail, Slack, Notion API 통합을 위한 의존성 (공식 SDK 사용)
+
+# ========================================
+# 기존 프로젝트와 공유 (이미 설치되어 있음)
+# ========================================
+# fastapi==0.115.0 (기존)
+# pydantic==2.12.4 (기존)
+# httpx==0.28.1 (기존)
+
+# ========================================
+# Tools 전용 추가 패키지
+# ========================================
+
+# Google API 공식 SDK
+google-api-python-client==2.147.0
+google-auth==2.37.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+
+# Slack 공식 SDK
+slack-sdk==3.33.4
+
+# Notion 공식 SDK
+notion-client==2.2.1

@@ -8,6 +8,18 @@ import { isHRQuestion, queryHRDocument } from './hrService.js';
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const SESSION_KEY = 'chatbot_session_id';
 
+// JWT 토큰 저장
+let accessToken = null;
+
+/**
+ * 챗봇 서비스 초기화 (토큰 설정)
+ * @param {string} token - JWT 액세스 토큰
+ */
+export function initChatbotService(token) {
+  accessToken = token;
+  console.log('✅ 챗봇 서비스 - 액세스 토큰 설정 완료');
+}
+
 /**
  * 세션 ID 가져오기 (없으면 새로 생성)
  * @returns {Promise<string>} session_id
@@ -17,11 +29,19 @@ export async function getOrCreateSession() {
   
   if (!sessionId) {
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      // 토큰이 있으면 Authorization 헤더 추가
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/chatbot/session`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
+        headers: headers,
+        credentials: 'include'  // 쿠키 자동 전송
       });
       
       if (!response.ok) {
@@ -67,11 +87,19 @@ export async function sendChatMessage(userMessage) {
     console.log('📨 챗봇 메시지 전송:', userMessage);
     console.log('🔍 세션 ID:', sessionId);
     
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    // 토큰이 있으면 Authorization 헤더 추가
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
     const response = await fetch(`${API_BASE_URL}/chatbot/message`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
+      credentials: 'include',  // 쿠키 자동 전송
       body: JSON.stringify({
         session_id: sessionId,
         message: userMessage
@@ -89,11 +117,18 @@ export async function sendChatMessage(userMessage) {
       sessionId = await getOrCreateSession();
       
       // 재시도
+      const retryHeaders = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (accessToken) {
+        retryHeaders['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
       const retryResponse = await fetch(`${API_BASE_URL}/chatbot/message`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: retryHeaders,
+        credentials: 'include',  // 쿠키 자동 전송
         body: JSON.stringify({
           session_id: sessionId,
           message: userMessage
@@ -135,7 +170,8 @@ export async function getChatHistory() {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      credentials: 'include'  // 쿠키 자동 전송
     });
     
     if (!response.ok) {
@@ -160,6 +196,7 @@ export async function deleteChatSession() {
     
     await fetch(`${API_BASE_URL}/chatbot/session/${sessionId}`, {
       method: 'DELETE',
+      credentials: 'include'  // 쿠키 자동 전송
     });
     
     localStorage.removeItem(SESSION_KEY);

@@ -28,16 +28,18 @@ class GoogleOAuthClient:
         client = AsyncOAuth2Client(
             client_id=self.client_id,
             redirect_uri=self.redirect_uri,
-            scope="openid email profile"
+            scope="openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly"
         )
         
-        # prompt를 설정하지 않으면:
-        # - 이미 Google에 로그인되어 있고 앱을 허용한 적 있으면 → 자동 로그인 ✨
-        # - 처음이거나 로그인 안 되어있으면 → 로그인 화면 표시
+        # access_type='offline'로 Refresh Token 받기
+        # prompt='select_account'로 계정 선택 화면만 표시 (권한은 첫 로그인 시에만)
+        import secrets
         url, _ = client.create_authorization_url(
             self.AUTHORIZE_URL,
-            state=state,
-            access_type="offline"  # Refresh Token 받기
+            state=state or secrets.token_urlsafe(16),
+            access_type="offline",  # Refresh Token 받기
+            prompt="select_account",  # 계정 선택 화면만 표시
+            include_granted_scopes="true"  # 기존 권한 포함
         )
         
         return url
