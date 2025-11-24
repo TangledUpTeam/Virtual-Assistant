@@ -220,10 +220,11 @@ class ChatService:
                     try:
                         tool_func = self.tool_map[function_name]
                         
-                        # Gmail, Slack, Notion 도구는 user_id가 필요함
+                        # 모든 도구는 user_id가 필요함
                         if function_name in ["send_email", "list_messages", "get_message", 
                                             "send_dm", "send_channel_message", 
-                                            "create_page", "add_database_item"]:
+                                            "create_page", "add_database_item",
+                                            "create_folder", "upload_file", "search_files", "download_file"]:
                             # user_id를 문자열로 변환하여 전달
                             if user_id:
                                 function_args["user_id"] = str(user_id)
