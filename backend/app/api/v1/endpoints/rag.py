@@ -8,14 +8,14 @@ RAG API 엔드포인트
 from fastapi import APIRouter, HTTPException
 import threading
 
-from app.domain.rag.config import rag_config
-from app.domain.rag.vector_store import VectorStore
-from app.domain.rag.retriever import RAGRetriever
-from app.domain.rag.schemas import (
+from app.domain.rag.HR.config import rag_config
+from app.domain.rag.HR.vector_store import VectorStore
+from app.domain.rag.HR.retriever import RAGRetriever
+from app.domain.rag.HR.schemas import (
     QueryRequest,
     QueryResponse
 )
-from app.domain.rag.utils import get_logger
+from app.domain.rag.HR.utils import get_logger
 
 logger = get_logger(__name__)
 
