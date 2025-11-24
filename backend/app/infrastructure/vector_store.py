@@ -1,20 +1,20 @@
 """
 Unified Vector Store 클라이언트
 
-Chroma Cloud에서 unified_documents 컬렉션을 관리합니다.
+로컬 ChromaDB에서 unified_documents 컬렉션을 관리합니다.
 
 Author: AI Assistant
 Created: 2025-11-18
+Updated: 2025-11-19 (로컬 ChromaDB로 전환)
 """
 import chromadb
 from chromadb import Collection
+from chromadb.config import Settings
 from typing import Optional
+from pathlib import Path
 
-
-# Chroma Cloud 설정 (고정값)
-CHROMA_API_KEY = "ck-BcnEUpVpQa3x18paPEMqLSobcLHFSaga1kekufxB24tn"
-CHROMA_TENANT = "87acc175-c5c2-44df-97ff-c0b914e35994"
-CHROMA_DATABASE = "Virtual_Assistant"
+# 로컬 ChromaDB 경로
+CHROMA_PERSIST_DIR = Path("backend/Data/chroma")
 
 # 통합 컬렉션 이름
 UNIFIED_COLLECTION_NAME = "unified_documents"
@@ -24,11 +24,14 @@ class UnifiedVectorStore:
     """Unified Documents Vector Store 클라이언트"""
     
     def __init__(self):
-        """Chroma Cloud 클라이언트 초기화"""
-        self.client = chromadb.CloudClient(
-            api_key=CHROMA_API_KEY,
-            tenant=CHROMA_TENANT,
-            database=CHROMA_DATABASE
+        """로컬 ChromaDB 클라이언트 초기화"""
+        # 디렉토리 생성
+        CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # 로컬 ChromaDB 클라이언트 초기화
+        self.client = chromadb.PersistentClient(
+            path=str(CHROMA_PERSIST_DIR),
+            settings=Settings(anonymized_telemetry=False)
         )
         self._collection: Optional[Collection] = None
     

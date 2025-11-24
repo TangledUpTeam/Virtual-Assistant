@@ -1,0 +1,9 @@
+# 정확한 버전으로 고정된 requirements (pip freeze 기반)
+# 설치 명령: pip install -r requirements-freeze.txt
+# 
+# 이 파일은 개발 환경과 정확히 동일한 버전을 설치하기 위해 사용됩니다.
+# 업데이트하려면: pip freeze > requirements-freeze.txt
+
+# 주의: 이 파일은 자동 생성되므로 직접 수정하지 마세요.
+# 새 패키지를 추가하려면 requirements.txt를 수정하세요.
+

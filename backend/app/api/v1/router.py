@@ -4,6 +4,11 @@ from app.api.v1.endpoints.users import router as users_router
 from app.api.v1.endpoints.reports import router as reports_router
 from app.api.v1.endpoints.plan import router as plan_router
 from app.api.v1.endpoints.daily import router as daily_router
+from app.api.v1.endpoints.daily_report import router as daily_report_router
+from app.api.v1.endpoints.weekly_report import router as weekly_report_router
+from app.api.v1.endpoints.monthly_report import router as monthly_report_router
+from app.api.v1.endpoints.performance_report import router as performance_report_router
+from app.api.v1.endpoints.pdf_export import router as pdf_export_router
 from app.api.v1.endpoints.rag import router as rag_router
 from app.api.v1.endpoints.brainstorming import router as brainstorming_router
 from app.api.v1.endpoints.chatbot import router as chatbot_router
@@ -41,6 +46,36 @@ api_router.include_router(
 api_router.include_router(
     daily_router,
     tags=["Daily"]
+)
+
+# Daily Report (운영 DB) 엔드포인트
+api_router.include_router(
+    daily_report_router,
+    tags=["Daily Report"]
+)
+
+# Weekly Report (주간 보고서) 엔드포인트
+api_router.include_router(
+    weekly_report_router,
+    tags=["Weekly Report"]
+)
+
+# Monthly Report (월간 보고서) 엔드포인트
+api_router.include_router(
+    monthly_report_router,
+    tags=["Monthly Report"]
+)
+
+# Performance Report (실적 보고서) 엔드포인트
+api_router.include_router(
+    performance_report_router,
+    tags=["Performance Report"]
+)
+
+# PDF Export (PDF 다운로드) 엔드포인트
+api_router.include_router(
+    pdf_export_router,
+    tags=["PDF Export"]
 )
 
 # RAG 엔드포인트

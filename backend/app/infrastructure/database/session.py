@@ -5,7 +5,7 @@ from app.core.config import settings
 # SQLAlchemy 엔진 생성
 engine = create_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,  # SQL 쿼리 로깅
+    echo=False,           # 🔥 SQL 쿼리 로깅 비활성화 (너무 번잡함)
     pool_pre_ping=True,   # 연결 유효성 체크
     pool_size=10,         # 커넥션 풀 크기
     max_overflow=20       # 최대 추가 연결 수
