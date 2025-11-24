@@ -7,12 +7,14 @@ Chatbot API Endpoints
 - 대화 히스토리 조회
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 from app.domain.chatbot.service import ChatService
+from app.domain.auth.dependencies import get_current_user, get_current_user_optional
+from app.domain.user.models import User
 
 router = APIRouter()
 
@@ -49,15 +51,28 @@ class HistoryResponse(BaseModel):
 
 
 @router.post("/session", response_model=SessionResponse)
-async def create_session():
+async def create_session(
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
     """
     새로운 채팅 세션 생성
+    
+    Args:
+        current_user: 현재 로그인한 사용자 (선택, 쿠키에서 자동 추출)
     
     Returns:
         SessionResponse: 생성된 세션 ID
     """
     try:
-        session_id = chat_service.create_session()
+        # 로그인한 사용자면 user_id 사용, 아니면 None (게스트)
+        user_id = current_user.id if current_user else None
+        
+        if user_id:
+            print(f"✅ 세션 생성 - 로그인 사용자: {current_user.email} (ID: {user_id})")
+        else:
+            print(f"✅ 세션 생성 - 게스트 사용자")
+        
+        session_id = chat_service.create_session(user_id=user_id)
         return SessionResponse(
             session_id=session_id,
             message="세션이 생성되었습니다."
@@ -67,12 +82,16 @@ async def create_session():
 
 
 @router.post("/message", response_model=MessageResponse)
-async def send_message(request: MessageRequest):
+async def send_message(
+    request: MessageRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
     """
     메시지 전송 및 AI 응답 받기
     
     Args:
         request: 세션 ID와 사용자 메시지
+        current_user: 현재 로그인한 사용자 (선택, 쿠키에서 자동 추출)
         
     Returns:
         MessageResponse: 사용자 메시지와 AI 응답
@@ -82,10 +101,19 @@ async def send_message(request: MessageRequest):
         if not chat_service.session_manager.session_exists(request.session_id):
             raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
         
-        # AI 응답 생성
-        assistant_message = chat_service.process_message(
+        # 로그인한 사용자면 user_id 사용, 아니면 None (게스트)
+        user_id = current_user.id if current_user else None
+        
+        if user_id:
+            print(f"💬 메시지 전송 - 로그인 사용자: {current_user.email} (ID: {user_id})")
+        else:
+            print(f"💬 메시지 전송 - 게스트 사용자")
+        
+        # AI 응답 생성 (user_id 전달)
+        assistant_message = await chat_service.process_message(
             session_id=request.session_id,
-            user_message=request.message
+            user_message=request.message,
+            user_id=user_id
         )
         
         return MessageResponse(

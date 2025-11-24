@@ -27,9 +27,10 @@ except ImportError:
 class SessionData:
     """세션 데이터 (대화 히스토리)"""
     
-    def __init__(self, max_history: int = 15):
+    def __init__(self, max_history: int = 15, user_id: int = None):
         self.messages = deque(maxlen=max_history)
         self.message_count = 0
+        self.user_id = user_id
 
 
 class SessionManager(BaseSessionManager[SessionData]):
@@ -67,9 +68,12 @@ class SessionManager(BaseSessionManager[SessionData]):
             self.max_history = max_history
             self._initialized = True
     
-    def create_session(self) -> str:
+    def create_session(self, user_id: int = None) -> str:
         """
         새로운 채팅 세션 생성
+        
+        Args:
+            user_id: 사용자 ID (선택)
         
         Returns:
             str: 생성된 세션 ID (UUID)
@@ -79,7 +83,7 @@ class SessionManager(BaseSessionManager[SessionData]):
         # Atomic get-or-create
         self._safe_get_or_create(
             session_id,
-            lambda: SessionData(self.max_history)
+            lambda: SessionData(self.max_history, user_id)
         )
         
         return session_id
@@ -151,7 +155,7 @@ class SessionManager(BaseSessionManager[SessionData]):
             session_id: 세션 ID
             
         Returns:
-            dict: 세션 정보 (생성 시간, 마지막 활동, 메시지 수)
+            dict: 세션 정보 (생성 시간, 마지막 활동, 메시지 수, user_id)
         """
         # BaseSessionManager의 메타데이터 조회
         base_metadata = self._get_metadata(session_id)
@@ -170,7 +174,8 @@ class SessionManager(BaseSessionManager[SessionData]):
             "created_at": base_metadata.get("created_at"),
             "last_activity": base_metadata.get("last_access"),
             "message_count": session_data.message_count,
-            "current_message_count": len(session_data.messages)
+            "current_message_count": len(session_data.messages),
+            "user_id": session_data.user_id
         }
     
     def delete_session(self, session_id: str):
