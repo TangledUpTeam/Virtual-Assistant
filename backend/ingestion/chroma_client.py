@@ -1,36 +1,37 @@
 """
-Chroma Cloud 클라이언트 설정
+로컬 ChromaDB 클라이언트 설정
 
-고정된 API 키와 tenant/database 사용
+backend/Data/chroma/ 경로에 로컬 데이터 저장
 """
 import chromadb
 from chromadb import Collection
+from pathlib import Path
 
 
-# Chroma Cloud 설정 (고정값)
-CHROMA_API_KEY = "ck-BcnEUpVpQa3x18paPEMqLSobcLHFSaga1kekufxB24tn"
-CHROMA_TENANT = "87acc175-c5c2-44df-97ff-c0b914e35994"
-CHROMA_DATABASE = "Virtual_Assistant"
+# 로컬 ChromaDB 경로
+CHROMA_PERSIST_DIR = Path(__file__).resolve().parent.parent / "Data" / "chroma"
 
 # 컬렉션 이름
 COLLECTION_REPORTS = "reports"
 COLLECTION_KPI = "kpi"
 
 
-class ChromaCloudService:
-    """Chroma Cloud 서비스"""
+class ChromaLocalService:
+    """로컬 ChromaDB 서비스"""
     
     def __init__(self):
-        """Chroma Cloud 클라이언트 초기화"""
-        print("🔗 Chroma Cloud 연결 중...")
+        """로컬 ChromaDB 클라이언트 초기화"""
+        print(f"🔗 로컬 ChromaDB 연결 중... ({CHROMA_PERSIST_DIR})")
         
-        self.client = chromadb.CloudClient(
-            api_key=CHROMA_API_KEY,
-            tenant=CHROMA_TENANT,
-            database=CHROMA_DATABASE
+        # 디렉토리 생성
+        CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # 로컬 PersistentClient 사용
+        self.client = chromadb.PersistentClient(
+            path=str(CHROMA_PERSIST_DIR)
         )
         
-        print("✅ Chroma Cloud 연결 성공")
+        print("✅ 로컬 ChromaDB 연결 성공")
     
     def get_or_create_collection(self, name: str) -> Collection:
         """
@@ -123,16 +124,16 @@ class ChromaCloudService:
 _chroma_service = None
 
 
-def get_chroma_service() -> ChromaCloudService:
+def get_chroma_service() -> ChromaLocalService:
     """
-    Chroma Cloud 서비스 싱글톤 인스턴스 반환
+    로컬 ChromaDB 서비스 싱글톤 인스턴스 반환
     
     Returns:
-        ChromaCloudService 인스턴스
+        ChromaLocalService 인스턴스
     """
     global _chroma_service
     if _chroma_service is None:
-        _chroma_service = ChromaCloudService()
+        _chroma_service = ChromaLocalService()
     return _chroma_service
 
 

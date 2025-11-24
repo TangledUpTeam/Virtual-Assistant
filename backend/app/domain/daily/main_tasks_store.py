@@ -35,7 +35,8 @@ class MainTasksStore:
         self,
         owner: str,
         target_date: date,
-        main_tasks: List[Dict[str, Any]]
+        main_tasks: List[Dict[str, Any]],
+        append: bool = False  # 🔥 append 모드 추가
     ) -> None:
         """
         금일 진행 업무 저장
@@ -44,15 +45,30 @@ class MainTasksStore:
             owner: 작성자
             target_date: 대상 날짜
             main_tasks: 선택된 업무 리스트
+            append: True면 기존 업무에 추가, False면 덮어쓰기
         """
         key = self._make_key(owner, target_date)
-        data = MainTasksData(
-            owner=owner,
-            target_date=target_date,
-            main_tasks=main_tasks
-        )
-        self._store[key] = data
-        print(f"[MainTasksStore] 저장 완료: {key}, {len(main_tasks)}개 업무")
+        
+        if append and key in self._store:
+            # 🔥 기존 업무에 추가
+            existing_tasks = self._store[key].main_tasks
+            combined_tasks = existing_tasks + main_tasks
+            data = MainTasksData(
+                owner=owner,
+                target_date=target_date,
+                main_tasks=combined_tasks
+            )
+            self._store[key] = data
+            print(f"[MainTasksStore] 추가 완료: {key}, {len(main_tasks)}개 추가 (총 {len(combined_tasks)}개)")
+        else:
+            # 기존 방식: 덮어쓰기
+            data = MainTasksData(
+                owner=owner,
+                target_date=target_date,
+                main_tasks=main_tasks
+            )
+            self._store[key] = data
+            print(f"[MainTasksStore] 저장 완료: {key}, {len(main_tasks)}개 업무")
     
     def get(
         self,

@@ -54,7 +54,8 @@ class UnifiedRetriever:
         single_date: Optional[str] = None,
         period_start: Optional[str] = None,
         period_end: Optional[str] = None,
-        n_results: int = 5
+        n_results: int = 5,
+        chunk_types: Optional[List[str]] = None
     ) -> List[UnifiedSearchResult]:
         """
         일일/주간/월간 보고서 검색
@@ -66,6 +67,7 @@ class UnifiedRetriever:
             period_start: 시작 날짜
             period_end: 종료 날짜
             n_results: 결과 개수
+            chunk_types: 청크 타입 필터 (예: ["task", "plan"])
             
         Returns:
             검색 결과 리스트
@@ -77,6 +79,12 @@ class UnifiedRetriever:
         conditions.append({
             "doc_type": {"$in": ["daily", "weekly", "monthly", "performance"]}
         })
+        
+        # chunk_type 필터 (task 타입만 가져오기)
+        if chunk_types:
+            conditions.append({
+                "chunk_type": {"$in": chunk_types}
+            })
         
         # owner 필터
         if owner:

@@ -19,6 +19,10 @@ class DailyState(str, Enum):
     RECEIVE_ANSWER = "receive_answer"
     PARSE_TASK = "parse_task"
     NEXT_TIME_RANGE = "next_time_range"
+    ASK_ISSUES = "ask_issues"
+    RECEIVE_ISSUES = "receive_issues"
+    ASK_PLANS = "ask_plans"
+    RECEIVE_PLANS = "receive_plans"
     FINISHED = "finished"
 
 
@@ -44,6 +48,18 @@ class DailyFSMContext(BaseModel):
     time_tasks: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="시간대별 세부업무 (FSM이 생성)"
+    )
+    
+    # FSM이 수집하는 이슈사항
+    issues: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="이슈 사항 (FSM이 생성)"
+    )
+    
+    # FSM이 수집하는 익일 업무 계획
+    plans: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="익일 업무 계획 (FSM이 생성)"
     )
     
     # 상태 관리

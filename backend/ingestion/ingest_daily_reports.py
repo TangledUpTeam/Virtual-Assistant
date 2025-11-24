@@ -47,7 +47,7 @@ from ingestion.chroma_client import get_chroma_service
 # 설정
 # ========================================
 DATA_DIR = project_root / "Data" / "mock_reports"
-COLLECTION_NAME = "daily_reports"
+COLLECTION_NAME = "unified_documents"  # ✅ vector_store.py와 동일하게 설정
 BATCH_SIZE = 100
 
 
@@ -312,12 +312,19 @@ def ingest_daily_reports_pipeline(api_key: str = None, dry_run: bool = False):
                         chunk["chunk_text"] = chunk.pop("text")
                         
                         # 추가 메타데이터
-                        chunk["metadata"]["date"] = date_str
-                        chunk["metadata"]["month"] = month_str
+                        chunk["metadata"]["doc_type"] = "daily"  # ✅ 검색 필터용
+                        chunk["metadata"]["date"] = date_str if date_str else "unknown"
+                        chunk["metadata"]["month"] = month_str if month_str else "unknown"
                         chunk["metadata"]["source_file"] = relative_path
                         chunk["metadata"]["task_count"] = len(canonical.tasks)
                         chunk["metadata"]["issue_count"] = len(canonical.issues)
                         chunk["metadata"]["plan_count"] = len(canonical.plans)
+                        
+                        # 🔥 None 값 제거 (ChromaDB는 None을 허용하지 않음)
+                        chunk["metadata"] = {
+                            k: v for k, v in chunk["metadata"].items()
+                            if v is not None
+                        }
                     
                     all_chunks.extend(chunks)
                     print(f"  ✅ 보고서 {json_idx + 1}: {len(chunks)}개 청크 생성 (작성일: {date_str}, 작성자: {canonical.owner})")
