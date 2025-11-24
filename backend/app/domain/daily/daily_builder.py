@@ -112,7 +112,9 @@ def build_daily_report(
     owner: str,
     target_date: date,
     main_tasks: List[Dict[str, Any]],
-    time_tasks: List[Dict[str, Any]]
+    time_tasks: List[Dict[str, Any]],
+    issues: List[Dict[str, Any]] = None,
+    plans: List[Dict[str, Any]] = None
 ) -> CanonicalReport:
     """
     일일보고서 생성
@@ -120,6 +122,8 @@ def build_daily_report(
     실무 기준:
     - main_tasks = 아침에 선택한 "예정" 업무
     - time_tasks = FSM에서 입력한 "실제 수행" 업무
+    - issues = FSM에서 입력한 "이슈 사항"
+    - plans = FSM에서 입력한 "익일 업무 계획"
     - 실제 수행되지 않은 main_tasks → unresolved (미종결 업무)
     
     Args:
@@ -127,10 +131,16 @@ def build_daily_report(
         target_date: 날짜
         main_tasks: 금일 진행 업무 (예정, TodayPlan에서 선택)
         time_tasks: 시간대별 세부업무 (실제 수행, FSM 입력)
+        issues: 이슈 사항 (FSM 입력, optional)
+        plans: 익일 업무 계획 (FSM 입력, optional)
         
     Returns:
         CanonicalReport 객체
     """
+    if issues is None:
+        issues = []
+    if plans is None:
+        plans = []
     # report_id 생성 (deterministic)
     report_id = generate_report_id(owner, target_date)
     
@@ -144,8 +154,29 @@ def build_daily_report(
         if i not in completed_main_indices
     ]
     
-    # 🔥 plans = 모든 main_tasks의 title (예정 업무 전체)
-    plans = [task.get("title", "") for task in main_tasks]
+    # 🔥 issues = FSM 이슈사항 + 미종결 업무
+    all_issues = []
+    
+    # FSM에서 입력한 이슈사항 추가
+    for issue in issues:
+        description = issue.get("description", "")
+        if description and description.strip():
+            all_issues.append(description.strip())
+    
+    # 미종결 업무도 이슈로 추가 (구분자로 표시)
+    for unresolved in unresolved_tasks:
+        if unresolved and unresolved.strip():
+            all_issues.append(f"[미종결] {unresolved.strip()}")
+    
+    # 🔥 plans = 금일 예정 업무 (main_tasks) - 원래 설계대로 유지
+    planned_tasks = [task.get("title", "") for task in main_tasks if task.get("title")]
+    
+    # 🔥 next_day_plans = FSM 익일 업무 계획 (별도로 metadata에 저장)
+    next_day_plans = []
+    for plan in plans:
+        title = plan.get("title", "")
+        if title and title.strip():
+            next_day_plans.append(title.strip())
     
     # 🔥 tasks = time_tasks만 (실제 완료 업무)
     tasks = []
@@ -171,9 +202,11 @@ def build_daily_report(
     
     # 로그 출력
     print(f"\n📊 일일보고서 생성 요약:")
-    print(f"  - 예정 업무(plans): {len(main_tasks)}개")
+    print(f"  - 금일 예정 업무: {len(main_tasks)}개")
     print(f"  - 실제 완료(tasks): {len(time_tasks)}개")
-    print(f"  - 미종결(issues): {len(unresolved_tasks)}개")
+    print(f"  - 이슈사항(issues): {len(all_issues)}개")
+    print(f"  - 익일 계획(next_day_plans): {len(next_day_plans)}개")
+    print(f"  - 미종결 업무: {len(unresolved_tasks)}개")
     if unresolved_tasks:
         print(f"  - 미종결 목록: {', '.join(unresolved_tasks)}")
     
@@ -186,14 +219,17 @@ def build_daily_report(
         period_end=target_date,
         tasks=tasks,  # 🔥 실제 완료 업무만
         kpis=[],
-        issues=unresolved_tasks,  # 🔥 미종결 업무
-        plans=plans,  # 🔥 예정 업무 전체
+        issues=all_issues,  # 🔥 FSM 이슈사항 + 미종결 업무
+        plans=planned_tasks,  # 🔥 금일 예정 업무 (main_tasks)
         metadata={
             "source": "daily_fsm",
             "planned_task_count": len(main_tasks),
             "completed_task_count": len(time_tasks),
             "unresolved_task_count": len(unresolved_tasks),
-            "completion_rate": f"{len(completed_main_indices)}/{len(main_tasks)}" if main_tasks else "0/0"
+            "completion_rate": f"{len(completed_main_indices)}/{len(main_tasks)}" if main_tasks else "0/0",
+            "fsm_issues_count": len(issues),
+            "fsm_plans_count": len(plans),
+            "next_day_plans": next_day_plans  # 🔥 익일 업무 계획 (FSM 입력)
         }
     )
 

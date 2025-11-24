@@ -1031,8 +1031,27 @@ async function showSavedTasksConfirmation(owner, targetDate) {
       btnContainer.remove();
     });
     
+    // "수정" 버튼
+    const editBtn = document.createElement('button');
+    editBtn.textContent = '✏️ 수정';
+    editBtn.style.cssText = `
+      padding: 10px 20px;
+      border: 2px solid rgba(255, 150, 100, 0.6);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      color: rgba(255, 150, 100, 0.9);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    `;
+    editBtn.addEventListener('click', () => {
+      showEditMainTasksUI(owner, targetDate, tasks);
+      btnContainer.remove();
+    });
+    
     btnContainer.appendChild(confirmBtn);
     btnContainer.appendChild(addMoreBtn);
+    btnContainer.appendChild(editBtn);
     
     messageDiv.appendChild(btnContainer);
     messagesContainer.appendChild(messageDiv);
@@ -1040,6 +1059,181 @@ async function showSavedTasksConfirmation(owner, targetDate) {
     
   } catch (error) {
     console.error('❌ 업무 확인 오류:', error);
+  }
+}
+
+/**
+ * 금일 진행 업무 수정 UI 표시
+ */
+async function showEditMainTasksUI(owner, targetDate, currentTasks) {
+  try {
+    addMessage('assistant', '✏️ **업무 수정 모드**\n\n각 업무를 수정하거나 삭제할 수 있습니다.');
+    
+    // 수정 UI 컨테이너
+    const editContainer = document.createElement('div');
+    editContainer.className = 'message assistant';
+    editContainer.style.cssText = 'width: 100%;';
+    
+    const editBubble = document.createElement('div');
+    editBubble.className = 'bubble';
+    editBubble.style.cssText = 'padding: 20px; background: rgba(255, 255, 255, 0.98);';
+    
+    // 업무 목록 (수정 가능)
+    const tasksContainer = document.createElement('div');
+    tasksContainer.style.cssText = 'display: flex; flex-direction: column; gap: 12px;';
+    
+    // 각 업무에 대한 입력 필드
+    currentTasks.forEach((task, index) => {
+      const taskRow = document.createElement('div');
+      taskRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px;
+        background: rgba(240, 240, 250, 0.5);
+        border-radius: 8px;
+      `;
+      taskRow.dataset.taskIndex = index;
+      
+      // 번호
+      const numberSpan = document.createElement('span');
+      numberSpan.textContent = `${index + 1}.`;
+      numberSpan.style.cssText = 'font-weight: 600; color: #666; min-width: 25px;';
+      
+      // 입력 필드
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = task.title;
+      input.style.cssText = `
+        flex: 1;
+        padding: 8px 12px;
+        border: 2px solid rgba(100, 150, 255, 0.3);
+        border-radius: 6px;
+        font-size: 14px;
+        background: white;
+      `;
+      input.placeholder = '업무 내용을 입력하세요';
+      
+      // 삭제 버튼
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.style.cssText = `
+        padding: 8px 12px;
+        border: none;
+        border-radius: 6px;
+        background: rgba(255, 100, 100, 0.1);
+        color: rgba(255, 100, 100, 0.9);
+        cursor: pointer;
+        font-size: 16px;
+      `;
+      deleteBtn.addEventListener('click', () => {
+        taskRow.remove();
+      });
+      
+      taskRow.appendChild(numberSpan);
+      taskRow.appendChild(input);
+      taskRow.appendChild(deleteBtn);
+      tasksContainer.appendChild(taskRow);
+    });
+    
+    editBubble.appendChild(tasksContainer);
+    
+    // 버튼 컨테이너
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display: flex; gap: 8px; margin-top: 16px; justify-content: center;';
+    
+    // 저장 버튼
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = '💾 저장';
+    saveBtn.style.cssText = `
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(100, 200, 100, 0.9), rgba(80, 180, 80, 0.9));
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    `;
+    saveBtn.addEventListener('click', async () => {
+      // 모든 입력 필드에서 값 수집
+      const updatedTasks = [];
+      const inputs = tasksContainer.querySelectorAll('input');
+      
+      inputs.forEach((input) => {
+        const value = input.value.trim();
+        if (value) {
+          updatedTasks.push({ title: value });
+        }
+      });
+      
+      if (updatedTasks.length === 0) {
+        addMessage('assistant', '❌ 최소 1개 이상의 업무가 필요합니다!');
+        return;
+      }
+      
+      // 백엔드 업데이트 호출
+      addMessage('user', '수정된 업무를 저장합니다...');
+      
+      try {
+        const response = await fetch(`${API_BASE}/daily/update_main_tasks`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            owner: owner,
+            target_date: targetDate,
+            main_tasks: updatedTasks
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API 오류: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        addMessage('assistant', `✅ ${updatedTasks.length}개의 업무가 수정되었습니다!`);
+        editContainer.remove();
+        
+        // 수정된 업무 다시 확인
+        await showSavedTasksConfirmation(owner, targetDate);
+        
+      } catch (error) {
+        console.error('❌ 업무 수정 실패:', error);
+        addMessage('assistant', `❌ 업무 수정 실패: ${error.message}`);
+      }
+    });
+    
+    // 취소 버튼
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '❌ 취소';
+    cancelBtn.style.cssText = `
+      padding: 10px 20px;
+      border: 2px solid rgba(150, 150, 150, 0.6);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      color: rgba(150, 150, 150, 0.9);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    `;
+    cancelBtn.addEventListener('click', () => {
+      editContainer.remove();
+      addMessage('assistant', '업무 수정이 취소되었습니다.');
+    });
+    
+    btnContainer.appendChild(saveBtn);
+    btnContainer.appendChild(cancelBtn);
+    editBubble.appendChild(btnContainer);
+    
+    editContainer.appendChild(editBubble);
+    messagesContainer.appendChild(editContainer);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+  } catch (error) {
+    console.error('❌ 업무 수정 UI 오류:', error);
+    addMessage('assistant', '❌ 업무 수정 UI 표시 중 오류가 발생했습니다.');
   }
 }
 

@@ -15,7 +15,6 @@ from app.domain.planner.today_plan_chain import TodayPlanGenerator
 from app.domain.planner.tools import YesterdayReportTool
 from app.domain.search.retriever import UnifiedRetriever
 from app.infrastructure.database.session import get_db
-from app.infrastructure.vector_store import get_unified_collection
 from app.llm.client import get_llm
 from app.core.config import settings
 
@@ -31,14 +30,24 @@ def get_today_plan_generator(db: Session = Depends(get_db)) -> TodayPlanGenerato
     # VectorDB에서 유사 업무 패턴 검색 (선택적)
     vector_retriever = None
     try:
-        collection = get_unified_collection()
+        # unified_documents 컬렉션 사용 (로컬 ChromaDB)
+        from ingestion.chroma_client import get_chroma_service
+        chroma_service = get_chroma_service()
+        collection = chroma_service.get_or_create_collection(name="unified_documents")
+        
         vector_retriever = UnifiedRetriever(
             collection=collection,
             openai_api_key=settings.OPENAI_API_KEY
         )
+        
+        doc_count = collection.count()
+        print(f"✅ VectorDB 초기화 완료: unified_documents 컬렉션 ({doc_count}개 문서)")
     except Exception as e:
         print(f"[WARNING] VectorDB 초기화 실패 (추천 기능 제한): {e}")
+        import traceback
+        traceback.print_exc()
         # VectorDB가 없어도 작동하도록 None으로 설정
+        vector_retriever = None
     
     llm_client = get_llm(model="gpt-4o-mini", temperature=0.7)
     

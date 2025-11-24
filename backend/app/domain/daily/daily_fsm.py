@@ -30,9 +30,8 @@ class DailyReportFSM:
             context.current_question = f"{time_range} 무엇을 했나요?"
             context.current_state = DailyState.ASK_TIME_RANGE
         else:
-            context.current_state = DailyState.FINISHED
-            context.finished = True
-            context.current_question = ""
+            # 시간대가 끝나면 이슈사항 질문으로 이동
+            context = self._ask_issues(context)
         
         return context
     
@@ -60,8 +59,54 @@ class DailyReportFSM:
         context.current_state = DailyState.NEXT_TIME_RANGE
         
         if context.current_index >= len(context.time_ranges):
-            context.current_state = DailyState.FINISHED
-            context.finished = True
+            # 시간대 완료 후 이슈사항 질문으로 이동
+            context.current_state = DailyState.ASK_ISSUES
+        
+        return context
+    
+    def _ask_issues(self, context: DailyFSMContext) -> DailyFSMContext:
+        """이슈사항 질문 생성"""
+        context.current_question = "오늘 업무 중 발생한 이슈사항이 있나요? (없으면 '없음'이라고 입력해주세요)"
+        context.current_state = DailyState.ASK_ISSUES
+        return context
+    
+    def _parse_issues(self, context: DailyFSMContext) -> DailyFSMContext:
+        """이슈사항 파싱 및 저장"""
+        if context.last_answer:
+            answer = context.last_answer.strip()
+            
+            # "없음" 관련 키워드 체크
+            if answer.lower() in ['없음', '없어요', '없습니다', 'x', '-']:
+                context.issues = []
+            else:
+                # 간단한 파싱 (줄바꿈으로 구분)
+                issue_lines = [line.strip() for line in answer.split('\n') if line.strip()]
+                context.issues = [{"description": line} for line in issue_lines]
+            
+            context.current_state = DailyState.RECEIVE_ISSUES
+        
+        return context
+    
+    def _ask_plans(self, context: DailyFSMContext) -> DailyFSMContext:
+        """익일 업무 계획 질문 생성"""
+        context.current_question = "내일 진행할 업무 계획을 입력해주세요. (없으면 '없음'이라고 입력해주세요)"
+        context.current_state = DailyState.ASK_PLANS
+        return context
+    
+    def _parse_plans(self, context: DailyFSMContext) -> DailyFSMContext:
+        """익일 업무 계획 파싱 및 저장"""
+        if context.last_answer:
+            answer = context.last_answer.strip()
+            
+            # "없음" 관련 키워드 체크
+            if answer.lower() in ['없음', '없어요', '없습니다', 'x', '-']:
+                context.plans = []
+            else:
+                # 간단한 파싱 (줄바꿈으로 구분)
+                plan_lines = [line.strip() for line in answer.split('\n') if line.strip()]
+                context.plans = [{"title": line} for line in plan_lines]
+            
+            context.current_state = DailyState.RECEIVE_PLANS
         
         return context
     
@@ -109,17 +154,31 @@ class DailyReportFSM:
         """
         # 답변 저장
         context.last_answer = answer
-        context.current_state = DailyState.RECEIVE_ANSWER
         
-        # 답변 파싱 및 저장
-        context = self._parse_answer(context)
+        # 현재 상태에 따라 처리
+        if context.current_state == DailyState.ASK_TIME_RANGE:
+            # 시간대 업무 답변 처리
+            context.current_state = DailyState.RECEIVE_ANSWER
+            context = self._parse_answer(context)
+            context = self._move_next(context)
+            
+            # 다음 질문 생성
+            if context.current_state == DailyState.ASK_ISSUES:
+                context = self._ask_issues(context)
+            elif not context.finished:
+                context = self._ask_question(context)
         
-        # 다음 시간대로 이동
-        context = self._move_next(context)
+        elif context.current_state == DailyState.ASK_ISSUES:
+            # 이슈사항 답변 처리
+            context = self._parse_issues(context)
+            context = self._ask_plans(context)
         
-        # 다음 질문 생성 (완료되지 않았으면)
-        if not context.finished:
-            context = self._ask_question(context)
+        elif context.current_state == DailyState.ASK_PLANS:
+            # 익일 계획 답변 처리
+            context = self._parse_plans(context)
+            context.current_state = DailyState.FINISHED
+            context.finished = True
+            context.current_question = ""
         
         return {
             "session_id": context.session_id,
@@ -128,6 +187,8 @@ class DailyReportFSM:
             "total_ranges": len(context.time_ranges),
             "finished": context.finished,
             "state": context,
-            "tasks_collected": len(context.time_tasks)
+            "tasks_collected": len(context.time_tasks),
+            "issues_collected": len(context.issues),
+            "plans_collected": len(context.plans)
         }
 

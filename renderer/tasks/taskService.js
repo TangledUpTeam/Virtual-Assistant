@@ -313,6 +313,46 @@ export async function saveSelectedTasks(owner, targetDate, tasks) {
 }
 
 /**
+ * 금일 진행 업무 수정
+ */
+export async function updateMainTasks(owner, targetDate, tasks) {
+  try {
+    console.log('🔄 [API] /daily/update_main_tasks 호출 중...');
+    
+    const response = await fetch(`${API_BASE}/daily/update_main_tasks`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        owner: owner,
+        target_date: targetDate,
+        main_tasks: tasks
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ [API] 업무 수정 완료:', data);
+    
+    return {
+      success: true,
+      updated_count: tasks.length,
+      data: data
+    };
+  } catch (error) {
+    console.error('❌ [API] 업무 수정 실패:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+/**
  * 유틸: 이번 주 월요일 날짜 구하기
  */
 function getMonday(date) {

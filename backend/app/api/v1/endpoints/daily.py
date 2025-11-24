@@ -178,22 +178,74 @@ async def answer_daily_question(
                 owner=updated_context.owner,
                 target_date=updated_context.target_date,
                 main_tasks=updated_context.today_main_tasks,
-                time_tasks=updated_context.time_tasks
+                time_tasks=updated_context.time_tasks,
+                issues=updated_context.issues,
+                plans=updated_context.plans
             )
             
-            # 🔥 운영 DB에 저장 (PostgreSQL)
+            # 🔥 운영 DB에 저장 (PostgreSQL) - 기존 데이터 병합
             try:
-                report_dict = report.model_dump(mode='json')
-                report_create = DailyReportCreate(
-                    owner=report.owner,
-                    report_date=report.period_start,
-                    report_json=report_dict
+                # 기존 보고서 확인 (금일 진행 업무가 이미 저장되어 있을 수 있음)
+                existing_report = DailyReportRepository.get_by_owner_and_date(
+                    db, report.owner, report.period_start
                 )
-                db_report, is_created = DailyReportRepository.create_or_update(
-                    db, report_create
-                )
-                action = "생성" if is_created else "업데이트"
-                print(f"💾 운영 DB 저장 완료 ({action}): {report.owner} - {report.period_start}")
+                
+                if existing_report:
+                    # 기존 보고서가 있으면 병합
+                    print(f"📝 기존 보고서 발견 - 병합 모드")
+                    
+                    existing_json = existing_report.report_json.copy()
+                    report_dict = report.model_dump(mode='json')
+                    
+                    # 기존 금일 진행 업무 + FSM 시간대별 업무 병합
+                    existing_tasks = existing_json.get("tasks", [])
+                    new_tasks = report_dict.get("tasks", [])
+                    
+                    # 중복 제거: task_id 기준
+                    merged_tasks = existing_tasks.copy()
+                    existing_ids = {t.get("task_id") for t in existing_tasks if t.get("task_id")}
+                    
+                    for task in new_tasks:
+                        if task.get("task_id") not in existing_ids:
+                            merged_tasks.append(task)
+                    
+                    # 병합된 데이터 생성
+                    merged_json = {
+                        **report_dict,
+                        "tasks": merged_tasks,
+                        "metadata": {
+                            **report_dict.get("metadata", {}),
+                            "status": "completed",
+                            "merged": True
+                        }
+                    }
+                    
+                    from app.domain.daily.schemas import DailyReportUpdate
+                    db_report = DailyReportRepository.update(
+                        db,
+                        existing_report,
+                        DailyReportUpdate(report_json=merged_json)
+                    )
+                    
+                    print(f"💾 운영 DB 병합 완료: {report.owner} - {report.period_start} (tasks: {len(merged_tasks)}개)")
+                    is_created = False
+                else:
+                    # 기존 보고서가 없으면 새로 생성
+                    report_dict = report.model_dump(mode='json')
+                    report_dict["metadata"] = {
+                        **report_dict.get("metadata", {}),
+                        "status": "completed"
+                    }
+                    
+                    report_create = DailyReportCreate(
+                        owner=report.owner,
+                        report_date=report.period_start,
+                        report_json=report_dict
+                    )
+                    db_report = DailyReportRepository.create(db, report_create)
+                    
+                    print(f"💾 운영 DB 생성 완료: {report.owner} - {report.period_start}")
+                    is_created = True
                 
                 # 🔥 PDF 자동 생성 및 저장
                 try:
@@ -212,6 +264,59 @@ async def answer_daily_question(
                     print(f"📄 일일 보고서 PDF 생성 완료: {pdf_path}")
                 except Exception as pdf_error:
                     print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
+                
+                # 🔥 벡터 DB 자동 저장 (비동기 작업, 실패해도 계속 진행)
+                try:
+                    from app.domain.report.chunker import chunk_report
+                    from ingestion.embed import embed_texts
+                    from ingestion.chroma_client import get_chroma_service
+                    
+                    print(f"⏳ 벡터 DB 저장 시작...")
+                    
+                    # 1. 청킹
+                    chunks = chunk_report(report, include_summary=True)
+                    
+                    if chunks:
+                        # 2. 임베딩 생성
+                        texts = [chunk["text"] for chunk in chunks]
+                        chunk_ids = [chunk["id"] for chunk in chunks]
+                        metadatas = [chunk["metadata"] for chunk in chunks]
+                        
+                        # 각 청크에 chunk_text 키 추가 (Chroma용)
+                        for chunk in chunks:
+                            chunk["chunk_text"] = chunk.pop("text")
+                        
+                        # 메타데이터에 날짜 정보 추가
+                        for metadata in metadatas:
+                            metadata["doc_type"] = "daily"  # ✅ 검색 필터용
+                            metadata["date"] = report.period_start.isoformat()
+                            metadata["month"] = report.period_start.strftime("%Y-%m")
+                            metadata["owner"] = report.owner
+                            
+                            # None 값 제거 (ChromaDB는 None을 허용하지 않음)
+                            metadata_cleaned = {k: v for k, v in metadata.items() if v is not None}
+                            metadata.clear()
+                            metadata.update(metadata_cleaned)
+                        
+                        embeddings = embed_texts(texts, api_key=os.getenv("OPENAI_API_KEY"))
+                        
+                        # 3. ChromaDB 저장
+                        chroma_service = get_chroma_service()
+                        collection = chroma_service.get_or_create_collection(name="unified_documents")
+                        
+                        collection.upsert(
+                            ids=chunk_ids,
+                            embeddings=embeddings,
+                            documents=texts,
+                            metadatas=metadatas
+                        )
+                        
+                        print(f"✅ 벡터 DB 저장 완료: {len(chunks)}개 청크 (collection: daily_reports)")
+                    else:
+                        print(f"⚠️  청크가 생성되지 않음 (벡터 DB 저장 건너뜀)")
+                
+                except Exception as vector_error:
+                    print(f"⚠️  벡터 DB 저장 실패 (보고서는 저장됨): {str(vector_error)}")
                     
             except Exception as db_error:
                 print(f"⚠️  운영 DB 저장 실패 (계속 진행): {str(db_error)}")
@@ -270,14 +375,19 @@ class SelectMainTasksResponse(BaseModel):
 
 
 @router.post("/select_main_tasks", response_model=SelectMainTasksResponse)
-async def select_main_tasks(request: SelectMainTasksRequest):
+async def select_main_tasks(
+    request: SelectMainTasksRequest,
+    db: Session = Depends(get_db)
+):
     """
     금일 진행 업무 선택 및 저장
     
     사용자가 TodayPlan Chain에서 추천받은 업무 중 
     실제로 수행할 업무를 선택하여 저장합니다.
     
-    저장된 업무는 /daily/start 호출 시 자동으로 불러옵니다.
+    저장된 업무는:
+    1. 메모리에 임시 저장 (FSM 시작 시 사용)
+    2. PostgreSQL에 부분 저장 (금일 진행 업무만, status="in_progress")
     """
     try:
         if not request.main_tasks:
@@ -286,14 +396,71 @@ async def select_main_tasks(request: SelectMainTasksRequest):
                 detail="최소 1개 이상의 업무를 선택해주세요."
             )
         
-        # 저장소에 저장
+        # 1. 메모리 저장 (FSM용)
         store = get_main_tasks_store()
         store.save(
             owner=request.owner,
             target_date=request.target_date,
             main_tasks=request.main_tasks,
-            append=request.append  # 🔥 append 모드 전달
+            append=request.append
         )
+        
+        # 2. PostgreSQL에 부분 저장 (금일 진행 업무만)
+        try:
+            # 기존 보고서 확인
+            existing_report = DailyReportRepository.get_by_owner_and_date(
+                db, request.owner, request.target_date
+            )
+            
+            if existing_report:
+                # 기존 보고서가 있으면 tasks만 업데이트 (append 모드 고려)
+                report_json = existing_report.report_json.copy()
+                
+                if request.append and "tasks" in report_json:
+                    # 기존 tasks에 추가
+                    existing_tasks = report_json.get("tasks", [])
+                    report_json["tasks"] = existing_tasks + request.main_tasks
+                else:
+                    # 덮어쓰기
+                    report_json["tasks"] = request.main_tasks
+                
+                report_json["metadata"] = report_json.get("metadata", {})
+                report_json["metadata"]["status"] = "in_progress"
+                
+                from app.domain.daily.schemas import DailyReportUpdate
+                DailyReportRepository.update(
+                    db,
+                    existing_report,
+                    DailyReportUpdate(report_json=report_json)
+                )
+                print(f"💾 금일 진행 업무 업데이트 완료: {request.owner} - {request.target_date}")
+            else:
+                # 새로운 부분 보고서 생성
+                partial_report = {
+                    "report_type": "daily",
+                    "owner": request.owner,
+                    "period_start": request.target_date.isoformat(),
+                    "period_end": request.target_date.isoformat(),
+                    "tasks": request.main_tasks,
+                    "kpis": [],
+                    "issues": [],
+                    "plans": [],
+                    "metadata": {"status": "in_progress", "main_tasks_only": True}
+                }
+                
+                DailyReportRepository.create(
+                    db,
+                    DailyReportCreate(
+                        owner=request.owner,
+                        report_date=request.target_date,
+                        report_json=partial_report
+                    )
+                )
+                print(f"💾 금일 진행 업무 생성 완료: {request.owner} - {request.target_date}")
+        
+        except Exception as db_error:
+            print(f"⚠️  PostgreSQL 저장 실패 (메모리 저장은 성공): {str(db_error)}")
+            # DB 저장 실패해도 메모리 저장은 성공했으므로 계속 진행
         
         return SelectMainTasksResponse(
             success=True,
@@ -348,6 +515,116 @@ async def get_main_tasks(request: GetMainTasksRequest):
         raise HTTPException(
             status_code=500,
             detail=f"업무 조회 실패: {str(e)}"
+        )
+
+
+class UpdateMainTasksRequest(BaseModel):
+    """금일 진행 업무 수정 요청"""
+    owner: str = Field(..., description="작성자")
+    target_date: date = Field(..., description="보고서 날짜")
+    main_tasks: List[Dict[str, Any]] = Field(
+        ...,
+        description="수정된 금일 진행 업무 리스트"
+    )
+
+
+class UpdateMainTasksResponse(BaseModel):
+    """금일 진행 업무 수정 응답"""
+    success: bool
+    message: str
+    updated_count: int
+
+
+@router.put("/update_main_tasks", response_model=UpdateMainTasksResponse)
+async def update_main_tasks(
+    request: UpdateMainTasksRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    금일 진행 업무 수정
+    
+    저장된 금일 진행 업무를 수정합니다.
+    - 메모리 (MainTasksStore) 업데이트
+    - PostgreSQL 업데이트 (tasks 필드만)
+    """
+    try:
+        if not request.main_tasks:
+            raise HTTPException(
+                status_code=400,
+                detail="최소 1개 이상의 업무가 필요합니다."
+            )
+        
+        # 1. 메모리 업데이트
+        store = get_main_tasks_store()
+        store.save(
+            owner=request.owner,
+            target_date=request.target_date,
+            main_tasks=request.main_tasks,
+            append=False  # 덮어쓰기
+        )
+        
+        # 2. PostgreSQL 업데이트
+        try:
+            existing_report = DailyReportRepository.get_by_owner_and_date(
+                db, request.owner, request.target_date
+            )
+            
+            if existing_report:
+                # tasks 필드만 업데이트
+                report_json = existing_report.report_json.copy()
+                report_json["tasks"] = request.main_tasks
+                
+                # status는 유지 (in_progress 또는 completed)
+                if "metadata" not in report_json:
+                    report_json["metadata"] = {}
+                
+                from app.domain.daily.schemas import DailyReportUpdate
+                DailyReportRepository.update(
+                    db,
+                    existing_report,
+                    DailyReportUpdate(report_json=report_json)
+                )
+                print(f"💾 금일 진행 업무 수정 완료 (DB): {request.owner} - {request.target_date}")
+            else:
+                # 보고서가 없으면 새로 생성
+                partial_report = {
+                    "report_type": "daily",
+                    "owner": request.owner,
+                    "period_start": request.target_date.isoformat(),
+                    "period_end": request.target_date.isoformat(),
+                    "tasks": request.main_tasks,
+                    "kpis": [],
+                    "issues": [],
+                    "plans": [],
+                    "metadata": {"status": "in_progress", "main_tasks_only": True}
+                }
+                
+                DailyReportRepository.create(
+                    db,
+                    DailyReportCreate(
+                        owner=request.owner,
+                        report_date=request.target_date,
+                        report_json=partial_report
+                    )
+                )
+                print(f"💾 금일 진행 업무 생성 완료 (DB): {request.owner} - {request.target_date}")
+        
+        except Exception as db_error:
+            print(f"⚠️  PostgreSQL 업데이트 실패 (메모리는 성공): {str(db_error)}")
+            # DB 실패해도 메모리는 성공했으므로 계속 진행
+        
+        return UpdateMainTasksResponse(
+            success=True,
+            message="금일 진행 업무가 수정되었습니다.",
+            updated_count=len(request.main_tasks)
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"업무 수정 실패: {str(e)}"
         )
 
 
