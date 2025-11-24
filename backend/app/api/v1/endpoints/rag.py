@@ -1,24 +1,19 @@
 """
 RAG API 엔드포인트
 
-PDF 업로드, 문서 처리, 질의응답 API를 제공합니다.
+질의응답 API를 제공합니다.
+문서 업로드는 internal_docs/uploads 폴더에 직접 추가 후 별도 ingestion 스크립트로 처리합니다.
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
-from pathlib import Path
-import shutil
-from typing import Optional
+from fastapi import APIRouter, HTTPException
+import threading
 
 from app.domain.rag.config import rag_config
-from app.domain.rag.pdf_processor import PDFProcessor
-from app.domain.rag.document_converter import DocumentConverter
 from app.domain.rag.vector_store import VectorStore
 from app.domain.rag.retriever import RAGRetriever
 from app.domain.rag.schemas import (
     QueryRequest,
-    QueryResponse,
-    UploadResponse
+    QueryResponse
 )
 from app.domain.rag.utils import get_logger
 
@@ -26,114 +21,33 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# 전역 인스턴스 (lazy loading)
-_pdf_processor = None
-_document_converter = None
+# 전역 인스턴스 (lazy loading with thread-safe)
 _vector_store = None
 _retriever = None
-
-def get_pdf_processor():
-    """PDF 프로세서 lazy loading"""
-    global _pdf_processor
-    if _pdf_processor is None:
-        _pdf_processor = PDFProcessor()
-        logger.info("PDFProcessor 인스턴스 생성")
-    return _pdf_processor
-
-def get_document_converter():
-    """문서 변환기 lazy loading"""
-    global _document_converter
-    if _document_converter is None:
-        _document_converter = DocumentConverter()
-        logger.info("DocumentConverter 인스턴스 생성")
-    return _document_converter
+_vector_store_lock = threading.Lock()
+_retriever_lock = threading.Lock()
 
 def get_vector_store():
-    """벡터 저장소 lazy loading"""
+    """벡터 저장소 lazy loading (thread-safe)"""
     global _vector_store
     if _vector_store is None:
-        _vector_store = VectorStore()
-        logger.info("VectorStore 인스턴스 생성")
+        with _vector_store_lock:
+            # Double-checked locking pattern
+            if _vector_store is None:
+                _vector_store = VectorStore()
+                logger.info("VectorStore 인스턴스 생성")
     return _vector_store
 
 def get_retriever():
-    """RAG 검색기 lazy loading"""
+    """RAG 검색기 lazy loading (thread-safe)"""
     global _retriever
     if _retriever is None:
-        _retriever = RAGRetriever()
-        logger.info("RAGRetriever 인스턴스 생성")
+        with _retriever_lock:
+            # Double-checked locking pattern
+            if _retriever is None:
+                _retriever = RAGRetriever()
+                logger.info("RAGRetriever 인스턴스 생성")
     return _retriever
-
-
-@router.post("/upload", response_model=UploadResponse)
-async def upload_pdf(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
-):
-    """
-    PDF 파일 업로드 및 처리
-    
-    Args:
-        file: 업로드할 PDF 파일
-        
-    Returns:
-        UploadResponse: 업로드 결과
-    """
-    # 파일 확장자 확인
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(
-            status_code=400,
-            detail="PDF 파일만 업로드 가능합니다."
-        )
-    
-    try:
-        # 파일 저장
-        upload_path = rag_config.UPLOAD_DIR / file.filename
-        
-        with upload_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        logger.info(f"파일 업로드 완료: {file.filename}")
-        
-        # 인스턴스 lazy loading
-        pdf_processor = get_pdf_processor()
-        document_converter = get_document_converter()
-        vector_store = get_vector_store()
-        
-        # PDF 처리 (동기)
-        processed_doc = pdf_processor.process_pdf(str(upload_path))
-        
-        # 청킹
-        chunks = document_converter.create_chunks(processed_doc)
-        
-        # 벡터 저장 (임베딩 재사용 가능)
-        added_count = vector_store.add_document(processed_doc, chunks)
-        
-        # 임베딩과 함께 JSON 저장
-        pdf_processor.save_chunks_with_embeddings(processed_doc, chunks)
-        
-        # 처리된 파일 경로
-        processed_file_path = str(
-            rag_config.PROCESSED_DIR / f"{Path(file.filename).stem}.json"
-        )
-        
-        response = UploadResponse(
-            success=True,
-            message="PDF 처리 완료",
-            filename=file.filename,
-            total_pages=processed_doc.total_pages,
-            total_chunks=added_count,
-            processed_file_path=processed_file_path
-        )
-        
-        return response
-        
-    except Exception as e:
-        logger.exception("PDF 업로드 중 오류")
-        raise HTTPException(
-            status_code=500,
-            detail=f"PDF 처리 중 오류가 발생했습니다: {str(e)}"
-        )
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -200,72 +114,5 @@ async def get_stats():
         raise HTTPException(
             status_code=500,
             detail=f"통계 조회 중 오류가 발생했습니다: {str(e)}"
-        )
-
-
-@router.delete("/document/{document_id}")
-async def delete_document(document_id: str):
-    """
-    문서 삭제
-    
-    Args:
-        document_id: 문서 ID
-        
-    Returns:
-        dict: 삭제 결과
-    """
-    try:
-        # 인스턴스 lazy loading
-        vector_store = get_vector_store()
-        
-        success = vector_store.delete_document(document_id)
-        
-        if success:
-            return {
-                "success": True,
-                "message": f"문서 '{document_id}'가 삭제되었습니다."
-            }
-        else:
-            raise HTTPException(
-                status_code=404,
-                detail=f"문서를 찾을 수 없습니다: {document_id}"
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("문서 삭제 중 오류")
-        raise HTTPException(
-            status_code=500,
-            detail=f"문서 삭제 중 오류가 발생했습니다: {str(e)}"
-        )
-
-
-@router.post("/reset")
-async def reset_collection():
-    """
-    컬렉션 초기화 (모든 문서 삭제)
-    
-    주의: 이 작업은 되돌릴 수 없습니다!
-    
-    Returns:
-        dict: 초기화 결과
-    """
-    try:
-        # 인스턴스 lazy loading
-        vector_store = get_vector_store()
-        
-        vector_store.reset_collection()
-        
-        return {
-            "success": True,
-            "message": "컬렉션이 초기화되었습니다."
-        }
-        
-    except Exception as e:
-        logger.exception("컬렉션 초기화 중 오류")
-        raise HTTPException(
-            status_code=500,
-            detail=f"컬렉션 초기화 중 오류가 발생했습니다: {str(e)}"
         )
 
