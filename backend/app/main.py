@@ -4,10 +4,32 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from pathlib import Path
+import sys
 
 from app.core.config import settings
 from app.api.v1 import api_router
 from app.infrastructure.database import engine, Base
+
+# 경로 설정
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Virtual-Assistant 루트
+COUNCEL_DIR = BASE_DIR / "backend" / "councel"
+sys.path.insert(0, str(COUNCEL_DIR))
+
+from sourcecode.automatic_save import automatic_save
+
+# Tools Router 추가
+import sys
+from pathlib import Path
+tools_path = Path(__file__).resolve().parent.parent.parent / "tools"
+if str(tools_path) not in sys.path:
+    sys.path.insert(0, str(tools_path))
+
+try:
+    from tools.router import tools_router
+    TOOLS_AVAILABLE = True
+except ImportError:
+    TOOLS_AVAILABLE = False
+    print("⚠️ Tools module not available.")
 
 
 @asynccontextmanager
@@ -23,6 +45,17 @@ async def lifespan(app: FastAPI):
     # 프로덕션에서는 Alembic 마이그레이션 사용
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created")
+    
+    # Vector DB 자동 생성 (심리 상담 시스템용)
+    print("\n🧠 Initializing Therapy Vector DB...")
+    try:
+        success = automatic_save()
+        if success:
+            print("✅ Therapy Vector DB initialized successfully")
+        else:
+            print("⚠️  Therapy Vector DB initialization failed (may already exist)")
+    except Exception as e:
+        print(f"⚠️  Therapy Vector DB initialization error: {e}")
     
     yield
     
@@ -51,9 +84,12 @@ app.add_middleware(
 # API 라우터 등록
 app.include_router(api_router, prefix=settings.API_PREFIX)
 
+# Tools 라우터 등록
+if TOOLS_AVAILABLE:
+    app.include_router(tools_router, prefix="/api/tools", tags=["tools"])
+
 
 # 정적 파일 경로 설정
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 PUBLIC_DIR = BASE_DIR / "public"
 RENDERER_DIR = BASE_DIR / "renderer"

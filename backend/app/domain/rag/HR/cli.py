@@ -364,28 +364,28 @@ def main():
         epilog="""
 사용 예시:
   # 단일 파일 업로드
-  python -m app.domain.rag.cli upload document.pdf
-  python -m app.domain.rag.cli upload document.txt
-  python -m app.domain.rag.cli upload document.md
+  python -m app.domain.rag.HR.cli upload document.pdf
+  python -m app.domain.rag.HR.cli upload document.txt
+  python -m app.domain.rag.HR.cli upload document.md
   
   # 폴더 전체 업로드 (내부 모든 PDF/TXT/MD 파일 처리)
-  python -m app.domain.rag.cli upload internal_docs/uploads
+  python -m app.domain.rag.HR.cli upload internal_docs/uploads
   
   # 대화형 질의응답
-  python -m app.domain.rag.cli query
+  python -m app.domain.rag.HR.cli query
   
   # 단일 질문
-  python -m app.domain.rag.cli query "회사의 비전은 무엇인가요?"
+  python -m app.domain.rag.HR.cli query "회사의 비전은 무엇인가요?"
   
   # 통계 확인
-  python -m app.domain.rag.cli stats
+  python -m app.domain.rag.HR.cli stats
   
   # 컬렉션 초기화 (모든 문서 삭제)
-  python -m app.domain.rag.cli reset
-  python -m app.domain.rag.cli reset --yes  # 확인 없이 바로 초기화
+  python -m app.domain.rag.HR.cli reset
+  python -m app.domain.rag.HR.cli reset --yes  # 확인 없이 바로 초기화
   
   # 기존 JSON 파일 경로 업데이트 (data → internal_docs)
-  python -m app.domain.rag.cli update-paths
+  python -m app.domain.rag.HR.cli update-paths
         """
     )
     

@@ -3,8 +3,22 @@
  * 간단한 대화 및 기타 기능
  */
 
-import { sendChatMessage } from './chatbotService.js';
+import { sendChatMessage, initChatbotService } from './chatbotService.js';
 import { getTodayPlan, saveSelectedTasks } from '../tasks/taskService.js';
+
+// 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
+const accessToken = sessionStorage.getItem('access_token');
+console.log('🔍 세션 스토리지 확인:', {
+  accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : 'null',
+  sessionStorageKeys: Object.keys(sessionStorage)
+});
+
+if (accessToken) {
+  initChatbotService(accessToken);
+  console.log('✅ 세션 스토리지에서 액세스 토큰 로드 완료');
+} else {
+  console.warn('⚠️ 액세스 토큰이 없습니다. 일부 기능(메일 전송 등)은 로그인이 필요합니다.');
+}
 
 let messages = [];
 let isPanelVisible = true;

@@ -98,6 +98,9 @@ async function handleSendMessage() {
     if (response.type === 'task_recommendations') {
       // 추천 업무 카드 UI 표시
       addTaskRecommendations(response.data);
+    } else if (response.type === 'therapy') {
+      // 심리 상담 응답 (아들러 페르소나)
+      addTherapyMessage(response.data, response.mode);
     } else if (response.type === 'error') {
       addMessage('assistant', response.data);
     } else {
@@ -138,6 +141,39 @@ function addMessage(role, text) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
   
   console.log(`💬 [${role}]: ${text}`);
+}
+
+/**
+ * 심리 상담 메시지 추가 (아들러 페르소나)
+ * @param {string} text - 메시지 내용
+ * @param {string} mode - 상담 모드 (adler/counseling/general)
+ */
+function addTherapyMessage(text, mode) {
+  // 상태에 저장
+  messages.push({ role: 'therapy', text, mode });
+  
+  // DOM에 추가
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message assistant therapy';
+  
+  // 아들러 아이콘 추가
+  const icon = document.createElement('div');
+  icon.className = 'therapy-icon';
+  icon.textContent = '🎭';
+  icon.title = '아들러 심리 상담사';
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble therapy-bubble';
+  bubble.textContent = text;
+  
+  messageDiv.appendChild(icon);
+  messageDiv.appendChild(bubble);
+  messagesContainer.appendChild(messageDiv);
+  
+  // 스크롤을 맨 아래로
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  
+  console.log(`🎭 [아들러 상담사 - ${mode}]: ${text}`);
 }
 
 /**

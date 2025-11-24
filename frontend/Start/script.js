@@ -1,26 +1,49 @@
-// 세션 스토리지 키 (앱 종료 시 자동 삭제)
-const STORAGE_KEYS = {
-    ACCESS_TOKEN: 'access_token',
-    REFRESH_TOKEN: 'refresh_token',
-    USER: 'user'
-};
-
-// localStorage 대신 sessionStorage 사용
-const storage = sessionStorage;
-
 /**
- * 로그인 여부 확인
+ * 쿠키에서 값 가져오기
  */
-function isLoggedIn() {
-    return !!storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        return decodeURIComponent(parts.pop().split(';').shift());
+    }
+    return null;
 }
 
 /**
- * 사용자 정보 가져오기
+ * 로그인 여부 확인 (쿠키에서)
+ * 
+ * 참고: access_token은 HttpOnly 쿠키라서 JavaScript에서 읽을 수 없음
+ * 대신 logged_in 플래그 쿠키를 확인
+ */
+function isLoggedIn() {
+    const loggedIn = getCookie('logged_in');
+    return loggedIn === 'true';
+}
+
+/**
+ * 사용자 정보 가져오기 (쿠키에서)
  */
 function getUserInfo() {
-    const userJson = storage.getItem(STORAGE_KEYS.USER);
-    return userJson ? JSON.parse(userJson) : null;
+    const userEncoded = getCookie('user');
+    if (userEncoded) {
+        try {
+            // URL 디코딩 후 JSON 파싱
+            const userJson = decodeURIComponent(userEncoded);
+            return JSON.parse(userJson);
+        } catch (e) {
+            console.error('사용자 정보 파싱 실패:', e);
+            return null;
+        }
+    }
+    return null;
+}
+
+/**
+ * 쿠키 삭제
+ */
+function deleteCookie(name) {
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
 }
 
 /**
@@ -28,12 +51,13 @@ function getUserInfo() {
  */
 function logout() {
     if (confirm('정말 로그아웃하시겠습니까?')) {
-        console.log('🚪 로그아웃 - 세션 스토리지 삭제');
+        console.log('🚪 로그아웃 - 쿠키 삭제');
         
-        // 세션 스토리지에서 토큰 및 사용자 정보 삭제
-        storage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-        storage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-        storage.removeItem(STORAGE_KEYS.USER);
+        // 쿠키에서 토큰 및 사용자 정보 삭제
+        deleteCookie('access_token');
+        deleteCookie('refresh_token');
+        deleteCookie('user');
+        deleteCookie('logged_in');
         
         // 로그인 페이지로 이동 (같은 창에서)
         console.log('🔐 로그인 페이지로 이동');
@@ -69,43 +93,35 @@ function startAssistant() {
  * 페이지 로드 시 실행
  */
 window.addEventListener('DOMContentLoaded', () => {
-    // URL에서 토큰 확인 (OAuth 콜백에서 넘어온 경우)
-    const urlParams = new URLSearchParams(window.location.search);
-    const accessToken = urlParams.get('access_token');
-    const refreshToken = urlParams.get('refresh_token');
-    const userName = urlParams.get('name');
-    const userEmail = urlParams.get('user');
+    console.log('📄 Start 페이지 로드');
+    console.log('🍪 전체 쿠키:', document.cookie);
     
-    // 토큰이 URL에 있으면 저장
-    if (accessToken && refreshToken) {
-        console.log('✅ OAuth 로그인 성공 - 토큰 저장 (세션)');
-        storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
-        storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
-        
-        const user = {
-            email: userEmail,
-            name: userName
-        };
-        storage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-        
-        // URL에서 토큰 제거 (보안)
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
+    // 각 쿠키 개별 확인
+    const loggedIn = getCookie('logged_in');
+    const user = getCookie('user');
     
-    // 로그인 확인
+    console.log('✅ logged_in:', loggedIn);
+    console.log('👤 user:', user ? user : '❌ 없음');
+    console.log('ℹ️  참고: access_token, refresh_token은 HttpOnly 쿠키라서 JavaScript에서 읽을 수 없습니다.');
+    
+    // 로그인 확인 (쿠키에서)
     if (!isLoggedIn()) {
-        // 로그인 안 되어있으면 로그인 페이지로
+        console.error('❌ 로그인 안 됨 - /login으로 이동');
+        console.error('   원인: logged_in 쿠키가 없거나 false입니다');
         window.location.href = '/login';
         return;
     }
+    
+    console.log('✅ 로그인 확인됨 (쿠키)');
 
     // 사용자 정보 표시
-    const user = getUserInfo();
-    if (user) {
+    const userInfo = getUserInfo();
+    if (userInfo) {
         const userNameEl = document.getElementById('userName');
         if (userNameEl) {
-            userNameEl.textContent = user.name || user.email || '사용자님';
+            userNameEl.textContent = userInfo.name || userInfo.email || '사용자님';
         }
+        console.log('👤 사용자 정보:', userInfo);
     }
 
     // 시작하기 버튼 이벤트

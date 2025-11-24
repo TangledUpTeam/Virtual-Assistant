@@ -180,7 +180,7 @@ LLM 호출: 시스템 프롬프트 + 최근 15개
 
 ```python
 # service.py에서 RAG 활성화
-from app.domain.rag.retriever import RAGRetriever
+from app.domain.rag.HR.retriever import RAGRetriever
 
 chat_service = ChatService()
 chat_service.enable_rag(RAGRetriever())

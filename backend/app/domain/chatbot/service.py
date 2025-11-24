@@ -14,6 +14,21 @@ from app.domain.chatbot.session_manager import SessionManager
 from app.domain.chatbot.memory_manager import MemoryManager
 from app.domain.chatbot.summarizer import Summarizer
 
+# Tools Function Calling 지원 (추가)
+import sys
+from pathlib import Path
+tools_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "tools"
+if str(tools_path) not in sys.path:
+    sys.path.insert(0, str(tools_path))
+
+try:
+    from tools.schemas import function_definitions
+    TOOLS_AVAILABLE = True
+except ImportError:
+    function_definitions = []
+    TOOLS_AVAILABLE = False
+    print("⚠️ Tools module not available. Function calling disabled.")
+
 
 class ChatService:
     """
@@ -38,6 +53,25 @@ class ChatService:
         self.model = os.getenv("LLM_MODEL", "gpt-4o")
         self.system_prompt_base = self._get_system_prompt()
         self.rag_service = None  # 추후 RAG 통합용
+        
+        # Tool 함수 매핑 (Function Calling 실행용)
+        if TOOLS_AVAILABLE:
+            from tools import drive_tool, gmail_tool, slack_tool, notion_tool
+            self.tool_map = {
+                "create_folder": drive_tool.create_folder,
+                "upload_file": drive_tool.upload_file,
+                "search_files": drive_tool.search_files,
+                "download_file": drive_tool.download_file,
+                "send_email": gmail_tool.send_email,
+                "list_messages": gmail_tool.list_messages,
+                "get_message": gmail_tool.get_message,
+                "send_dm": slack_tool.send_dm,
+                "send_channel_message": slack_tool.send_channel_message,
+                "create_page": notion_tool.create_page,
+                "add_database_item": notion_tool.add_database_item,
+            }
+        else:
+            self.tool_map = {}
     
     def _get_system_prompt(self) -> str:
         """
@@ -79,19 +113,23 @@ class ChatService:
         """
         self.rag_service = rag_service
     
-    def create_session(self) -> str:
+    def create_session(self, user_id: int = None) -> str:
         """
         새로운 채팅 세션 생성
+        
+        Args:
+            user_id: 사용자 ID (선택)
         
         Returns:
             str: 세션 ID
         """
-        return self.session_manager.create_session()
+        return self.session_manager.create_session(user_id=user_id)
     
-    def process_message(
+    async def process_message(
         self,
         session_id: str,
         user_message: str,
+        user_id: int = None,
         temperature: float = 0.7
     ) -> str:
         """
@@ -152,14 +190,64 @@ class ChatService:
         
         # 9. OpenAI API 호출
         try:
-            response = self.openai_client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=1000
-            )
+            # Function Calling 지원 추가
+            if TOOLS_AVAILABLE and function_definitions:
+                response = self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=1000,
+                    functions=function_definitions,
+                    function_call="auto"
+                )
+            else:
+                response = self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=1000
+                )
             
             ai_message = response.choices[0].message.content
+            
+            # Function Call 처리 추가
+            if TOOLS_AVAILABLE and hasattr(response.choices[0].message, 'function_call') and response.choices[0].message.function_call:
+                function_name = response.choices[0].message.function_call.name
+                import json
+                function_args = json.loads(response.choices[0].message.function_call.arguments)
+                
+                if function_name in self.tool_map:
+                    try:
+                        tool_func = self.tool_map[function_name]
+                        
+                        # Gmail, Slack, Notion 도구는 user_id가 필요함
+                        if function_name in ["send_email", "list_messages", "get_message", 
+                                            "send_dm", "send_channel_message", 
+                                            "create_page", "add_database_item"]:
+                            # user_id를 문자열로 변환하여 전달
+                            if user_id:
+                                function_args["user_id"] = str(user_id)
+                            else:
+                                # user_id가 없으면 에러 메시지 설정하고 tool 실행 건너뛰기
+                                ai_message = f"❌ {function_name} 실행 실패: 로그인이 필요합니다."
+                                # 10. AI 응답 저장으로 바로 이동
+                                self.session_manager.add_message(session_id, "assistant", ai_message)
+                                self.memory_manager.append_message(
+                                    session_id,
+                                    {"role": "assistant", "content": ai_message, "timestamp": ""}
+                                )
+                                return ai_message
+                        
+                        result = await tool_func(**function_args)
+                        
+                        if result["success"]:
+                            ai_message = f"✅ 작업 완료!\n\n{json.dumps(result['data'], ensure_ascii=False, indent=2)}"
+                        else:
+                            ai_message = f"❌ 작업 실패: {result['error']}"
+                    except Exception as e:
+                        ai_message = f"❌ Tool 실행 중 오류: {str(e)}"
+                else:
+                    ai_message = f"⚠️ {function_name} 함수를 찾을 수 없습니다."
             
             # 10. AI 응답 저장 (deque + MD 파일)
             self.session_manager.add_message(session_id, "assistant", ai_message)
