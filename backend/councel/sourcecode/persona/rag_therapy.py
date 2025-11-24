@@ -136,6 +136,19 @@ class RAGTherapySystem:
         
         return "general"
     
+    def is_therapy_related(self, user_input: str) -> bool:
+        """
+        입력이 심리 상담 관련인지 확인
+        
+        Args:
+            user_input: 사용자 입력
+            
+        Returns:
+            bool: 심리 상담 관련 여부
+        """
+        input_type = self.classify_input(user_input)
+        return input_type in ["adler", "counseling"]
+    
     
     # 사용자 질문과 관련된 데이터를 상담 청크로부터 검색하는 함수
     def retrieve_chunks(self, user_input: str, n_results: int = 5) -> List[Dict[str, Any]]:
@@ -262,19 +275,12 @@ class RAGTherapySystem:
         
         # 1. 입력 분류
         input_type = self.classify_input(user_input)
-        mode_name = {"adler": "아들러 모드", "counseling": "상담 모드", "general": "일반 모드"}
-        print(f"\n📋 입력 유형: {mode_name.get(input_type, input_type)}")
         
         # 2. 영어로 번역 (Vector DB 검색용)
-        print("🌐 영어로 번역 중...")
         english_input = self.translate_to_english(user_input)
-        print(f"✓ 번역 완료: {english_input[:50]}...")
         
         # 3. 입력 유형에 따른 처리 (모든 모드에서 아들러 페르소나 사용)
-        print("\n🔍 관련 자료 검색 중...")
         retrieved_chunks = self.retrieve_chunks(english_input, n_results=5)
-        print(f"✓ {len(retrieved_chunks)}개의 관련 자료를 찾았습니다.")
-        print("🎭 아들러 페르소나 적용 중...\n")
         
         response = self.generate_response_with_persona(user_input, retrieved_chunks, mode=input_type)
         

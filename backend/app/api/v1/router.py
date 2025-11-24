@@ -7,6 +7,7 @@ from app.api.v1.endpoints.daily import router as daily_router
 from app.api.v1.endpoints.rag import router as rag_router
 from app.api.v1.endpoints.brainstorming import router as brainstorming_router
 from app.api.v1.endpoints.chatbot import router as chatbot_router
+from app.api.v1.endpoints.therapy import router as therapy_router
 
 api_router = APIRouter()
 
@@ -61,4 +62,11 @@ api_router.include_router(
     chatbot_router,
     prefix="/chatbot",
     tags=["Chatbot"]
+)
+
+# Therapy 엔드포인트
+api_router.include_router(
+    therapy_router,
+    prefix="/therapy",
+    tags=["Therapy"]
 )

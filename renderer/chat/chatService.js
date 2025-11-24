@@ -54,12 +54,35 @@ async function initSession() {
 }
 
 /**
+ * 심리 상담 관련 키워드 확인
+ * @param {string} text - 사용자 입력 텍스트
+ * @returns {boolean} 심리 상담 관련 여부
+ */
+function isTherapyRelated(text) {
+  const therapyKeywords = [
+    '힘들어', '상담', '짜증', '우울', '불안', '스트레스',
+    '고민', '걱정', '슬프', '외로', '화나', '답답',
+    '아들러', 'adler', 'counseling', 'therapy', 'help',
+    'depressed', 'anxious', '심리'
+  ];
+  
+  const lowerText = text.toLowerCase();
+  return therapyKeywords.some(keyword => lowerText.includes(keyword));
+}
+
+/**
  * 챗봇에게 메시지를 전송하고 응답을 받음
  * @param {string} userText - 사용자 입력 텍스트
  * @returns {Promise<{type: string, data: any}>} 챗봇 응답 (type과 data 포함)
  */
 export async function callChatModule(userText) {
   console.log('📨 사용자 메시지:', userText);
+  
+  // 심리 상담 관련 키워드가 있으면 Therapy API 호출
+  if (isTherapyRelated(userText)) {
+    console.log('🎭 심리 상담 모드 감지');
+    return await sendTherapyMessage(userText);
+  }
   
   // "오늘 뭐할지 추천" 등의 키워드가 있으면 TodayPlan API 호출
   if (userText.includes('오늘') && (userText.includes('추천') || userText.includes('뭐할'))) {
@@ -68,6 +91,45 @@ export async function callChatModule(userText) {
   
   // 챗봇 API 호출
   return await sendChatbotMessage(userText);
+}
+
+/**
+ * 심리 상담 메시지 전송
+ * @param {string} userText - 사용자 입력 텍스트
+ * @returns {Promise<{type: string, data: any}>}
+ */
+async function sendTherapyMessage(userText) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/therapy/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: userText
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`심리 상담 API 호출 실패: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('🎭 아들러 상담사 응답:', result);
+    
+    return {
+      type: 'therapy',
+      data: result.answer,
+      mode: result.mode,
+      used_chunks: result.used_chunks
+    };
+  } catch (error) {
+    console.error('❌ 심리 상담 API 오류:', error);
+    return {
+      type: 'error',
+      data: '심리 상담 시스템에 연결할 수 없습니다. 백엔드 서버를 확인해주세요.'
+    };
+  }
 }
 
 /**
