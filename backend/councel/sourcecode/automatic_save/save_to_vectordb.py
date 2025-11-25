@@ -137,7 +137,6 @@ class VectorDBManager:
                 metadatas.append(metadata)
             
             if not ids:
-                print(f"\n저장할 새로운 데이터가 없습니다. 모든 데이터가 이미 존재합니다.") # 배포 전 삭제 예정
                 return 0
             
             # 배치로 저장

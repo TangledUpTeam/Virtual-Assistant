@@ -178,7 +178,7 @@ class AutomaticSaveManager:
                     # 컬렉션이 없으면 계속 진행
                     pass
             except Exception as e:
-                print(f"Vector DB 확인 중 오류: {e}")
+                pass
         
         # 폴더가 없으면 생성
         if not folder_exists:
