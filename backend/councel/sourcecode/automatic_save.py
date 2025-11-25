@@ -11,9 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Tuple, Optional
 
-
+# 자동 저장 관리 클래스
 class AutomaticSaveManager:
-    """자동 저장 관리 클래스"""
     
     def __init__(self):
         # 기본 경로 설정
@@ -32,23 +31,17 @@ class AutomaticSaveManager:
         # 롤백을 위한 생성된 디렉토리 추적
         self.created_dirs = []
     
+    # 폴더와 파일 존재 여부 확인 -> 없으면 생성 있으면 건너뛰기
     def check_folder_and_files(self, folder_path: Path, file_pattern: str = "*") -> Tuple[bool, bool]:
-        """
-        폴더와 파일 존재 여부 확인
-        
-        Args:
-            folder_path: 확인할 폴더 경로
-            file_pattern: 파일 패턴 (예: "*.json")
-        
-        Returns:
-            (폴더 존재 여부, 파일 존재 여부)
-        """
+
+        # 폴더 여부 확인 -> 존재하면 True, 없으면 false
         folder_exists = folder_path.exists()
         files_exist = False
         
+        # 폴더가 존재할 경우 파일 여부 확인
         if folder_exists:
             files = list(folder_path.glob(file_pattern))
-            files_exist = len(files) > 0
+            files_exist = len(files) > 0 # 파일이 있으면 True, 없으면 False
         
         return folder_exists, files_exist
     

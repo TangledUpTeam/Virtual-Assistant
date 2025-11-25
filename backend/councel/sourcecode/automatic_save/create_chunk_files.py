@@ -3,6 +3,7 @@
 생성날짜: 2025.11.18
 수정날짜: 2025.11.19 - Adler PDF 처리 추가
 수정날짜: 2025.11.21 - Rogers 관련 코드 제거
+리팩토링: 2025.11.25 - 1차 코드 리팩토링(쓸데 없는 print문 제거 및 코드 정리)
 설명: Adler PDF 파일을 의미 단위로 청킹하여 개별 JSON 파일로 저장
 """
 
@@ -195,11 +196,13 @@ class ChunkCreator:
     # 청크 간 Overlap 추가(20%)
     def add_overlap(self, chunks: List[str]) -> List[str]:
 
+        # 청크가 1개 이하면 그대로 리턴
         if len(chunks) <= 1:
             return chunks
         
-        overlapped_chunks = []
+        overlapped_chunks = [] # Overlap 청크를 저장할 리스트
         
+        # 청크 개수만큼 반복하면서 Overlap 청크 생성
         for i, chunk in enumerate(chunks):
             if i == 0:
                 # 첫 번째 청크는 그대로
@@ -210,11 +213,12 @@ class ChunkCreator:
                 prev_tokens = self.encoding.encode(prev_chunk)
                 overlap_size = int(len(prev_tokens) * self.overlap_ratio)
                 
+                # Overlap 크기가 0보다 커야지만 청크 생성
                 if overlap_size > 0:
                     overlap_tokens = prev_tokens[-overlap_size:]
                     overlap_text = self.encoding.decode(overlap_tokens)
                     
-                    # 현재 청크에 overlap 추가
+                    # 현재 청크에 Overlap 추가
                     overlapped_chunks.append(overlap_text + "\n\n" + chunk)
                 else:
                     overlapped_chunks.append(chunk)
@@ -429,31 +433,6 @@ class ChunkCreator:
             # self.print_statistics(all_chunk_objects)
             
             return all_chunk_objects
-    
-    # 청크 생성 통계 
-    # def print_statistics(self, chunk_objects: List[Dict[str, Any]]):
-
-    #     # 타입별 통계
-    #     type_counts = {}
-    #     for chunk in chunk_objects:
-    #         file_type = chunk['metadata']['type']
-    #         type_counts[file_type] = type_counts.get(file_type, 0) + 1
-        
-
-    #     # for file_type, count in sorted(type_counts.items()):
-    #     #     print(f"    - {file_type}: {count}개")
-        
-    #     # 토큰 통계
-    #     token_counts = [self.count_tokens(chunk['text']) for chunk in chunk_objects]
-    #     avg_tokens = sum(token_counts) / len(token_counts)
-    #     max_tokens = max(token_counts)
-    #     min_tokens = min(token_counts)
-        
-    #     print(f"\n  토큰 통계:")
-    #     print(f"    - 평균: {avg_tokens:.1f} tokens")
-    #     print(f"    - 최대: {max_tokens} tokens")
-    #     print(f"    - 최소: {min_tokens} tokens")
-
 
 # ==================== Adler 관련 main 함수 ====================
 
@@ -498,12 +477,9 @@ def main():
         total_files += len(pdf_files)
         total_chunks += chunk_count if isinstance(chunk_count, int) else 0
     
+    # automatic_save.py에 관련 print문이 있을 경우 삭제 예정
     print("="*60)
     print("전체 작업 완료!")
-    print("="*60)
-    print(f"총 처리 파일: {total_files}개")
-    print(f"총 생성 청크: {total_chunks}개")
-    print(f"저장 위치: {output_dir}")
     print("="*60)
 
 
