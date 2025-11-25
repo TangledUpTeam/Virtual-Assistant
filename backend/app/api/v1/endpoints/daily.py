@@ -27,6 +27,7 @@ from app.llm.client import get_llm
 from app.domain.report.schemas import CanonicalReport
 from app.infrastructure.database.session import get_db
 from app.reporting.pdf_generator.daily_report_pdf import DailyReportPDFGenerator
+from ingestion.auto_ingest import ingest_single_report
 
 
 router = APIRouter(prefix="/daily", tags=["daily"])
@@ -197,23 +198,22 @@ async def answer_daily_question(
                     existing_json = existing_report.report_json.copy()
                     report_dict = report.model_dump(mode='json')
                     
-                    # 기존 금일 진행 업무 + FSM 시간대별 업무 병합
-                    existing_tasks = existing_json.get("tasks", [])
-                    new_tasks = report_dict.get("tasks", [])
+                    # 🔥 병합 전략:
+                    # - plans: existing에서 가져옴 (예정 업무는 select_main_tasks에서 이미 저장됨)
+                    # - tasks: new에서 가져옴 (실제 완료 업무는 FSM에서 입력됨)
+                    # - issues: new에서 가져옴 (미종결 업무)
+                    # - metadata: 병합
                     
-                    # 중복 제거: task_id 기준
-                    merged_tasks = existing_tasks.copy()
-                    existing_ids = {t.get("task_id") for t in existing_tasks if t.get("task_id")}
-                    
-                    for task in new_tasks:
-                        if task.get("task_id") not in existing_ids:
-                            merged_tasks.append(task)
+                    existing_plans = existing_json.get("plans", [])
+                    new_tasks = report_dict.get("tasks", [])  # 실제 완료 업무만
                     
                     # 병합된 데이터 생성
                     merged_json = {
                         **report_dict,
-                        "tasks": merged_tasks,
+                        "plans": existing_plans if existing_plans else report_dict.get("plans", []),  # 🔥 예정 업무 유지
+                        "tasks": new_tasks,  # 🔥 실제 완료 업무만
                         "metadata": {
+                            **existing_json.get("metadata", {}),
                             **report_dict.get("metadata", {}),
                             "status": "completed",
                             "merged": True
@@ -227,7 +227,9 @@ async def answer_daily_question(
                         DailyReportUpdate(report_json=merged_json)
                     )
                     
-                    print(f"💾 운영 DB 병합 완료: {report.owner} - {report.period_start} (tasks: {len(merged_tasks)}개)")
+                    print(f"💾 운영 DB 병합 완료: {report.owner} - {report.period_start}")
+                    print(f"   - 예정 업무(plans): {len(existing_plans)}개")
+                    print(f"   - 실제 완료(tasks): {len(new_tasks)}개")
                     is_created = False
                 else:
                     # 기존 보고서가 없으면 새로 생성
@@ -267,53 +269,22 @@ async def answer_daily_question(
                 
                 # 🔥 벡터 DB 자동 저장 (비동기 작업, 실패해도 계속 진행)
                 try:
-                    from app.domain.report.chunker import chunk_report
-                    from ingestion.embed import embed_texts
-                    from ingestion.chroma_client import get_chroma_service
-                    
                     print(f"⏳ 벡터 DB 저장 시작...")
                     
-                    # 1. 청킹
-                    chunks = chunk_report(report, include_summary=True)
+                    # 최종 보고서 가져오기 (병합된 버전)
+                    final_report_json = db_report.report_json
+                    final_report = CanonicalReport(**final_report_json)
                     
-                    if chunks:
-                        # 2. 임베딩 생성
-                        texts = [chunk["text"] for chunk in chunks]
-                        chunk_ids = [chunk["id"] for chunk in chunks]
-                        metadatas = [chunk["metadata"] for chunk in chunks]
-                        
-                        # 각 청크에 chunk_text 키 추가 (Chroma용)
-                        for chunk in chunks:
-                            chunk["chunk_text"] = chunk.pop("text")
-                        
-                        # 메타데이터에 날짜 정보 추가
-                        for metadata in metadatas:
-                            metadata["doc_type"] = "daily"  # ✅ 검색 필터용
-                            metadata["date"] = report.period_start.isoformat()
-                            metadata["month"] = report.period_start.strftime("%Y-%m")
-                            metadata["owner"] = report.owner
-                            
-                            # None 값 제거 (ChromaDB는 None을 허용하지 않음)
-                            metadata_cleaned = {k: v for k, v in metadata.items() if v is not None}
-                            metadata.clear()
-                            metadata.update(metadata_cleaned)
-                        
-                        embeddings = embed_texts(texts, api_key=os.getenv("OPENAI_API_KEY"))
-                        
-                        # 3. ChromaDB 저장
-                        chroma_service = get_chroma_service()
-                        collection = chroma_service.get_or_create_collection(name="unified_documents")
-                        
-                        collection.upsert(
-                            ids=chunk_ids,
-                            embeddings=embeddings,
-                            documents=texts,
-                            metadatas=metadatas
-                        )
-                        
-                        print(f"✅ 벡터 DB 저장 완료: {len(chunks)}개 청크 (collection: daily_reports)")
+                    # 자동 인제스트 함수 호출
+                    result = ingest_single_report(
+                        report=final_report,
+                        api_key=os.getenv("OPENAI_API_KEY")
+                    )
+                    
+                    if result["success"]:
+                        print(f"✅ 벡터 DB 저장 완료: {result.get('uploaded_chunks', 0)}개 청크")
                     else:
-                        print(f"⚠️  청크가 생성되지 않음 (벡터 DB 저장 건너뜀)")
+                        print(f"⚠️  벡터 DB 저장 실패: {result.get('message', 'Unknown error')}")
                 
                 except Exception as vector_error:
                     print(f"⚠️  벡터 DB 저장 실패 (보고서는 저장됨): {str(vector_error)}")
@@ -413,16 +384,19 @@ async def select_main_tasks(
             )
             
             if existing_report:
-                # 기존 보고서가 있으면 tasks만 업데이트 (append 모드 고려)
+                # 기존 보고서가 있으면 plans만 업데이트 (append 모드 고려)
                 report_json = existing_report.report_json.copy()
                 
-                if request.append and "tasks" in report_json:
-                    # 기존 tasks에 추가
-                    existing_tasks = report_json.get("tasks", [])
-                    report_json["tasks"] = existing_tasks + request.main_tasks
+                # 🔥 예정 업무는 plans에 저장 (tasks는 실제 완료 업무용)
+                new_plan_titles = [task.get("title", "") for task in request.main_tasks if task.get("title")]
+                
+                if request.append and "plans" in report_json:
+                    # 기존 plans에 추가
+                    existing_plans = report_json.get("plans", [])
+                    report_json["plans"] = existing_plans + new_plan_titles
                 else:
                     # 덮어쓰기
-                    report_json["tasks"] = request.main_tasks
+                    report_json["plans"] = new_plan_titles
                 
                 report_json["metadata"] = report_json.get("metadata", {})
                 report_json["metadata"]["status"] = "in_progress"
@@ -436,15 +410,16 @@ async def select_main_tasks(
                 print(f"💾 금일 진행 업무 업데이트 완료: {request.owner} - {request.target_date}")
             else:
                 # 새로운 부분 보고서 생성
+                # 🔥 예정 업무는 plans에 저장 (tasks는 실제 완료 업무용)
                 partial_report = {
                     "report_type": "daily",
                     "owner": request.owner,
                     "period_start": request.target_date.isoformat(),
                     "period_end": request.target_date.isoformat(),
-                    "tasks": request.main_tasks,
+                    "tasks": [],  # 🔥 비어있음 (FSM 완료 시 실제 완료 업무로 채워짐)
                     "kpis": [],
                     "issues": [],
-                    "plans": [],
+                    "plans": [task.get("title", "") for task in request.main_tasks if task.get("title")],  # 🔥 예정 업무
                     "metadata": {"status": "in_progress", "main_tasks_only": True}
                 }
                 

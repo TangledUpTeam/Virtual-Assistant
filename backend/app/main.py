@@ -46,16 +46,17 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created")
     
-    # Vector DB 자동 생성 (심리 상담 시스템용)
-    print("\n🧠 Initializing Therapy Vector DB...")
-    try:
-        success = automatic_save()
-        if success:
-            print("✅ Therapy Vector DB initialized successfully")
-        else:
-            print("⚠️  Therapy Vector DB initialization failed (may already exist)")
-    except Exception as e:
-        print(f"⚠️  Therapy Vector DB initialization error: {e}")
+    # Vector DB 자동 생성 (심리 상담 시스템용) - 임시 비활성화
+    # print("\n🧠 Initializing Therapy Vector DB...")
+    # try:
+    #     success = automatic_save()
+    #     if success:
+    #         print("✅ Therapy Vector DB initialized successfully")
+    #     else:
+    #         print("⚠️  Therapy Vector DB initialization failed (may already exist)")
+    # except Exception as e:
+    #     print(f"⚠️  Therapy Vector DB initialization error: {e}")
+    print("ℹ️  Therapy Vector DB initialization skipped")
     
     yield
     

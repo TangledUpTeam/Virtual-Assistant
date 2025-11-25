@@ -75,13 +75,31 @@ class DailyReportFSM:
         if context.last_answer:
             answer = context.last_answer.strip()
             
-            # "없음" 관련 키워드 체크
-            if answer.lower() in ['없음', '없어요', '없습니다', 'x', '-']:
+            # "없음" 관련 키워드 체크 (더 유연하게)
+            answer_lower = answer.lower().replace(" ", "")
+            
+            # 부정 키워드 리스트
+            negative_keywords = [
+                '없음', '없어요', '없습니다', '없네요', '없었어요',
+                '딱히없음', '딱히없어요', '딱히없습니다',
+                '특별히없음', '특별히없어요', '특별히없습니다',
+                'x', '-', 'n/a', 'na', 'none'
+            ]
+            
+            if answer_lower in negative_keywords:
                 context.issues = []
             else:
                 # 간단한 파싱 (줄바꿈으로 구분)
                 issue_lines = [line.strip() for line in answer.split('\n') if line.strip()]
-                context.issues = [{"description": line} for line in issue_lines]
+                
+                # 각 라인도 부정 표현 필터링
+                valid_issues = []
+                for line in issue_lines:
+                    line_lower = line.lower().replace(" ", "")
+                    if line_lower not in negative_keywords and len(line) > 1:
+                        valid_issues.append({"description": line})
+                
+                context.issues = valid_issues
             
             context.current_state = DailyState.RECEIVE_ISSUES
         
@@ -98,13 +116,31 @@ class DailyReportFSM:
         if context.last_answer:
             answer = context.last_answer.strip()
             
-            # "없음" 관련 키워드 체크
-            if answer.lower() in ['없음', '없어요', '없습니다', 'x', '-']:
+            # "없음" 관련 키워드 체크 (더 유연하게)
+            answer_lower = answer.lower().replace(" ", "")
+            
+            # 부정 키워드 리스트
+            negative_keywords = [
+                '없음', '없어요', '없습니다', '없네요', '없었어요',
+                '딱히없음', '딱히없어요', '딱히없습니다',
+                '특별히없음', '특별히없어요', '특별히없습니다',
+                'x', '-', 'n/a', 'na', 'none'
+            ]
+            
+            if answer_lower in negative_keywords:
                 context.plans = []
             else:
                 # 간단한 파싱 (줄바꿈으로 구분)
                 plan_lines = [line.strip() for line in answer.split('\n') if line.strip()]
-                context.plans = [{"title": line} for line in plan_lines]
+                
+                # 각 라인도 부정 표현 필터링
+                valid_plans = []
+                for line in plan_lines:
+                    line_lower = line.lower().replace(" ", "")
+                    if line_lower not in negative_keywords and len(line) > 1:
+                        valid_plans.append({"title": line})
+                
+                context.plans = valid_plans
             
             context.current_state = DailyState.RECEIVE_PLANS
         
