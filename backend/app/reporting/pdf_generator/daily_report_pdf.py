@@ -18,7 +18,7 @@ def clean_task_description(text: str) -> str:
     """
     업무 설명을 간결하게 정리
     
-    예: "대상자 리스트를 업데이트하는" → "대상자 리스트 업데이트"
+    예: "대상자 리스트를 업데이트합니다" → "대상자 리스트 업데이트"
         "암보험 보장 구간을 점검하는" → "암보험 보장 구간 점검"
     """
     if not text:
@@ -26,25 +26,34 @@ def clean_task_description(text: str) -> str:
     
     result = text
     
-    # 1. "~하는" 형태 제거 (가장 일반적인 패턴)
-    result = re.sub(r'하는$', '', result)  # 끝에 "하는"
-    result = re.sub(r'하는\s+(작업|업무)', '', result)  # "하는 작업/업무"
+    # 1. 종결어미 제거 (합니다, 입니다, 습니다, 함, 임)
+    result = re.sub(r'(합니다|입니다|습니다)\.?$', '', result)
+    result = re.sub(r'(함|임)\.?$', '', result)
     
-    # 2. "~를/을 [동사]하는" 패턴 처리
-    # "를 업데이트하는" → "업데이트"
+    # 2. "~하고 ... 합니다/진행함" 패턴 → "~하고 ... 진행"
+    result = re.sub(r'하고\s+(\S+)\s+(진행|수행|실시)합니다?', r'하고 \1 \2', result)
+    result = re.sub(r'하고\s+(\S+)\s+(진행|수행|실시)함', r'하고 \1 \2', result)
+    
+    # 3. "~를/을 [동사]합니다" → "[동사]"
+    result = re.sub(r'(을|를)\s+(\S+)합니다\.?$', r'\2', result)
+    result = re.sub(r'(을|를)\s+(\S+)함\.?$', r'\2', result)
+    
+    # 4. "~하는" 형태 제거
+    result = re.sub(r'하는$', '', result)
+    result = re.sub(r'하는\s+(작업|업무)', '', result)
     result = re.sub(r'(을|를)\s+(\S+)하는', r'\2', result)
-    
-    # 3. 명사+하는 → 명사 (예: "업데이트하는" → "업데이트")
     result = re.sub(r'(\S+)하는', r'\1', result)
     
-    # 4. "~입니다", "~작업", "~업무" 제거
-    result = re.sub(r'입니다\.?$', '', result)
+    # 5. "~니다" 종결 제거
+    result = re.sub(r'니다\.?$', '', result)
+    
+    # 6. "작업", "업무" 제거
     result = re.sub(r'\s*(작업|업무)\.?$', '', result)
     
-    # 5. 마침표 제거
-    result = re.sub(r'\.+$', '', result)
+    # 7. 마침표, 쉼표 제거
+    result = re.sub(r'[.,;]+$', '', result)
     
-    # 6. 연속된 공백 제거 및 앞뒤 공백 제거
+    # 8. 연속된 공백 제거 및 앞뒤 공백 제거
     result = re.sub(r'\s+', ' ', result).strip()
     
     return result
@@ -148,7 +157,7 @@ class DailyReportPDFGenerator(BasePDFGenerator):
             # 업무내용 (좌측 정렬)
             업무내용 = task.description or task.title
             업무내용 = clean_task_description(업무내용)  # 간결하게 정리
-            업무내용 = truncate_text(업무내용, max_length=40)
+            업무내용 = truncate_text(업무내용, max_length=32)
             
             self.draw_text(
                 x=195,
@@ -180,7 +189,7 @@ class DailyReportPDFGenerator(BasePDFGenerator):
                 x=195,
                 y=self._to_pdf_y(535),
                 text=미종결_업무,
-                font_size=12,
+                font_size=10,
                 line_height=14
             )
         
@@ -211,8 +220,8 @@ class DailyReportPDFGenerator(BasePDFGenerator):
         특이사항 = report.metadata.get('notes', '')
         if 특이사항:
             self.draw_multiline_text(
-                x=150,
-                y=self._to_pdf_y(1005),
+                x=195,
+                y=self._to_pdf_y(725),
                 text=특이사항,
                 font_size=10,
                 line_height=14

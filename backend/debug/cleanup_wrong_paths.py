@@ -26,6 +26,9 @@ def cleanup_wrong_paths():
     wrong_paths = [
         project_root / "backend" / "output",  # backend/backend/output
         project_root / "Data" / "chroma",  # 혹시 있을 수 있는 루트 레벨 Data
+        project_root / "backend" / "output" / "report_result" / "daily" / "output",  # 중복 경로
+        project_root / "backend" / "output" / "report_result" / "weekly" / "output",  # 중복 경로
+        project_root / "backend" / "output" / "report_result" / "monthly" / "output",  # 중복 경로
     ]
     
     removed_count = 0
