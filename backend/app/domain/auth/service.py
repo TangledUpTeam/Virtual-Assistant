@@ -28,8 +28,9 @@ class AuthService:
         Returns:
             Token 객체
         """
-        access_token = create_access_token({"sub": user_id, "email": email})
-        refresh_token = create_refresh_token({"sub": user_id})
+        # JWT 표준: sub는 문자열이어야 함
+        access_token = create_access_token({"sub": str(user_id), "email": email})
+        refresh_token = create_refresh_token({"sub": str(user_id)})
         
         return Token(
             access_token=access_token,
@@ -85,7 +86,16 @@ class AuthService:
         user_id = payload.get("sub")
         
         # 사용자 확인
-        user = self.user_service.get_user_by_id(user_id)
+        # sub가 문자열로 저장되므로 int로 변환
+        try:
+            user_id_int = int(user_id)
+        except (ValueError, TypeError):
+             raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token subject"
+            )
+
+        user = self.user_service.get_user_by_id(user_id_int)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -124,4 +134,10 @@ class AuthService:
                 detail="Invalid token payload"
             )
         
-        return user_id
+        try:
+            return int(user_id)
+        except (ValueError, TypeError):
+             raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token subject"
+            )
