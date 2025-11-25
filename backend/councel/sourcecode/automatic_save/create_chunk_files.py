@@ -221,6 +221,7 @@ class ChunkCreator:
                 temp_chunk = []
                 temp_tokens = 0
                 
+                # 한줄씩 반복하면서 토큰 수 초과하면 청크 생성
                 for line in lines:
                     line_tokens = self.count_tokens(line)
                     if temp_tokens + line_tokens > self.max_tokens:
