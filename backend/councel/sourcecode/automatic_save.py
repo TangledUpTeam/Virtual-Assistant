@@ -86,8 +86,6 @@ class AutomaticSaveManager:
     # 청크 파일 생성 함수(create_chunk_files.py 실행)
     def step1_create_chunks(self) -> bool:
 
-        print("Step 1: 청크 파일 생성")
-
         # 폴더 및 파일 확인
         folder_exists, files_exist = self.check_folder_and_files(
             self.chunkfiles_dir, 
@@ -96,7 +94,7 @@ class AutomaticSaveManager:
         
         # 폴더가 있고 파일도 있으면 건너뛰기
         if folder_exists and files_exist:
-            print("청크 파일이 이미 존재합니다. 건너뛰기...")
+            print("파일이 존재합니다. 건너뛰겠습니다.") # 배포 전 삭제 예정
             return True
         
         # 폴더가 없으면 생성
@@ -105,30 +103,20 @@ class AutomaticSaveManager:
         
         # 청크 파일 생성 실행
         try:
-            print("\n청크 파일 생성 시작...")
             if self.run_script(self.chunk_script):
-                print("\n청크 파일 생성 완료!")
                 return True
             else:
-                print("\n청크 파일 생성 실패!")
+                print("\n청크 파일 생성 실패!") # 배포 전 삭제 예정
                 return False
         except Exception as e:
-            print(f"\n청크 파일 생성 중 오류 발생: {e}")
+            print(f"\n청크 파일 생성 중 오류 발생: {e}") # 배포 전 삭제 예정
             import traceback
             traceback.print_exc()
             return False
     
+    # 임베딩 파일 생성 함수(create_openai_embeddings.py 실행)
     def step2_create_embeddings(self) -> bool:
-        """
-        Step 2: 임베딩 파일 생성
-        
-        Returns:
-            성공 여부
-        """
-        print("\n" + "="*60)
-        print("Step 2: 임베딩 파일 생성")
-        print("="*60)
-        
+
         # 폴더 및 파일 확인
         folder_exists, files_exist = self.check_folder_and_files(
             self.embeddings_dir,
@@ -137,7 +125,7 @@ class AutomaticSaveManager:
         
         # 폴더가 있고 파일도 있으면 건너뛰기
         if folder_exists and files_exist:
-            print("임베딩 파일이 이미 존재합니다. 건너뛰기...")
+            print("파일이 존재합니다. 건너뛰겠습니다.") # 배포 전 삭제 예정
             return True
         
         # 폴더가 없으면 생성
@@ -146,30 +134,20 @@ class AutomaticSaveManager:
         
         # 임베딩 파일 생성 실행
         try:
-            print("\n임베딩 파일 생성 시작...")
             if self.run_script(self.embedding_script):
-                print("\n임베딩 파일 생성 완료!")
                 return True
             else:
-                print("\n임베딩 파일 생성 실패!")
+                print("\n임베딩 파일 생성 실패!") # 배포 전 삭제 예정
                 return False
         except Exception as e:
-            print(f"\n임베딩 파일 생성 중 오류 발생: {e}")
+            print(f"\n임베딩 파일 생성 중 오류 발생: {e}") # 배포 전 삭제 예정
             import traceback
             traceback.print_exc()
             return False
     
+    # Vector DB 저장 함수(save_to_vectordb.py 실행)
     def step3_save_to_vectordb(self) -> bool:
-        """
-        Step 3: Vector DB에 저장
-        
-        Returns:
-            성공 여부
-        """
-        print("\n" + "="*60)
-        print("Step 3: Vector DB에 저장")
-        print("="*60)
-        
+
         # Vector DB 폴더 확인
         folder_exists = self.vector_db_dir.exists()
         
@@ -192,7 +170,7 @@ class AutomaticSaveManager:
                     collection = client.get_collection(name="vector_adler")
                     count = collection.count()
                     if count > 0:
-                        print(f"Vector DB에 이미 데이터가 존재합니다 ({count}개). 건너뛰기...")
+                        print(f"Vector DB에 이미 데이터가 존재합니다 ({count}개). 건너뛰기...") # 배포 전 삭제 예정
                         return True
                 except Exception:
                     # 컬렉션이 없으면 계속 진행
