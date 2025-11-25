@@ -124,7 +124,23 @@ def embed_chunks(chunks_path: Path) -> bool:
         
         for idx, ch in enumerate(chunks, 1):
             try:
-                text = ch["content"]
+                text = ch.get("content", "").strip()
+                
+                # 빈 청크 또는 너무 짧은 청크 스킵
+                if not text or len(text) < 10:
+                    logger.debug(f"청크 {idx}: 빈 청크 또는 너무 짧은 청크 스킵 ({len(text)}자)")
+                    skipped_count += 1
+                    continue
+                
+                # OCR 실패 메시지 체크 (추가 안전장치)
+                ocr_failure_indicators = [
+                    "i'm sorry", "can't assist", "can't transcribe",
+                    "image appears to be blank", "provide a different image"
+                ]
+                if any(indicator in text.lower() for indicator in ocr_failure_indicators):
+                    logger.warning(f"청크 {idx}: OCR 실패 메시지 감지, 스킵: {text[:50]}...")
+                    skipped_count += 1
+                    continue
                 
                 # 청크 ID 확인 및 생성 (UUID 기반으로 이미 고유함)
                 chunk_id = ch.get("id")
@@ -138,6 +154,12 @@ def embed_chunks(chunks_path: Path) -> bool:
                 
                 # 번역
                 translated = translate(text)
+                
+                # 번역 결과 검증
+                if not translated or len(translated.strip()) < 10:
+                    logger.warning(f"청크 {idx}: 번역 결과가 비어있거나 너무 짧음, 스킵")
+                    skipped_count += 1
+                    continue
                 
                 # 임베딩
                 vector = embed(translated)

@@ -14,7 +14,44 @@ from .utils import get_logger
 logger = get_logger(__name__)
 
 
+def is_ocr_failure_message(text: str) -> bool:
+    """
+    OCR 실패 메시지인지 확인
+    
+    Vision API가 실패할 때 반환하는 에러 메시지를 감지합니다.
+    
+    Args:
+        text: 확인할 텍스트
+        
+    Returns:
+        bool: OCR 실패 메시지인 경우 True
+    """
+    if not text:
+        return False
+    
+    text_lower = text.lower().strip()
+    
+    # OpenAI Vision API 실패 메시지 패턴
+    ocr_failure_indicators = [
+        "i'm sorry",
+        "i'm sorry, i can't",
+        "can't assist",
+        "can't transcribe",
+        "the image appears to be blank",
+        "the image you provided is blank",
+        "provide a different image",
+        "check if the file is correct"
+    ]
+    
+    return any(indicator in text_lower for indicator in ocr_failure_indicators)
+
+
 def merge_page_text(page):
+    """
+    페이지의 텍스트, 표, Vision OCR 결과를 병합
+    
+    OCR 실패 메시지는 필터링하여 제외합니다.
+    """
     text = page.get("text", "").strip()
 
     for key, label in [
@@ -25,7 +62,15 @@ def merge_page_text(page):
             value = page[key]
             if isinstance(value, list):
                 value = "\n\n".join(value)
-            text += f"\n\n{label}\n{value}"
+            
+            # OCR 실패 메시지 필터링
+            if key == "vision_markdown" and is_ocr_failure_message(value):
+                logger.warning(f"페이지 {page.get('page', '?')}: OCR 실패 메시지 감지 및 제외 - '{value[:50]}...'")
+                continue  # OCR 실패 메시지는 제외
+            
+            value = value.strip()
+            if value:  # 빈 값이 아닐 때만 추가
+                text += f"\n\n{label}\n{value}"
 
     return text
 
@@ -75,6 +120,12 @@ def chunk_json(json_path: Path) -> Path:
             page_num = page.get("page", 1)
             page_text = merge_page_text(page)
             
+            # 빈 페이지 스킵 (텍스트가 없거나 너무 짧은 경우)
+            # 빈 페이지는 청크 생성 자체를 스킵하여 ChromaDB에 저장되지 않도록 함
+            if not page_text or len(page_text.strip()) < 10:
+                logger.debug(f"페이지 {page_num}: 빈 페이지 또는 내용 부족 (길이: {len(page_text)}자), 청크 생성 스킵")
+                continue
+            
             # 청크 생성
             chunks = simple_chunk(
                 page_text,
@@ -85,7 +136,20 @@ def chunk_json(json_path: Path) -> Path:
             logger.debug(f"페이지 {page_num}: {len(chunks)}개 청크 생성")
 
             for c in chunks:
-                if not c.strip():  # 빈 청크 스킵
+                chunk_text = c.strip()
+                
+                # 빈 청크 스킵
+                if not chunk_text:
+                    continue
+                
+                # OCR 실패 메시지만 포함된 청크 스킵
+                if is_ocr_failure_message(chunk_text):
+                    logger.debug(f"페이지 {page_num}: OCR 실패 메시지 청크 스킵")
+                    continue
+                
+                # 최소 길이 검증 (너무 짧은 청크는 제외)
+                if len(chunk_text) < 10:  # 최소 10자 이상
+                    logger.debug(f"페이지 {page_num}: 너무 짧은 청크 스킵 ({len(chunk_text)}자)")
                     continue
                 
                 # UUID 기반 고유 ID 생성 (충돌 방지)
@@ -97,7 +161,7 @@ def chunk_json(json_path: Path) -> Path:
                     
                 output_chunks.append({
                     "id": unique_chunk_id,  # UUID 기반 고유 ID
-                    "content": c.strip(),
+                    "content": chunk_text,
                     "metadata": {
                         "page": page_num,
                         "source": source_filename,
