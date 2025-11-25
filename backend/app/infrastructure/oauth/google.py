@@ -25,10 +25,9 @@ class GoogleOAuthClient:
         Returns:
             Google 로그인 페이지 URL
         """
-        client = AsyncOAuth2Client(
             client_id=self.client_id,
             redirect_uri=self.redirect_uri,
-            scope="openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly"
+            scope="openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive"
         )
         
         # access_type='offline'로 Refresh Token 받기
