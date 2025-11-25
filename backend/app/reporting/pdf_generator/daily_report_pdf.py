@@ -11,6 +11,43 @@ from pathlib import Path
 from app.reporting.pdf_generator.base import BasePDFGenerator
 from app.reporting.pdf_generator.utils import format_korean_date, truncate_text
 from app.domain.report.schemas import CanonicalReport
+import re
+
+
+def clean_task_description(text: str) -> str:
+    """
+    업무 설명을 간결하게 정리
+    
+    예: "대상자 리스트를 업데이트하는" → "대상자 리스트 업데이트"
+        "암보험 보장 구간을 점검하는" → "암보험 보장 구간 점검"
+    """
+    if not text:
+        return text
+    
+    result = text
+    
+    # 1. "~하는" 형태 제거 (가장 일반적인 패턴)
+    result = re.sub(r'하는$', '', result)  # 끝에 "하는"
+    result = re.sub(r'하는\s+(작업|업무)', '', result)  # "하는 작업/업무"
+    
+    # 2. "~를/을 [동사]하는" 패턴 처리
+    # "를 업데이트하는" → "업데이트"
+    result = re.sub(r'(을|를)\s+(\S+)하는', r'\2', result)
+    
+    # 3. 명사+하는 → 명사 (예: "업데이트하는" → "업데이트")
+    result = re.sub(r'(\S+)하는', r'\1', result)
+    
+    # 4. "~입니다", "~작업", "~업무" 제거
+    result = re.sub(r'입니다\.?$', '', result)
+    result = re.sub(r'\s*(작업|업무)\.?$', '', result)
+    
+    # 5. 마침표 제거
+    result = re.sub(r'\.+$', '', result)
+    
+    # 6. 연속된 공백 제거 및 앞뒤 공백 제거
+    result = re.sub(r'\s+', ' ', result).strip()
+    
+    return result
 
 
 class DailyReportPDFGenerator(BasePDFGenerator):
@@ -35,121 +72,147 @@ class DailyReportPDFGenerator(BasePDFGenerator):
         Returns:
             PDF 바이트 스트림
         """
+        print(f"📄 일일보고서 PDF 생성 시작")
+        print(f"   Owner: {report.owner}, Date: {report.period_start}")
+        print(f"   Tasks: {len(report.tasks)}개, Issues: {len(report.issues)}개")
+        
         # Canvas 초기화
         self._init_canvas()
         
         # ========================================
-        # 헤더: 작성일자, 성명
+        # 상단 정보 (font 11pt)
+        # 작성자 / 작성일자 / 성명
         # ========================================
-        # TODO: 실제 템플릿에 맞게 좌표 조정 필요
         작성일자 = format_korean_date(report.period_start)
         성명 = report.owner
         
-        # 작성일자 (오른쪽 상단)
-        self.draw_text(420, self._to_pdf_y(80), 작성일자, font_size=11)  # TODO: 좌표 미세조정
-        
-        # 성명 (오른쪽 상단 아래)
-        self.draw_text(450, self._to_pdf_y(110), 성명, font_size=11)  # TODO: 좌표 미세조정
+        self.draw_text(172, self._to_pdf_y(105), 작성일자, font_size=10)
+        self.draw_text(340, self._to_pdf_y(105), 성명, font_size=10)
         
         # ========================================
-        # 금일 진행 업무 (요약)
+        # 금일 진행 업무 (font 10pt, line spacing 22px)
+        # y = 235, 257, 279 (최대 3줄)
         # ========================================
-        금일_진행_업무 = report.metadata.get('summary', '')
-        if 금일_진행_업무:
-            # TODO: 템플릿의 "금일 진행 업무" 섹션 좌표
-            self.draw_multiline_text(
-                x=70,  # TODO: 좌표 미세조정
-                y=self._to_pdf_y(180),  # TODO: 좌표 미세조정
-                text=금일_진행_업무,
-                font_size=10,
-                line_height=14,
-                max_width=450
-            )
+        금일_진행_업무_list = []
+        
+        # plans (예정 업무) 포함
+        if report.plans:
+            for idx, plan in enumerate(report.plans, 1):
+                plan_text = plan if isinstance(plan, str) else plan.get('title', str(plan))
+                금일_진행_업무_list.append(f"{idx}. {plan_text}")
+        
+        # summary 추가
+        summary = report.metadata.get('summary', '')
+        if summary:
+            금일_진행_업무_list.append(summary)
+        
+        # Y 좌표 배열 (보정된 좌표)
+        금일_진행_업무_y_positions = [165, 187, 209]
+        
+        for idx, line in enumerate(금일_진행_업무_list[:3]):
+            if idx < len(금일_진행_업무_y_positions):
+                self.draw_text(
+                    x=195,
+                    y=self._to_pdf_y(금일_진행_업무_y_positions[idx]),
+                    text=truncate_text(line, max_length=80),
+                    font_size=10
+                )
         
         # ========================================
-        # 세부업무 (시간대별 - 최대 9칸)
+        # 세부업무 표 (font 9pt)
+        # 시간은 출력하지 않음 (템플릿에 이미 인쇄됨)
+        # 업무내용 x=260, 비고 x=620
         # ========================================
-        # TODO: 템플릿의 표 시작 좌표 확인 필요
-        table_start_y = 250  # TODO: 실제 표 시작 위치로 조정
-        row_height = 30  # TODO: 실제 행 높이로 조정
+        # 시간대별 Y 좌표 맵핑 (보정된 좌표 +25px)
+        time_slot_y_positions = [
+            265,  # 09:00
+            295,  # 10:00
+            325,  # 11:00
+            350,  # 12:00
+            380,  # 13:00
+            410,  # 14:00
+            440,  # 15:00
+            465,  # 16:00
+            495   # 17:00
+        ]
         
-        # 시간대별 업무를 최대 9개까지 표시
+        # 최대 9개 업무 표시
         tasks = report.tasks[:9] if len(report.tasks) > 9 else report.tasks
         
         for idx, task in enumerate(tasks):
-            # 각 행의 Y 좌표 계산
-            current_y = self._to_pdf_y(table_start_y + (idx * row_height))
+            if idx >= len(time_slot_y_positions):
+                break
             
-            # 시간 (09:00 - 10:00)
-            time_text = ""
-            if task.time_start and task.time_end:
-                time_text = f"{task.time_start} - {task.time_end}"
-            elif task.time_start:
-                time_text = task.time_start
+            y_pos = time_slot_y_positions[idx]
             
-            self.draw_text(
-                x=70,  # TODO: 시간 열 X 좌표 조정
-                y=current_y,
-                text=time_text,
-                font_size=9
-            )
-            
-            # 업무내용
+            # 업무내용 (좌측 정렬)
             업무내용 = task.description or task.title
-            업무내용 = truncate_text(업무내용, max_length=40)  # 너무 길면 자르기
+            업무내용 = clean_task_description(업무내용)  # 간결하게 정리
+            업무내용 = truncate_text(업무내용, max_length=40)
             
             self.draw_text(
-                x=150,  # TODO: 업무내용 열 X 좌표 조정
-                y=current_y,
+                x=195,
+                y=self._to_pdf_y(y_pos),
                 text=업무내용,
-                font_size=9
+                font_size=10
             )
             
-            # 비고
+            # 비고 (좌측 정렬)
             비고 = task.note or ""
             if 비고:
+                # "카테고리: " 제거
+                비고 = re.sub(r'^카테고리:\s*', '', 비고)
                 비고 = truncate_text(비고, max_length=20)
                 self.draw_text(
-                    x=450,  # TODO: 비고 열 X 좌표 조정
-                    y=current_y,
+                    x=460,
+                    y=self._to_pdf_y(y_pos),
                     text=비고,
                     font_size=9
                 )
         
         # ========================================
-        # 미종결 업무사항
+        # 미종결 업무사항 (font 10pt)
+        # x=150, y=835
         # ========================================
         if report.issues:
-            미종결_업무 = ", ".join(report.issues)
+            미종결_업무 = "\n".join([f"• {issue}" for issue in report.issues])
             self.draw_multiline_text(
-                x=70,  # TODO: 좌표 미세조정
-                y=self._to_pdf_y(550),  # TODO: 좌표 미세조정
+                x=195,
+                y=self._to_pdf_y(535),
                 text=미종결_업무,
-                font_size=10,
+                font_size=12,
                 line_height=14
             )
         
         # ========================================
-        # 익일 업무계획
+        # 익일 업무계획 (font 10pt)
+        # x=150, y=920
         # ========================================
-        익일_업무계획 = report.metadata.get('next_plan', '')
+        익일_업무계획_raw = report.metadata.get('next_day_plans', '') or report.metadata.get('next_plan', '')
+        
+        if isinstance(익일_업무계획_raw, list):
+            익일_업무계획 = "\n".join([f"• {plan}" for plan in 익일_업무계획_raw]) if 익일_업무계획_raw else ""
+        else:
+            익일_업무계획 = str(익일_업무계획_raw) if 익일_업무계획_raw else ""
+        
         if 익일_업무계획:
             self.draw_multiline_text(
-                x=70,  # TODO: 좌표 미세조정
-                y=self._to_pdf_y(620),  # TODO: 좌표 미세조정
+                x=195,
+                y=self._to_pdf_y(630),
                 text=익일_업무계획,
                 font_size=10,
                 line_height=14
             )
         
         # ========================================
-        # 특이사항
+        # 특이사항 (font 10pt)
+        # x=150, y=1005
         # ========================================
         특이사항 = report.metadata.get('notes', '')
         if 특이사항:
             self.draw_multiline_text(
-                x=70,  # TODO: 좌표 미세조정
-                y=self._to_pdf_y(690),  # TODO: 좌표 미세조정
+                x=150,
+                y=self._to_pdf_y(1005),
                 text=특이사항,
                 font_size=10,
                 line_height=14
@@ -166,7 +229,13 @@ class DailyReportPDFGenerator(BasePDFGenerator):
         daily_dir = self.OUTPUT_DIR / "daily"
         daily_dir.mkdir(parents=True, exist_ok=True)
         output_path = daily_dir / output_filename
+        
+        print(f"📁 PDF 출력 경로: {output_path}")
+        print(f"   템플릿 경로: {self.template_path}")
+        
         pdf_bytes = self.merge_with_template(output_path)
+        
+        print(f"✅ PDF 생성 완료: {len(pdf_bytes)} bytes")
         
         return pdf_bytes
 

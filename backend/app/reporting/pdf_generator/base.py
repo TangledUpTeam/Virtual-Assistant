@@ -21,14 +21,17 @@ class BasePDFGenerator:
     # A4 크기 (points)
     PAGE_WIDTH, PAGE_HEIGHT = A4  # 595.27 x 841.89 points
     
-    # 기본 템플릿 경로
-    TEMPLATE_DIR = Path("backend/Data/reports")
-    OUTPUT_DIR = Path("backend/output/report_result")
+    # 프로젝트 루트 찾기 (backend/app/reporting/pdf_generator/base.py -> backend/)
+    _BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+    
+    # 기본 템플릿 경로 (절대 경로)
+    TEMPLATE_DIR = _BASE_DIR / "Data" / "reports"
+    OUTPUT_DIR = _BASE_DIR / "output" / "report_result"
     
     def __init__(self, template_filename: str):
         """
         Args:
-            template_filename: 템플릿 PDF 파일명 (예: "daily_template.pdf")
+            template_filename: 템플릿 PDF 파일명 (예: "일일 업무 보고서.pdf")
         """
         self.template_path = self.TEMPLATE_DIR / template_filename
         self.overlay_buffer = BytesIO()
@@ -36,6 +39,12 @@ class BasePDFGenerator:
         
         # 출력 디렉토리 생성
         self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # 템플릿 파일 존재 확인
+        if not self.template_path.exists():
+            print(f"⚠️  템플릿 파일을 찾을 수 없습니다: {self.template_path}")
+            print(f"   템플릿 디렉토리: {self.TEMPLATE_DIR}")
+            print(f"   확인해주세요: backend/Data/reports/{template_filename}")
         
     def _init_canvas(self):
         """ReportLab Canvas 초기화"""

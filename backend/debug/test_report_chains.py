@@ -66,6 +66,21 @@ def test_weekly_chain(owner: str = "김보험", target_date: date = None):
         action = "생성" if is_created else "업데이트"
         print(f"✅ DB 저장 완료 ({action})")
         
+        # PDF 생성
+        print(f"\n⏳ PDF 생성 중...")
+        from app.reporting.service.report_export_service import ReportExportService
+        
+        pdf_bytes = ReportExportService.export_weekly_pdf(
+            db=db,
+            owner=owner,
+            period_start=report.period_start,
+            period_end=report.period_end
+        )
+        
+        print(f"✅ PDF 생성 완료!")
+        print(f"   파일 크기: {len(pdf_bytes):,} bytes")
+        print(f"   저장 경로: backend/output/report_result/weekly/")
+        
         return True
         
     except Exception as e:
@@ -112,6 +127,21 @@ def test_monthly_chain(owner: str = "김보험", target_date: date = None):
         db_report, is_created = MonthlyReportRepository.create_or_update(db, report_create)
         action = "생성" if is_created else "업데이트"
         print(f"✅ DB 저장 완료 ({action})")
+        
+        # PDF 생성
+        print(f"\n⏳ PDF 생성 중...")
+        from app.reporting.service.report_export_service import ReportExportService
+        
+        pdf_bytes = ReportExportService.export_monthly_pdf(
+            db=db,
+            owner=owner,
+            period_start=report.period_start,
+            period_end=report.period_end
+        )
+        
+        print(f"✅ PDF 생성 완료!")
+        print(f"   파일 크기: {len(pdf_bytes):,} bytes")
+        print(f"   저장 경로: backend/output/report_result/monthly/")
         
         return True
         
@@ -192,7 +222,19 @@ def main():
     parser.add_argument('--performance', action='store_true', help='실적 보고서 테스트')
     parser.add_argument('--all', action='store_true', help='모두 테스트')
     parser.add_argument('--owner', default='김보험', help='작성자')
+    parser.add_argument('--date', type=str, help='기준 날짜 (YYYY-MM-DD, 예: 2025-11-18)')
     args = parser.parse_args()
+    
+    # 날짜 파싱
+    target_date = None
+    if args.date:
+        from datetime import datetime
+        try:
+            target_date = datetime.strptime(args.date, '%Y-%m-%d').date()
+            print(f"📅 지정된 날짜: {target_date}")
+        except ValueError:
+            print(f"❌ 잘못된 날짜 형식: {args.date} (YYYY-MM-DD 형식을 사용하세요)")
+            return
     
     print()
     print("=" * 80)
@@ -203,11 +245,11 @@ def main():
     results = []
     
     if args.weekly or args.all:
-        results.append(('주간', test_weekly_chain(args.owner)))
+        results.append(('주간', test_weekly_chain(args.owner, target_date)))
         print()
     
     if args.monthly or args.all:
-        results.append(('월간', test_monthly_chain(args.owner)))
+        results.append(('월간', test_monthly_chain(args.owner, target_date)))
         print()
     
     if args.performance or args.all:
