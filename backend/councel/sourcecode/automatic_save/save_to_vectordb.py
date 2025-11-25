@@ -1,6 +1,7 @@
 """
 Vector DB 저장 스크립트
 생성날짜: 2025.11.21
+리팩토링: 2025.11.25 - 1차 코드 리팩토링(쓸데 없는 print문 제거 및 코드 정리)
 설명: adler/embeddings 폴더의 OpenAI 임베딩 파일들을 ChromaDB에 저장
 """
 
@@ -82,7 +83,6 @@ class VectorDBManager:
                     name=collection_name,
                     metadata={"hnsw:space": "cosine"}  # 코사인 유사도 사용
                 )
-                print(f"새 컬렉션 '{collection_name}' 생성 완료")
                 return collection
                 
             except Exception as e:
@@ -120,7 +120,6 @@ class VectorDBManager:
             metadatas = []
             skipped_count = 0
             
-            print(f"\n데이터 준비 중...")
             for item in data:
                 # 이미 존재하는 ID는 건너뛰기
                 if item['id'] in existing_ids:
@@ -138,7 +137,6 @@ class VectorDBManager:
                 metadatas.append(metadata)
             
             if not ids:
-                print(f"\n저장할 새로운 데이터가 없습니다. 모든 데이터가 이미 존재합니다.") # 배포 전 삭제 예정
                 return 0
             
             # 배치로 저장
@@ -163,9 +161,6 @@ class VectorDBManager:
                 except Exception as e:
                     print(f"\n배치 저장 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
                     failed_batches += 1
-            
-            print(f"\n배치 저장 완료:")
-            print(f"  - 저장된 항목: {total_items}개")
             
             return total_items
         
@@ -202,10 +197,6 @@ class VectorDBManager:
 # 예외처리 print문 및 쓸데없는 print문은 배포 전 삭제 예정
 def main():
     
-    print("=" * 60)
-    print("Vector DB 저장 스크립트")
-    print("=" * 60)
-    
     # 경로 설정 (sourcecode/automatic_save 기준)
     base_dir = Path(__file__).parent.parent.parent
     embedding_dir = base_dir / "dataset" / "adler" / "embeddings"
@@ -228,14 +219,9 @@ def main():
 
     try:
         # Vector DB 매니저 초기화
-        print(f"\n{'='*60}")
         db_manager = VectorDBManager(str(vector_db_dir))
         
         # 모든 임베딩 파일의 데이터를 하나로 합치기
-        print(f"\n{'='*60}")
-        print("임베딩 파일 로드 중...")
-        print(f"{'='*60}")
-        
         all_data = []
         file_stats = []
         
@@ -265,10 +251,6 @@ def main():
             sys.exit(1)
         
         # Vector DB에 저장
-        print(f"\n{'='*60}")
-        print(f"Vector DB에 저장 중")
-        print(f"{'='*60}")
-        
         total_saved = db_manager.save_to_collection(
             collection_name=collection_name,
             data=all_data,
@@ -276,34 +258,23 @@ def main():
         )
         
         # 검증
-        print(f"\n{'='*60}")
-        print("컬렉션 검증 중...")
-        print(f"{'='*60}")
+        # verification = db_manager.verify_collection(collection_name)
         
-        verification = db_manager.verify_collection(collection_name)
+        # print(f"\n컬렉션 정보:")
+        # print(f"  - 이름: {verification['name']}")
+        # print(f"  - 저장된 항목 수: {verification['count']}개")
+        # print(f"  - 메타데이터: {verification['metadata']}")
+        # if 'sample_id' in verification:
+        #     print(f"  - 샘플 ID: {verification['sample_id']}")
         
-        print(f"\n컬렉션 정보:")
-        print(f"  - 이름: {verification['name']}")
-        print(f"  - 저장된 항목 수: {verification['count']}개")
-        print(f"  - 메타데이터: {verification['metadata']}")
-        if 'sample_id' in verification:
-            print(f"  - 샘플 ID: {verification['sample_id']}")
-        
-        # 최종 결과
-        print(f"\n{'='*60}")
-        print("전체 작업 완료!")
-        print(f"{'='*60}")
-        print(f"총 삽입된 벡터 개수: {total_saved}개")
-        print(f"컬렉션 이름: {collection_name}")
-        print(f"DB 저장 위치: {vector_db_dir}")
-        print(f"{'='*60}")
-        
-        # 파일별 상세 결과
-        # 나중에 아예 삭제할 예정
-        print(f"\n파일별 처리 결과:")
-        for stat in file_stats:
-            status_symbol = "✓" if stat['status'] == '성공' else "✗"
-            print(f"  {status_symbol} {stat['file']}: {stat['count']}개 ({stat['status']})")
+        # # 최종 결과
+        # print(f"\n{'='*60}")
+        # print("전체 작업 완료!")
+        # print(f"{'='*60}")
+        # print(f"총 삽입된 벡터 개수: {total_saved}개")
+        # print(f"컬렉션 이름: {collection_name}")
+        # print(f"DB 저장 위치: {vector_db_dir}")
+        # print(f"{'='*60}")
         
     except KeyboardInterrupt:
         print("\n\n작업이 사용자에 의해 중단되었습니다.")
