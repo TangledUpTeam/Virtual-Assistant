@@ -45,39 +45,29 @@ class AutomaticSaveManager:
         
         return folder_exists, files_exist
     
+    # 폴더가 없으면 폴더 생성
     def create_folder_if_not_exists(self, folder_path: Path) -> None:
-        """폴더가 없으면 생성"""
+
         if not folder_path.exists():
             folder_path.mkdir(parents=True, exist_ok=True)
             self.created_dirs.append(folder_path)
-            print(f"폴더 생성: {folder_path}")
     
+    # 에러 발생 시 생성된 폴더 및 파일 삭제
     def rollback(self) -> None:
-        """에러 발생 시 생성된 폴더 및 파일 삭제"""
-        print("\n에러 발생으로 인한 롤백 시작...")
         
         for dir_path in reversed(self.created_dirs):
             if dir_path.exists():
                 try:
                     shutil.rmtree(dir_path)
-                    print(f"삭제 완료: {dir_path}")
                 except Exception as e:
-                    print(f"삭제 실패: {dir_path} - {e}")
-        
-        print("롤백 완료")
+                    print(f"삭제 실패: {dir_path} - {e}") # 배포 전 삭제 예정
     
+    # Python 스크립트 실행
     def run_script(self, script_path: Path) -> bool:
-        """
-        Python 스크립트 실행
-        
-        Args:
-            script_path: 실행할 스크립트 경로
-        
-        Returns:
-            성공 여부
-        """
+
+        # 스크립트 파일이 없으면 False 리턴
         if not script_path.exists():
-            print(f"오류: 스크립트 파일을 찾을 수 없습니다: {script_path}")
+            print(f"오류: 스크립트 파일을 찾을 수 없습니다: {script_path}") # 배포 전 삭제 예정
             return False
         
         try:
@@ -90,20 +80,14 @@ class AutomaticSaveManager:
             )
             return result.returncode == 0
         except Exception as e:
-            print(f"스크립트 실행 중 오류: {e}")
+            print(f"스크립트 실행 중 오류: {e}") # 배포 전 삭제 예정
             return False
     
+    # 청크 파일 생성 함수(create_chunk_files.py 실행)
     def step1_create_chunks(self) -> bool:
-        """
-        Step 1: 청크 파일 생성
-        
-        Returns:
-            성공 여부
-        """
-        print("\n" + "="*60)
+
         print("Step 1: 청크 파일 생성")
-        print("="*60)
-        
+
         # 폴더 및 파일 확인
         folder_exists, files_exist = self.check_folder_and_files(
             self.chunkfiles_dir, 
