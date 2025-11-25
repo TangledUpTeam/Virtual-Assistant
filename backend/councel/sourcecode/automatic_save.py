@@ -71,6 +71,7 @@ class AutomaticSaveManager:
             return False
         
         try:
+
             # Python 인터프리터로 스크립트 실행
             result = subprocess.run(
                 [sys.executable, str(script_path)],
@@ -154,6 +155,7 @@ class AutomaticSaveManager:
         # 폴더가 있으면 컬렉션 확인
         if folder_exists:
             try:
+
                 import chromadb
                 from chromadb.config import Settings
                 
@@ -184,9 +186,7 @@ class AutomaticSaveManager:
         
         # Vector DB 저장 실행
         try:
-            print("\nVector DB 저장 시작...")
             if self.run_script(self.vectordb_script):
-                print("\nVector DB 저장 완료!")
                 return True
             else:
                 print("\nVector DB 저장 실패!")
@@ -197,13 +197,9 @@ class AutomaticSaveManager:
             traceback.print_exc()
             return False
     
+    # 전체 프로세스 실행
     def run(self) -> bool:
-        """
-        전체 프로세스 실행
-        
-        Returns:
-            성공 여부
-        """
+
         print("\n" + "="*60)
         print("자동 저장 프로세스 시작")
         print("="*60)
@@ -232,24 +228,16 @@ class AutomaticSaveManager:
             self.rollback()
             return False
 
-
+# 외부에서 호출 가능한 함수(automatic_save.py 실행)
 def automatic_save() -> bool:
-    """
-    외부에서 호출 가능한 함수
-    
-    Returns:
-        성공 여부
-    """
     manager = AutomaticSaveManager()
     return manager.run()
 
-
+# 단독 실행용 메인 함수
 def main():
-    """메인 함수 (단독 실행용)"""
     success = automatic_save()
     sys.exit(0 if success else 1)
 
 
 if __name__ == "__main__":
     main()
-

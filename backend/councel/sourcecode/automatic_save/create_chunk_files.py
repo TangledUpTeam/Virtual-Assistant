@@ -11,7 +11,7 @@ import os
 import json
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 import tiktoken
 import fitz  # PyMuPDF
 
@@ -126,7 +126,7 @@ class ChunkCreator:
     def extract_metadata_adler(self, filename: str) -> Dict[str, Any]:
 
         # 확장자 제거
-        clean_name = filename.replace('.md', '').replace('.pdf', '')
+        clean_name = filename.replace('.pdf', '')
         parts = clean_name.split('_')
         
         file_category = parts[1] if len(parts) > 1 else "unknown"
@@ -157,41 +157,6 @@ class ChunkCreator:
     # 파일명에서 메타데이터 추출
     def extract_metadata_from_filename(self, filename: str) -> Dict[str, Any]:
         return self.extract_metadata_adler(filename)
-    
-    # 마크다운 파일을 의미 단위로 분할하는 코드
-    def split_by_sections(self, content: str) -> List[Tuple[str, str]]:
-
-        lines = content.split('\n')
-        sections = []
-        current_title = ""
-        current_content = []
-        
-        # 최상위 제목 패턴 (# Title)
-        main_title_pattern = r'^# .+'
-        # 섹션 제목 패턴 (## 1. 또는 ## Title)
-        section_pattern = r'^## (?:\d+\.\s*)?(.+)'
-        
-        for line in lines:
-            # 최상위 제목
-            if re.match(main_title_pattern, line):
-                if current_content:
-                    sections.append((current_title, '\n'.join(current_content)))
-                current_title = line
-                current_content = [line]
-            # 섹션 제목 (## 로 시작)
-            elif re.match(section_pattern, line):
-                if current_content:
-                    sections.append((current_title, '\n'.join(current_content)))
-                current_title = line
-                current_content = [line]
-            else:
-                current_content.append(line)
-        
-        # 마지막 섹션 추가
-        if current_content:
-            sections.append((current_title, '\n'.join(current_content)))
-        
-        return sections
     
     # 청크 간 Overlap 추가(20%)
     def add_overlap(self, chunks: List[str]) -> List[str]:
@@ -288,32 +253,15 @@ class ChunkCreator:
         
         return chunks
     
-    # 파일을 의미 단위로 청크 분할
+    # PDF 파일을 청크 분할
     def process_file(self, filepath: Path, metadata: Dict[str, Any]) -> List[str]:
 
-        # 파일 확장자 확인
-        if filepath.suffix.lower() == '.pdf':
-            # PDF 처리
-            content = self.extract_text_from_pdf(filepath)
-            content = self.clean_pdf_text(content)
-        else:
-            # 마크다운 처리
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
+        # PDF 텍스트 추출 및 정제
+        content = self.extract_text_from_pdf(filepath)
+        content = self.clean_pdf_text(content)
         
-        # 섹션별로 분할
-        sections = self.split_by_sections(content)
-        
-        all_chunks = []
-        
-        for section_title, section_content in sections:
-            # 빈 섹션 건너뛰기
-            if not section_content.strip():
-                continue
-            
-            # 섹션이 토큰 제한을 초과하면 분할
-            section_chunks = self.split_large_section(section_content)
-            all_chunks.extend(section_chunks)
+        # 토큰 제한에 맞춰 분할
+        all_chunks = self.split_large_section(content)
         
         # 청크가 없으면 전체 파일을 하나의 청크로
         if not all_chunks:
@@ -378,7 +326,7 @@ class ChunkCreator:
     # 디렉토리 내 모든 파일 처리
     # 한개의 파일로 할건지 개별 파일로 할건지 선택
     def process_directory(self, input_dir: Path, output_dir: Path, 
-                         file_pattern: str = "*.md", save_individually: bool = False):
+                         file_pattern: str = "*.pdf", save_individually: bool = False):
 
         # 출력 디렉토리 생성
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -429,9 +377,6 @@ class ChunkCreator:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(all_chunk_objects, f, ensure_ascii=False, indent=2)
             
-            # 통계 출력(필요 없는 부분)
-            # self.print_statistics(all_chunk_objects)
-            
             return all_chunk_objects
 
 # ==================== Adler 관련 main 함수 ====================
@@ -448,11 +393,6 @@ def main():
     
     # 5개 카테고리 디렉토리
     categories = ["case", "theory", "interventions", "qna", "tone"]
-    
-    print("="*60)
-    print("Adler PDF 청크 파일 생성 시작")
-    print("="*60)
-    print()
     
     total_files = 0
     total_chunks = 0
@@ -476,12 +416,6 @@ def main():
         pdf_files = list(input_dir.glob("*.pdf"))
         total_files += len(pdf_files)
         total_chunks += chunk_count if isinstance(chunk_count, int) else 0
-    
-    # automatic_save.py에 관련 print문이 있을 경우 삭제 예정
-    print("="*60)
-    print("전체 작업 완료!")
-    print("="*60)
-
 
 if __name__ == "__main__":
     main() # 실행

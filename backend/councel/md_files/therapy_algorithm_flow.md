@@ -13,28 +13,85 @@
 ```
 [1단계] 백엔드 서버 시작
     ↓
-[2단계] Vector DB 자동 생성 (automatic_save)
+[2단계] Vector DB 자동 생성 (automatic_save, 자세한건 algorithm_flow.md 참고)
     ├─ Step 1: 청크 파일 생성
     ├─ Step 2: 임베딩 파일 생성
     └─ Step 3: Vector DB 저장
     ↓
-[3단계] TherapyService 초기화
+[3단계] TherapyService 초기화(therapy_algorithm_flow.md 174줄 이하 참고)
     ↓
-[4단계] 사용자 입력 (프론트엔드)
+[4단계] 사용자 입력 (프론트엔드, therapy_algorithm_flow.md 196줄 이하 참고)
     ↓
-[5단계] 키워드 감지 (chatService.js)
+[5단계] 키워드 감지 (chatService.js, therapy_algorithm_flow.md 220줄 이하 참고)
     ↓
-[6단계] Therapy API 호출
+[6단계] Therapy API 호출(therapy_algorithm_flow.md 254줄 이하 참고)
     ↓
-[7단계] RAG 시스템 처리
+[7단계] RAG 시스템 처리(therapy_algorithm_flow.md 292줄 이하 참고)
     ├─ 입력 분류
     ├─ 영어 번역
     ├─ Vector DB 검색
     ├─ 페르소나 적용
     └─ 답변 생성
     ↓
-[8단계] 응답 반환 및 UI 표시
+[8단계] 응답 반환 및 UI 표시(therapy_algorithm_flow.md 451줄 이하 참고)
 ```
+
+---
+
+## 🔄 전체 데이터 흐름
+
+```
+[원본 PDF]
+    ↓
+[청크 파일] (JSON)
+    ↓
+[임베딩 파일] (JSON, 벡터)
+    ↓
+[Vector DB] (ChromaDB)
+    ↓
+[사용자 입력] (한국어)
+    ↓
+[영어 번역]
+    ↓
+[임베딩 벡터]
+    ↓
+[Vector DB 검색] (유사도 검색)
+    ↓
+[관련 청크 5개]
+    ↓
+[아들러 페르소나 + 컨텍스트]
+    ↓
+[GPT-4o-mini 답변 생성]
+    ↓
+[한국어 답변] (2-3문장)
+    ↓
+[프론트엔드 UI 표시] (🎭 아이콘)
+```
+
+---
+
+## 📊 주요 컴포넌트 역할
+
+| 컴포넌트 | 파일 | 역할 |
+|---------|------|------|
+| **AutomaticSaveManager** | `automatic_save.py` | Vector DB 자동 생성 관리 |
+| **RAGTherapySystem** | `rag_therapy.py` | RAG 기반 상담 시스템 핵심 로직 |
+| **TherapyService** | `therapy/service.py` | FastAPI와 RAG 시스템 연결 |
+| **Therapy Endpoint** | `endpoints/therapy.py` | REST API 엔드포인트 |
+| **ChatService** | `chatService.js` | 키워드 감지 및 API 호출 |
+| **ChatPanel** | `chatPanel.js` | UI 메시지 표시 |
+
+---
+
+---
+
+## 🎯 핵심 알고리즘 요약
+
+1. **서버 시작** → Vector DB 자동 생성 (청크 → 임베딩 → 저장)
+2. **사용자 입력** → 키워드 감지 → Therapy API 호출
+3. **입력 처리** → 분류 → 번역 → Vector DB 검색
+4. **답변 생성** → 페르소나 적용 → GPT 생성 → 히스토리 업데이트
+5. **UI 표시** → 특별한 스타일로 메시지 표시
 
 ---
 
@@ -459,52 +516,6 @@ function addTherapyMessage(text, mode) {
 }
 ```
 
----
-
-## 🔄 전체 데이터 흐름
-
-```
-[원본 PDF]
-    ↓
-[청크 파일] (JSON)
-    ↓
-[임베딩 파일] (JSON, 벡터)
-    ↓
-[Vector DB] (ChromaDB)
-    ↓
-[사용자 입력] (한국어)
-    ↓
-[영어 번역]
-    ↓
-[임베딩 벡터]
-    ↓
-[Vector DB 검색] (유사도 검색)
-    ↓
-[관련 청크 5개]
-    ↓
-[아들러 페르소나 + 컨텍스트]
-    ↓
-[GPT-4o-mini 답변 생성]
-    ↓
-[한국어 답변] (2-3문장)
-    ↓
-[프론트엔드 UI 표시] (🎭 아이콘)
-```
-
----
-
-## 📊 주요 컴포넌트 역할
-
-| 컴포넌트 | 파일 | 역할 |
-|---------|------|------|
-| **AutomaticSaveManager** | `automatic_save.py` | Vector DB 자동 생성 관리 |
-| **RAGTherapySystem** | `rag_therapy.py` | RAG 기반 상담 시스템 핵심 로직 |
-| **TherapyService** | `therapy/service.py` | FastAPI와 RAG 시스템 연결 |
-| **Therapy Endpoint** | `endpoints/therapy.py` | REST API 엔드포인트 |
-| **ChatService** | `chatService.js` | 키워드 감지 및 API 호출 |
-| **ChatPanel** | `chatPanel.js` | UI 메시지 표시 |
-
----
 
 ## ⚙️ 설정 및 파라미터
 
@@ -526,20 +537,9 @@ function addTherapyMessage(text, mode) {
 
 ---
 
-## 🎯 핵심 알고리즘 요약
-
-1. **서버 시작** → Vector DB 자동 생성 (청크 → 임베딩 → 저장)
-2. **사용자 입력** → 키워드 감지 → Therapy API 호출
-3. **입력 처리** → 분류 → 번역 → Vector DB 검색
-4. **답변 생성** → 페르소나 적용 → GPT 생성 → 히스토리 업데이트
-5. **UI 표시** → 특별한 스타일로 메시지 표시
-
----
-
 ## 📝 참고사항
 
 - Vector DB는 서버 시작 시 한 번만 생성 (이미 존재하면 건너뛰기)
 - 대화 히스토리는 메모리에만 저장 (세션별로 관리되지 않음)
 - 모든 모드(adler/counseling/general)에서 아들러 페르소나 적용
 - 다국어 지원: 한국어 입력 → 영어 번역 → Vector DB 검색 → 한국어 답변
-
