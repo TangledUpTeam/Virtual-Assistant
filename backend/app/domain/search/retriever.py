@@ -94,8 +94,17 @@ class UnifiedRetriever:
         if single_date:
             conditions.append({"date": single_date})
         elif period_start and period_end:
-            conditions.append({"period_start": {"$gte": period_start}})
-            conditions.append({"period_end": {"$lte": period_end}})
+            # 일일보고서는 date 필드를 사용하므로, 기간 내 모든 날짜를 $in으로 검색
+            # ChromaDB는 날짜 문자열에 대해 $gte/$lte를 지원하지 않으므로 $in 사용
+            from datetime import datetime, timedelta
+            start = datetime.strptime(period_start, "%Y-%m-%d")
+            end = datetime.strptime(period_end, "%Y-%m-%d")
+            date_list = []
+            current = start
+            while current <= end:
+                date_list.append(current.strftime("%Y-%m-%d"))
+                current += timedelta(days=1)
+            conditions.append({"date": {"$in": date_list}})
         
         # 조건이 하나만 있으면 그대로, 여러개면 $and로 묶기
         if len(conditions) == 1:
