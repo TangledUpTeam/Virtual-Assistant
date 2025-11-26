@@ -65,11 +65,15 @@ def build_chunk_metadata(
         "report_id": canonical.report_id,
         "report_type": canonical.report_type,
         "owner": canonical.owner,
+        "doc_type": canonical.report_type,  # retriever에서 doc_type으로 필터링
     }
     
     # 날짜 정보 추가
     if canonical.period_start:
         metadata["period_start"] = canonical.period_start.isoformat()
+        # 일일보고서의 경우 date 필드도 추가 (retriever에서 date로 검색)
+        if canonical.report_type == "daily":
+            metadata["date"] = canonical.period_start.isoformat()
     
     if canonical.period_end:
         metadata["period_end"] = canonical.period_end.isoformat()

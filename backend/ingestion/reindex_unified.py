@@ -366,7 +366,7 @@ def upload_to_chroma(
     reset_collection: bool = True
 ):
     """
-    Chroma Cloud에 업로드
+    로컬 ChromaDB에 업로드
     
     Args:
         ids: 청크 ID 리스트
@@ -376,7 +376,7 @@ def upload_to_chroma(
         reset_collection: True면 기존 컬렉션 삭제 후 재생성
     """
     print("=" * 80)
-    print("📊 Step 5: Chroma Cloud 업로드")
+    print("📊 Step 5: 로컬 ChromaDB 업로드")
     print("=" * 80)
     print()
     
@@ -425,14 +425,14 @@ def upload_to_chroma(
         
         print()
         print("=" * 80)
-        print("✅ Chroma Cloud 업로드 완료!")
+        print("✅ 로컬 ChromaDB 업로드 완료!")
         print("=" * 80)
         print(f"컬렉션: {COLLECTION_NAME}")
         print(f"총 문서 수: {collection.count()}개")
         print()
     
     except Exception as e:
-        print(f"❌ Chroma Cloud 오류: {e}")
+        print(f"❌ 로컬 ChromaDB 오류: {e}")
         raise
 
 

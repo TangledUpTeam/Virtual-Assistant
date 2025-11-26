@@ -24,6 +24,13 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 # .env 파일 로드
+import sys
+import io
+# Windows 인코딩 문제 해결
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 try:
     from dotenv import load_dotenv
     env_path = project_root / ".env"
@@ -401,9 +408,9 @@ def ingest_daily_reports_pipeline(api_key: str = None, dry_run: bool = False):
         print(f"❌ 임베딩 생성 오류: {e}")
         return
     
-    # 6. Chroma Cloud 업로드
+    # 6. 로컬 ChromaDB 업로드
     print("=" * 80)
-    print("⏳ Chroma Cloud 업로드 중...")
+    print("⏳ 로컬 ChromaDB 업로드 중...")
     print("=" * 80)
     
     try:
@@ -449,7 +456,7 @@ def ingest_daily_reports_pipeline(api_key: str = None, dry_run: bool = False):
         print()
         
     except Exception as e:
-        print(f"❌ Chroma Cloud 업로드 오류: {e}")
+        print(f"❌ 로컬 ChromaDB 업로드 오류: {e}")
         return
 
 

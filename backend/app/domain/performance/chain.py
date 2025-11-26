@@ -13,8 +13,9 @@ import os
 from pathlib import Path
 
 from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
-from app.domain.daily.repository import DailyReportRepository
-from app.domain.daily.models import DailyReport
+from app.infrastructure.vector_store import get_unified_collection
+from app.domain.search.retriever import UnifiedRetriever
+from app.core.config import settings
 
 
 # KPI 관련 카테고리 키워드
@@ -122,48 +123,6 @@ def convert_kpi_docs_to_items(kpi_docs: List[dict]) -> List[KPIItem]:
     return kpi_items
 
 
-def aggregate_daily_reports(daily_reports: List[DailyReport]) -> dict:
-    """
-    여러 일일보고서를 집계하여 실적 보고서 데이터를 생성
-    
-    Args:
-        daily_reports: 일일보고서 리스트
-        
-    Returns:
-        집계된 데이터 dict {tasks, plans, issues, kpis}
-    """
-    all_tasks = []
-    all_plans = []
-    all_issues = []
-    all_kpis = []
-    
-    for daily_report in daily_reports:
-        report_json = daily_report.report_json
-        
-        # tasks 수집
-        if "tasks" in report_json:
-            all_tasks.extend(report_json["tasks"])
-        
-        # plans 수집
-        if "plans" in report_json:
-            all_plans.extend(report_json["plans"])
-        
-        # issues 수집
-        if "issues" in report_json:
-            all_issues.extend(report_json["issues"])
-        
-        # kpis 수집
-        if "kpis" in report_json:
-            all_kpis.extend(report_json["kpis"])
-    
-    return {
-        "tasks": all_tasks,
-        "plans": all_plans,
-        "issues": all_issues,
-        "kpis": all_kpis
-    }
-
-
 def generate_performance_report(
     db: Session,
     owner: str,
@@ -185,22 +144,124 @@ def generate_performance_report(
     Raises:
         ValueError: 해당 기간에 일일보고서가 없는 경우
     """
-    # 1. 일일보고서 조회
-    daily_reports = DailyReportRepository.list_by_owner_and_date_range(
-        db=db,
-        owner=owner,
-        start_date=period_start,
-        end_date=period_end
+    # 1. 벡터DB에서 실적 보고서 데이터 검색
+    collection = get_unified_collection()
+    retriever = UnifiedRetriever(
+        collection=collection,
+        openai_api_key=settings.OPENAI_API_KEY
     )
     
-    if not daily_reports:
-        raise ValueError(f"해당 기간({period_start}~{period_end})에 일일보고서가 없습니다.")
+    print(f"[DEBUG] 실적 보고서 데이터 검색: owner={owner}, period={period_start}~{period_end}")
     
-    # 2. 일일보고서 집계
-    aggregated = aggregate_daily_reports(daily_reports)
+    # 1-1. 요일별 세부 업무 (task 타입) 검색
+    task_results = retriever.search_daily(
+        query=f"{owner} 실적 업무 KPI",
+        owner=owner,
+        period_start=period_start.isoformat(),
+        period_end=period_end.isoformat(),
+        n_results=1000,  # 연간이므로 매우 많은 데이터
+        chunk_types=["task"]
+    )
+    
+    if not task_results:
+        task_results = retriever.search_daily(
+            query=f"{owner} 실적 업무 KPI",
+            owner=owner,
+            n_results=1000,
+            chunk_types=["task"]
+        )
+    
+    print(f"[INFO] 벡터DB task 검색 완료: {len(task_results)}개 청크 발견")
+    
+    # 1-2. 특이사항 (issue 타입) 검색
+    issue_results = retriever.search_daily(
+        query=f"{owner} 실적 특이사항 이슈",
+        owner=owner,
+        period_start=period_start.isoformat(),
+        period_end=period_end.isoformat(),
+        n_results=500,
+        chunk_types=["issue"]
+    )
+    
+    if not issue_results:
+        issue_results = retriever.search_daily(
+            query=f"{owner} 실적 특이사항 이슈",
+            owner=owner,
+            n_results=500,
+            chunk_types=["issue"]
+        )
+    
+    print(f"[INFO] 벡터DB issue 검색 완료: {len(issue_results)}개 청크 발견")
+    
+    # 1-3. 계획 (plan 타입) 검색
+    plan_results = retriever.search_daily(
+        query=f"{owner} 실적 계획",
+        owner=owner,
+        period_start=period_start.isoformat(),
+        period_end=period_end.isoformat(),
+        n_results=500,
+        chunk_types=["plan"]
+    )
+    
+    if not plan_results:
+        plan_results = retriever.search_daily(
+            query=f"{owner} 실적 계획",
+            owner=owner,
+            n_results=500,
+            chunk_types=["plan"]
+        )
+    
+    print(f"[INFO] 벡터DB plan 검색 완료: {len(plan_results)}개 청크 발견")
+    
+    # 2. 벡터DB 검색 결과를 TaskItem, Issue, Plan으로 변환
+    all_tasks = []
+    seen_task_ids = set()
+    for result in task_results:
+        metadata = result.metadata
+        task_id = metadata.get("task_id", f"task_{len(all_tasks)}")
+        
+        if task_id in seen_task_ids:
+            continue
+        seen_task_ids.add(task_id)
+        
+        try:
+            task_dict = {
+                "title": result.text[:100] if len(result.text) > 100 else result.text,
+                "description": result.text,
+                "category": metadata.get("category", "기타"),
+                "time_range": metadata.get("time_slot", ""),
+                "status": metadata.get("status", "완료")
+            }
+            all_tasks.append(task_dict)
+        except Exception as e:
+            print(f"[WARNING] Task 변환 실패: {e}, text={result.text[:50]}")
+            continue
+    
+    issues = []
+    seen_issue_ids = set()
+    for result in issue_results:
+        issue_id = result.chunk_id
+        if issue_id in seen_issue_ids:
+            continue
+        seen_issue_ids.add(issue_id)
+        issues.append(result.text)
+    
+    plans = []
+    seen_plan_ids = set()
+    for result in plan_results:
+        plan_id = result.chunk_id
+        if plan_id in seen_plan_ids:
+            continue
+        seen_plan_ids.add(plan_id)
+        plans.append(result.text)
+    
+    print(f"[INFO] 벡터DB 데이터 변환 완료: tasks={len(all_tasks)}개, issues={len(issues)}개, plans={len(plans)}개")
+    
+    if not all_tasks:
+        raise ValueError(f"해당 기간({period_start}~{period_end})에 벡터DB에서 업무 데이터를 찾을 수 없습니다.")
     
     # 3. KPI 관련 task만 필터링
-    kpi_tasks = filter_kpi_tasks(aggregated["tasks"])
+    kpi_tasks = filter_kpi_tasks(all_tasks)
     
     # 4. KPI 문서 로드
     kpi_docs = load_kpi_documents()
@@ -208,13 +269,8 @@ def generate_performance_report(
     # 5. KPI 문서를 KPIItem으로 변환
     kpi_items_from_docs = convert_kpi_docs_to_items(kpi_docs)
     
-    # 6. 일일보고서의 KPI + KPI 문서의 KPI 합치기
-    all_kpis = []
-    # 일일보고서의 KPI
-    for kpi_data in aggregated["kpis"]:
-        all_kpis.append(KPIItem(**kpi_data))
-    # KPI 문서의 KPI
-    all_kpis.extend(kpi_items_from_docs)
+    # 6. KPI 문서의 KPI만 사용 (벡터DB에서 KPI는 가져오지 않음)
+    all_kpis = kpi_items_from_docs
     
     # 7. TaskItem 변환
     tasks = [TaskItem(**task) for task in kpi_tasks]
@@ -232,9 +288,11 @@ def generate_performance_report(
         plans=aggregated["plans"],
         metadata={
             "source": "performance_chain",
-            "daily_count": len(daily_reports),
+            "task_count": len(all_tasks),
+            "kpi_task_count": len(kpi_tasks),
+            "issue_count": len(issues),
+            "plan_count": len(plans),
             "kpi_document_count": len(kpi_docs),
-            "matched_task_count": len(kpi_tasks),
             "total_kpi_count": len(all_kpis)
         }
     )

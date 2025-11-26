@@ -72,8 +72,8 @@ def main():
         print("💡 .env 파일에 OPENAI_API_KEY를 추가하세요.")
         sys.exit(1)
     
-    # Chroma Cloud 연결 확인
-    print("🔗 Chroma Cloud 연결 확인...")
+    # 로컬 ChromaDB 연결 확인
+    print("🔗 로컬 ChromaDB 연결 확인...")
     chroma_service = get_chroma_service()
     print()
     

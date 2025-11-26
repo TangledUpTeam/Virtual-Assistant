@@ -120,7 +120,7 @@ def main():
     print(f"실패: {fail_count}개")
     print()
     print("💡 다음 단계:")
-    print("  python ingestion/init_ingest.py  # 모든 청크를 Chroma Cloud에 업로드")
+    print("  python ingestion/init_ingest.py  # 모든 청크를 로컬 ChromaDB에 업로드")
     print()
 
 

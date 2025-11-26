@@ -75,9 +75,13 @@ class UnifiedRetriever:
         # Chroma 필터는 $and를 사용해 복잡한 조건 구성
         conditions = []
         
-        # doc_type 조건
+        # doc_type 조건 (기존 데이터 호환: doc_type이 없으면 report_type 사용)
+        # doc_type 또는 report_type 중 하나라도 일치하면 됨
         conditions.append({
-            "doc_type": {"$in": ["daily", "weekly", "monthly", "performance"]}
+            "$or": [
+                {"doc_type": {"$in": ["daily", "weekly", "monthly", "performance"]}},
+                {"report_type": {"$in": ["daily", "weekly", "monthly", "performance"]}}
+            ]
         })
         
         # chunk_type 필터 (task 타입만 가져오기)
@@ -92,10 +96,17 @@ class UnifiedRetriever:
         
         # 날짜 필터
         if single_date:
-            conditions.append({"date": single_date})
+            # date 필드 또는 period_start 필드로 검색 (기존 데이터 호환)
+            conditions.append({
+                "$or": [
+                    {"date": single_date},
+                    {"period_start": single_date}
+                ]
+            })
         elif period_start and period_end:
             # 일일보고서는 date 필드를 사용하므로, 기간 내 모든 날짜를 $in으로 검색
             # ChromaDB는 날짜 문자열에 대해 $gte/$lte를 지원하지 않으므로 $in 사용
+            # 기존 데이터 호환을 위해 period_start도 함께 검색
             from datetime import datetime, timedelta
             start = datetime.strptime(period_start, "%Y-%m-%d")
             end = datetime.strptime(period_end, "%Y-%m-%d")
@@ -104,7 +115,13 @@ class UnifiedRetriever:
             while current <= end:
                 date_list.append(current.strftime("%Y-%m-%d"))
                 current += timedelta(days=1)
-            conditions.append({"date": {"$in": date_list}})
+            # date 필드 또는 period_start 필드로 검색
+            conditions.append({
+                "$or": [
+                    {"date": {"$in": date_list}},
+                    {"period_start": {"$in": date_list}}
+                ]
+            })
         
         # 조건이 하나만 있으면 그대로, 여러개면 $and로 묶기
         if len(conditions) == 1:
@@ -244,15 +261,52 @@ class UnifiedRetriever:
             검색 결과 리스트
         """
         try:
+            # 디버깅: 필터 조건 출력
+            print(f"[DEBUG] 검색 쿼리: {query}")
+            print(f"[DEBUG] 필터 조건: {where_filter}")
+            print(f"[DEBUG] 컬렉션 총 문서 수: {self.collection.count()}")
+            
             # OpenAI로 쿼리 임베딩 생성
             query_embedding = self._get_query_embedding(query)
             
             # Chroma 검색 (임베딩 직접 전달)
-            results = self.collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=where_filter if where_filter else None
-            )
+            # where 필터가 비어있으면 None으로 전달
+            where_param = where_filter if where_filter else None
+            
+            # 의미 검색을 위해 query() 사용 (필수)
+            try:
+                results = self.collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=n_results,
+                    where=where_param
+                )
+            except Exception as query_error:
+                # ChromaDB 버전 호환성 문제 - 에러 상세 출력
+                error_type = type(query_error).__name__
+                error_msg = str(query_error)
+                print(f"[ERROR] ChromaDB query 실패: {error_type}: {error_msg}")
+                
+                # dimensionality 에러인 경우 컬렉션 재생성 필요
+                if 'dimensionality' in error_msg.lower():
+                    print(f"[ERROR] ⚠️  ChromaDB 컬렉션 구조 문제 감지!")
+                    print(f"[ERROR] 컬렉션을 재생성해야 합니다:")
+                    print(f"[ERROR]   python debug/fix_chromadb_collection.py")
+                    print(f"[ERROR]   python -m ingestion.ingest_daily_reports")
+                    print(f"[ERROR] 의미 검색을 위해 컬렉션 재생성이 필요합니다.")
+                
+                import traceback
+                traceback.print_exc()
+                # 의미 검색이 필수이므로 빈 결과 반환 (fallback 없음)
+                return []
+            
+            # 디버깅: 검색 결과 수 출력
+            if results and results['ids']:
+                print(f"[DEBUG] 검색 결과: {len(results['ids'][0])}개 발견")
+                # 첫 번째 결과의 메타데이터 출력
+                if len(results['metadatas'][0]) > 0:
+                    print(f"[DEBUG] 첫 번째 결과 메타데이터: {results['metadatas'][0][0]}")
+            else:
+                print(f"[DEBUG] 검색 결과 없음")
             
             # 결과 변환
             search_results = []

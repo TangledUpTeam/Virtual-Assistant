@@ -111,11 +111,14 @@ def filter_person_names(text: str) -> bool:
 
 
 def generate_weekly_important_tasks(
+    owner: str,
+    period_start: date,
+    period_end: date,
     tasks: List[TaskItem],
     llm_client=None
 ) -> List[str]:
     """
-    주간 보고서의 요일별 세부 업무에서 중요한 업무 3개 생성
+    벡터DB에서 주간 데이터를 검색하여 주간 중요 업무 3개 생성
     
     우선순위 기준:
     1) 매출 또는 유지율에 직접 영향
@@ -126,6 +129,9 @@ def generate_weekly_important_tasks(
     6) 지연 시 리스크 큰 업무(마감 등)
     
     Args:
+        owner: 작성자
+        period_start: 시작 날짜 (월요일)
+        period_end: 종료 날짜 (금요일)
         tasks: 주간 보고서의 모든 TaskItem 리스트 (요일별 세부 업무)
         llm_client: LLM 클라이언트 (None이면 생성)
         
@@ -133,11 +139,52 @@ def generate_weekly_important_tasks(
         주간 중요 업무 리스트 (최대 3개, 큰 카테고리 형태)
     """
     try:
-        if not tasks:
-            print(f"[WARNING] 주간 중요 업무 생성: tasks가 비어있음")
-            return []
+        # 1. 벡터DB에서 주간 데이터 검색
+        collection = get_unified_collection()
+        retriever = UnifiedRetriever(
+            collection=collection,
+            openai_api_key=settings.OPENAI_API_KEY
+        )
         
-        # TaskItem을 텍스트로 변환
+        print(f"[DEBUG] 주간 중요 업무 검색 시작: owner={owner}, period={period_start}~{period_end}")
+        
+        # 주간 범위의 일일보고서 데이터 검색 (task 타입만)
+        all_results = retriever.search_daily(
+            query=f"{owner} 주간 중요 업무",
+            owner=owner,
+            period_start=period_start.isoformat(),
+            period_end=period_end.isoformat(),
+            n_results=50,  # 충분한 데이터 수집
+            chunk_types=["task"]  # task 타입만 검색
+        )
+        
+        # 날짜 필터로 검색 결과가 없으면, 날짜 필터 없이 검색 (최근 데이터 사용)
+        if not all_results:
+            print(f"[WARNING] 해당 기간 데이터를 찾을 수 없음: {owner}, {period_start}~{period_end}")
+            print(f"[INFO] 날짜 필터 없이 최근 데이터로 검색 시도...")
+            all_results = retriever.search_daily(
+                query=f"{owner} 주간 중요 업무",
+                owner=owner,
+                n_results=50,
+                chunk_types=["task"]
+            )
+            if not all_results:
+                print(f"[WARNING] 데이터를 찾을 수 없음: {owner}")
+                # 벡터DB 데이터가 없으면 tasks 파라미터만 사용
+                all_results = []
+        
+        print(f"[INFO] 벡터DB 검색 완료: {len(all_results)}개 청크 발견")
+        
+        # 2. 사람 이름이 포함된 업무 제외
+        filtered_texts = []
+        for result in all_results:
+            text = result.text
+            if not filter_person_names(text):
+                filtered_texts.append(text)
+        
+        print(f"[INFO] 사람 이름 필터링 후: {len(filtered_texts)}개 청크")
+        
+        # 3. tasks 파라미터에서도 텍스트 추출
         task_texts = []
         for task in tasks:
             task_str = task.title
@@ -145,10 +192,17 @@ def generate_weekly_important_tasks(
                 task_str += f": {task.description}"
             task_texts.append(task_str)
         
-        if not task_texts:
+        # 4. 벡터DB 데이터와 tasks 파라미터 데이터 결합
+        combined_texts = filtered_texts.copy()
+        combined_texts.extend(task_texts)
+        
+        if not combined_texts:
+            print(f"[WARNING] 주간 중요 업무 생성: 데이터가 비어있음")
             return []
         
-        # LLM 클라이언트 생성
+        print(f"[INFO] 총 {len(combined_texts)}개 업무 항목 수집 (벡터DB: {len(filtered_texts)}개, tasks: {len(task_texts)}개)")
+        
+        # 5. LLM 클라이언트 생성
         if llm_client is None:
             llm_client = get_llm()
         
@@ -170,6 +224,7 @@ def generate_weekly_important_tasks(
 3. 구체적인 고객 이름이나 개별 업무가 아닌, 전체적인 업무 카테고리로 작성
 4. 위 우선순위 기준에 가장 잘 맞는 업무들을 선정
 5. 유사한 업무들은 하나의 카테고리로 묶어서 요약
+6. 주간 보고서의 요일별 세부업무 중 위 기준 충족 항목을 묶어서 3개의 큰 카테고리 형태로 요약
 
 반드시 다음 JSON 형식으로만 응답:
 {
@@ -180,11 +235,11 @@ def generate_weekly_important_tasks(
   ]
 }"""
 
-        # 상위 50개만 사용 (너무 많으면 토큰 초과)
-        sample_tasks = task_texts[:50]
-        user_prompt = f"""다음은 주간 보고서의 요일별 세부 업무 항목들입니다:
+        # 상위 100개만 사용 (너무 많으면 토큰 초과)
+        sample_tasks = combined_texts[:100]
+        user_prompt = f"""다음은 {owner}의 {period_start}~{period_end} 주간 보고서의 요일별 세부 업무 항목들입니다:
 
-{chr(10).join([f"- {task[:150]}" for task in sample_tasks])}
+{chr(10).join([f"- {task[:200]}" for task in sample_tasks])}
 
 위 업무 항목들을 분석하여, 우선순위 기준에 따라 중요한 업무 3개를 큰 카테고리 형태로 요약해주세요."""
 
@@ -239,6 +294,44 @@ def generate_weekly_goals(
             openai_api_key=settings.OPENAI_API_KEY
         )
         
+        # 디버깅: 먼저 필터 없이 검색해서 데이터가 있는지 확인
+        print(f"[DEBUG] 주간 목표 검색 시작: owner={owner}, period={period_start}~{period_end}")
+        
+        # 필터 없이 전체 검색 (데이터 존재 확인)
+        try:
+            # 컬렉션에서 직접 샘플 데이터 가져오기 (get 사용)
+            sample_data = collection.get(limit=5)
+            print(f"[DEBUG] 컬렉션 샘플 데이터 ({len(sample_data.get('ids', []))}개):")
+            if sample_data.get('metadatas'):
+                for i, meta in enumerate(sample_data['metadatas'][:3]):
+                    print(f"  [{i+1}] owner={meta.get('owner', 'N/A')}, doc_type={meta.get('doc_type', 'N/A')}, chunk_type={meta.get('chunk_type', 'N/A')}, date={meta.get('date', 'N/A')}, period_start={meta.get('period_start', 'N/A')}")
+        except Exception as e:
+            print(f"[DEBUG] 샘플 데이터 조회 실패: {e}")
+        
+        # 필터 없이 전체 검색 (데이터 존재 확인)
+        try:
+            # 필터 없이 검색
+            all_data = retriever.search_all(
+                query=f"{owner} 업무",
+                n_results=10
+            )
+            print(f"[DEBUG] 필터 없이 전체 검색 결과: {len(all_data)}개")
+            if all_data:
+                print(f"[DEBUG] 샘플 메타데이터: {all_data[0].metadata}")
+        except Exception as e:
+            print(f"[DEBUG] 전체 검색 실패: {e}")
+        
+        # 필터 없이 owner만으로 검색 (데이터 존재 확인)
+        test_results = retriever.search_daily(
+            query=f"{owner} 업무",
+            owner=owner,
+            n_results=10,
+            chunk_types=["task", "plan"]
+        )
+        print(f"[DEBUG] owner 필터 검색 결과: {len(test_results)}개")
+        if test_results:
+            print(f"[DEBUG] 샘플 메타데이터: {test_results[0].metadata}")
+        
         # 주간 범위의 일일보고서 데이터 검색 (period_start와 period_end를 사용하여 한 번에 검색)
         all_results = retriever.search_daily(
             query=f"{owner} 주간 업무 계획 목표",
@@ -249,9 +342,21 @@ def generate_weekly_goals(
             chunk_types=["task", "plan"]
         )
         
+        # 날짜 필터로 검색 결과가 없으면, 날짜 필터 없이 검색 (최근 데이터 사용)
         if not all_results:
-            print(f"[WARNING] 주간 데이터를 찾을 수 없음: {owner}, {period_start}~{period_end}")
-            return []
+            print(f"[WARNING] 해당 기간 데이터를 찾을 수 없음: {owner}, {period_start}~{period_end}")
+            print(f"[INFO] 날짜 필터 없이 최근 데이터로 검색 시도...")
+            all_results = retriever.search_daily(
+                query=f"{owner} 주간 업무 계획 목표",
+                owner=owner,
+                n_results=50,  # 충분한 데이터 수집
+                chunk_types=["task", "plan"]
+            )
+            if all_results:
+                print(f"[INFO] 날짜 필터 없이 {len(all_results)}개 청크 발견 (최근 데이터 사용)")
+            else:
+                print(f"[WARNING] 데이터를 찾을 수 없음: {owner}")
+                return []
         
         print(f"[INFO] 벡터DB 검색 완료: {len(all_results)}개 청크 발견")
         
@@ -268,37 +373,103 @@ def generate_weekly_goals(
         
         print(f"[INFO] 사람 이름 필터링 후: {len(filtered_texts)}개 청크")
         
-        # 3. LLM으로 주간 업무 목표 3개 생성
+        # 3. 해당 주간의 모든 일일보고서에서 task, issue, plan 데이터 수집
+        # DB에서 일일보고서 조회하여 실제 데이터 가져오기
+        from app.domain.daily.repository import DailyReportRepository
+        from app.infrastructure.database.session import SessionLocal
+        
+        db = SessionLocal()
+        try:
+            daily_reports = DailyReportRepository.list_by_owner_and_date_range(
+                db=db,
+                owner=owner,
+                start_date=period_start,
+                end_date=period_end
+            )
+            
+            # 일일보고서에서 task, issue, plan 추출
+            all_tasks = []
+            all_issues = []
+            all_plans = []
+            
+            for daily_report in daily_reports:
+                report_json = daily_report.report_json
+                
+                # tasks 수집
+                if "tasks" in report_json:
+                    for task in report_json["tasks"]:
+                        task_text = task.get("title", "")
+                        if task.get("description"):
+                            task_text += f": {task.get('description')}"
+                        all_tasks.append(task_text)
+                
+                # issues 수집 (미종결 업무)
+                if "issues" in report_json:
+                    all_issues.extend(report_json["issues"])
+                
+                # plans 수집 (익일 계획)
+                if "plans" in report_json:
+                    all_plans.extend(report_json["plans"])
+            
+            # VectorDB 검색 결과와 DB 데이터 결합
+            combined_texts = filtered_texts.copy()
+            combined_texts.extend(all_tasks)
+            combined_texts.extend(all_issues)
+            combined_texts.extend(all_plans)
+            
+            print(f"[INFO] DB에서 수집한 데이터: task {len(all_tasks)}개, issue {len(all_issues)}개, plan {len(all_plans)}개")
+            
+        except Exception as e:
+            print(f"[WARNING] DB 데이터 수집 실패: {e}")
+            combined_texts = filtered_texts
+        finally:
+            db.close()
+        
+        # 4. LLM으로 주간 업무 목표 3개 생성 (새로운 기준 적용)
         if llm_client is None:
             llm_client = get_llm()
         
         system_prompt = """너는 보험 설계사의 주간 업무 목표를 생성하는 AI입니다.
 
-주어진 주간 업무 데이터를 분석하여, 한 주간의 큰 계획으로 요약한 주간 업무 목표를 3개 생성하세요.
+주어진 한 주간의 일일보고서 데이터(시간별 세부 업무, 미종결 업무, 계획)를 분석하여, 다음 기준에 따라 주간 업무 목표 3개를 생성하세요.
+
+선정 기준 (우선순위 순):
+1) 이번 주 일일보고서 세부 업무에서 반복적으로 등장한 테마
+2) 미종결 업무 중 다음 주로 반드시 이월되는 항목
+3) 고객 리스크 증가(보험금 청구, 민원 가능성 등)
+4) 매출/유지율에 직접 영향을 주는 진행 중 과제
+5) 다음 주 특정 일정/시즌에 의해 필수로 필요한 업무
 
 규칙:
 1. 반드시 3개의 목표를 생성
-2. 구체적이고 실행 가능한 목표로 작성
-3. 사람 이름이 포함된 업무는 제외 (이미 필터링됨)
-4. 주간 단위의 큰 계획으로 요약
-5. 업무의 공통 패턴과 핵심 목표를 추출
+2. 위 기준을 충족하는 요소를 묶어서 목표 형태로 요약
+3. 구체적이고 실행 가능한 목표로 작성
+4. 사람 이름이 포함된 업무는 제외 (이미 필터링됨)
+5. 주간 단위의 큰 계획으로 요약하되, 구체적인 실행 내용 포함
 
 반드시 다음 JSON 형식으로만 응답:
 {
   "goals": [
-    "목표 1",
-    "목표 2",
-    "목표 3"
+    "목표 1 (기준에 맞는 구체적 내용)",
+    "목표 2 (기준에 맞는 구체적 내용)",
+    "목표 3 (기준에 맞는 구체적 내용)"
   ]
 }"""
 
-        # 상위 30개만 사용 (너무 많으면 토큰 초과)
-        sample_texts = filtered_texts[:30]
-        user_prompt = f"""다음은 {owner}의 {period_start}~{period_end} 주간 업무 데이터입니다:
+        # 충분한 데이터 사용 (최대 100개)
+        sample_texts = combined_texts[:100]
+        user_prompt = f"""다음은 {owner}의 {period_start}~{period_end} 주간 일일보고서 데이터입니다:
 
-{chr(10).join([f"- {text[:200]}" for text in sample_texts])}
+=== 시간별 세부 업무 ===
+{chr(10).join([f"- {text[:200]}" for text in sample_texts if any(keyword in text for keyword in ['업무', '상담', '처리', '작업'])])}
 
-위 데이터를 분석하여 주간 업무 목표 3개를 생성해주세요."""
+=== 미종결 업무 ===
+{chr(10).join([f"- {text[:200]}" for text in sample_texts if '미종결' in text or '이슈' in text or '미완료' in text])}
+
+=== 계획 ===
+{chr(10).join([f"- {text[:200]}" for text in sample_texts if '계획' in text or '예정' in text])}
+
+위 데이터를 분석하여, 제시된 5가지 기준에 따라 주간 업무 목표 3개를 생성해주세요."""
 
         llm_response = llm_client.complete_json(
             system_prompt=system_prompt,
@@ -343,28 +514,137 @@ def generate_weekly_report(
     # 1. 해당 주의 월~금 날짜 계산
     monday, friday = get_week_range(target_date)
     
-    # 2. 일일보고서 조회
-    daily_reports = DailyReportRepository.list_by_owner_and_date_range(
-        db=db,
-        owner=owner,
-        start_date=monday,
-        end_date=friday
+    # 2. 벡터DB에서 주간 데이터 검색
+    collection = get_unified_collection()
+    retriever = UnifiedRetriever(
+        collection=collection,
+        openai_api_key=settings.OPENAI_API_KEY
     )
     
-    if not daily_reports:
-        raise ValueError(f"해당 기간({monday}~{friday})에 일일보고서가 없습니다.")
+    print(f"[DEBUG] 주간 보고서 데이터 검색: owner={owner}, period={monday}~{friday}")
     
-    # 3. 일일보고서 집계
-    aggregated = aggregate_daily_reports(daily_reports)
+    # 2-1. 요일별 세부 업무 (task 타입) 검색
+    task_results = retriever.search_daily(
+        query=f"{owner} 주간 업무",
+        owner=owner,
+        period_start=monday.isoformat(),
+        period_end=friday.isoformat(),
+        n_results=200,  # 충분한 데이터 수집
+        chunk_types=["task"]
+    )
     
-    # 4. TaskItem 변환
-    tasks = [TaskItem(**task) for task in aggregated["tasks"]]
+    # 날짜 필터로 검색 결과가 없으면, 날짜 필터 없이 검색
+    if not task_results:
+        print(f"[WARNING] 해당 기간 task 데이터를 찾을 수 없음: {owner}, {monday}~{friday}")
+        print(f"[INFO] 날짜 필터 없이 최근 데이터로 검색 시도...")
+        task_results = retriever.search_daily(
+            query=f"{owner} 주간 업무",
+            owner=owner,
+            n_results=200,
+            chunk_types=["task"]
+        )
     
-    # 5. KPIItem 변환
-    kpis = [KPIItem(**kpi) for kpi in aggregated["kpis"]]
+    print(f"[INFO] 벡터DB task 검색 완료: {len(task_results)}개 청크 발견")
     
-    # 6. 완료율 계산
-    completion_rate = calculate_completion_rate(aggregated["tasks"])
+    # 2-2. 특이사항 (issue 타입) 검색
+    issue_results = retriever.search_daily(
+        query=f"{owner} 주간 특이사항 이슈",
+        owner=owner,
+        period_start=monday.isoformat(),
+        period_end=friday.isoformat(),
+        n_results=100,
+        chunk_types=["issue"]
+    )
+    
+    if not issue_results:
+        issue_results = retriever.search_daily(
+            query=f"{owner} 주간 특이사항 이슈",
+            owner=owner,
+            n_results=100,
+            chunk_types=["issue"]
+        )
+    
+    print(f"[INFO] 벡터DB issue 검색 완료: {len(issue_results)}개 청크 발견")
+    
+    # 2-3. 계획 (plan 타입) 검색
+    plan_results = retriever.search_daily(
+        query=f"{owner} 주간 계획",
+        owner=owner,
+        period_start=monday.isoformat(),
+        period_end=friday.isoformat(),
+        n_results=100,
+        chunk_types=["plan"]
+    )
+    
+    if not plan_results:
+        plan_results = retriever.search_daily(
+            query=f"{owner} 주간 계획",
+            owner=owner,
+            n_results=100,
+            chunk_types=["plan"]
+        )
+    
+    print(f"[INFO] 벡터DB plan 검색 완료: {len(plan_results)}개 청크 발견")
+    
+    # 3. 벡터DB 검색 결과를 TaskItem, Issue, Plan으로 변환
+    # task_results에서 TaskItem 생성
+    tasks = []
+    seen_task_ids = set()
+    for result in task_results:
+        # 메타데이터에서 task 정보 추출
+        metadata = result.metadata
+        task_id = metadata.get("task_id", f"task_{len(tasks)}")
+        
+        # 중복 제거 (같은 task_id는 한 번만)
+        if task_id in seen_task_ids:
+            continue
+        seen_task_ids.add(task_id)
+        
+        # TaskItem 생성
+        try:
+            task_item = TaskItem(
+                title=result.text[:100] if len(result.text) > 100 else result.text,
+                description=result.text,
+                category=metadata.get("category", "기타"),
+                time_range=metadata.get("time_slot", ""),
+                status=metadata.get("status", "완료")
+            )
+            tasks.append(task_item)
+        except Exception as e:
+            print(f"[WARNING] TaskItem 변환 실패: {e}, text={result.text[:50]}")
+            continue
+    
+    # issue_results에서 Issue 생성
+    issues = []
+    seen_issue_ids = set()
+    for result in issue_results:
+        issue_id = result.chunk_id
+        if issue_id in seen_issue_ids:
+            continue
+        seen_issue_ids.add(issue_id)
+        issues.append(result.text)
+    
+    # plan_results에서 Plan 생성
+    plans = []
+    seen_plan_ids = set()
+    for result in plan_results:
+        plan_id = result.chunk_id
+        if plan_id in seen_plan_ids:
+            continue
+        seen_plan_ids.add(plan_id)
+        plans.append(result.text)
+    
+    print(f"[INFO] 벡터DB 데이터 변환 완료: tasks={len(tasks)}개, issues={len(issues)}개, plans={len(plans)}개")
+    
+    if not tasks:
+        raise ValueError(f"해당 기간({monday}~{friday})에 벡터DB에서 업무 데이터를 찾을 수 없습니다.")
+    
+    # 4. KPIItem 변환 (KPI는 벡터DB에서 가져오지 않음, 빈 리스트)
+    kpis = []
+    
+    # 5. 완료율 계산
+    task_dicts = [{"status": task.status} for task in tasks]
+    completion_rate = calculate_completion_rate(task_dicts)
     
     # 7. 주간 업무 목표 생성 (벡터DB 기반)
     llm_client = get_llm()
@@ -379,8 +659,11 @@ def generate_weekly_report(
     for idx, goal in enumerate(weekly_goals, 1):
         print(f"   {idx}. {goal}")
     
-    # 8. 주간 중요 업무 생성 (요일별 세부 업무에서 추출)
+    # 8. 주간 중요 업무 생성 (벡터DB 기반)
     important_tasks = generate_weekly_important_tasks(
+        owner=owner,
+        period_start=monday,
+        period_end=friday,
         tasks=tasks,
         llm_client=llm_client
     )
@@ -394,11 +677,13 @@ def generate_weekly_report(
         period_end=friday,
         tasks=tasks,
         kpis=kpis,
-        issues=aggregated["issues"],
-        plans=aggregated["plans"],
+        issues=issues,
+        plans=plans,
         metadata={
             "source": "weekly_chain",
-            "daily_count": len(daily_reports),
+            "task_count": len(tasks),
+            "issue_count": len(issues),
+            "plan_count": len(plans),
             "completion_rate": round(completion_rate, 2),
             "week_dates": [monday.isoformat(), friday.isoformat()],
             "weekly_goals": weekly_goals,  # 주간 업무 목표

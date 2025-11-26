@@ -16,7 +16,7 @@ def ingest_reports(
     batch_size: int = 100
 ) -> dict:
     """
-    보고서 청크를 Chroma Cloud에 업로드
+    보고서 청크를 로컬 ChromaDB에 업로드
     
     Args:
         chunks: 청크 리스트
@@ -60,7 +60,7 @@ def ingest_reports(
     print()
     
     # 4. 배치 upsert
-    print("⏳ Chroma Cloud에 업로드 중...")
+    print("⏳ 로컬 ChromaDB에 업로드 중...")
     total = len(chunks)
     
     for i in range(0, total, batch_size):

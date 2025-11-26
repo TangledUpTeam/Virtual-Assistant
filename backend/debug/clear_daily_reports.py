@@ -1,5 +1,5 @@
 """
-Chroma Cloud daily_reports 컬렉션 삭제 스크립트
+로컬 ChromaDB daily_reports 컬렉션 삭제 스크립트
 
 사용법:
     python -m debug.clear_daily_reports
@@ -22,7 +22,7 @@ def clear_collection():
     """daily_reports 컬렉션 삭제"""
     print()
     print("=" * 80)
-    print("🗑️  Chroma Cloud 컬렉션 삭제")
+    print("🗑️  로컬 ChromaDB 컬렉션 삭제")
     print("=" * 80)
     print()
     

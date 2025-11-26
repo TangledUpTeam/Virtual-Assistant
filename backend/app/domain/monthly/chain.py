@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
-from app.domain.daily.repository import DailyReportRepository
-from app.domain.daily.models import DailyReport
+from app.infrastructure.vector_store import get_unified_collection
+from app.domain.search.retriever import UnifiedRetriever
+from app.core.config import settings
 
 
 def get_month_range(target_date: date) -> tuple[date, date]:
@@ -29,48 +30,6 @@ def get_month_range(target_date: date) -> tuple[date, date]:
     last_day_num = monthrange(target_date.year, target_date.month)[1]
     last_day = target_date.replace(day=last_day_num)
     return (first_day, last_day)
-
-
-def aggregate_daily_reports(daily_reports: List[DailyReport]) -> dict:
-    """
-    여러 일일보고서를 집계하여 월간 보고서 데이터를 생성
-    
-    Args:
-        daily_reports: 일일보고서 리스트
-        
-    Returns:
-        집계된 데이터 dict {tasks, plans, issues, kpis}
-    """
-    all_tasks = []
-    all_plans = []
-    all_issues = []
-    all_kpis = []
-    
-    for daily_report in daily_reports:
-        report_json = daily_report.report_json
-        
-        # tasks 수집
-        if "tasks" in report_json:
-            all_tasks.extend(report_json["tasks"])
-        
-        # plans 수집
-        if "plans" in report_json:
-            all_plans.extend(report_json["plans"])
-        
-        # issues 수집
-        if "issues" in report_json:
-            all_issues.extend(report_json["issues"])
-        
-        # kpis 수집
-        if "kpis" in report_json:
-            all_kpis.extend(report_json["kpis"])
-    
-    return {
-        "tasks": all_tasks,
-        "plans": all_plans,
-        "issues": all_issues,
-        "kpis": all_kpis
-    }
 
 
 def calculate_completion_rate(tasks: List[dict]) -> float:
@@ -112,28 +71,128 @@ def generate_monthly_report(
     # 1. 해당 월의 1일~말일 날짜 계산
     first_day, last_day = get_month_range(target_date)
     
-    # 2. 일일보고서 조회
-    daily_reports = DailyReportRepository.list_by_owner_and_date_range(
-        db=db,
-        owner=owner,
-        start_date=first_day,
-        end_date=last_day
+    # 2. 벡터DB에서 월간 데이터 검색
+    collection = get_unified_collection()
+    retriever = UnifiedRetriever(
+        collection=collection,
+        openai_api_key=settings.OPENAI_API_KEY
     )
     
-    if not daily_reports:
-        raise ValueError(f"해당 기간({first_day}~{last_day})에 일일보고서가 없습니다.")
+    print(f"[DEBUG] 월간 보고서 데이터 검색: owner={owner}, period={first_day}~{last_day}")
     
-    # 3. 일일보고서 집계
-    aggregated = aggregate_daily_reports(daily_reports)
+    # 2-1. 요일별 세부 업무 (task 타입) 검색
+    task_results = retriever.search_daily(
+        query=f"{owner} 월간 업무",
+        owner=owner,
+        period_start=first_day.isoformat(),
+        period_end=last_day.isoformat(),
+        n_results=500,  # 월간이므로 더 많은 데이터
+        chunk_types=["task"]
+    )
     
-    # 4. TaskItem 변환
-    tasks = [TaskItem(**task) for task in aggregated["tasks"]]
+    if not task_results:
+        task_results = retriever.search_daily(
+            query=f"{owner} 월간 업무",
+            owner=owner,
+            n_results=500,
+            chunk_types=["task"]
+        )
     
-    # 5. KPIItem 변환
-    kpis = [KPIItem(**kpi) for kpi in aggregated["kpis"]]
+    print(f"[INFO] 벡터DB task 검색 완료: {len(task_results)}개 청크 발견")
     
-    # 6. 완료율 계산
-    completion_rate = calculate_completion_rate(aggregated["tasks"])
+    # 2-2. 특이사항 (issue 타입) 검색
+    issue_results = retriever.search_daily(
+        query=f"{owner} 월간 특이사항 이슈",
+        owner=owner,
+        period_start=first_day.isoformat(),
+        period_end=last_day.isoformat(),
+        n_results=200,
+        chunk_types=["issue"]
+    )
+    
+    if not issue_results:
+        issue_results = retriever.search_daily(
+            query=f"{owner} 월간 특이사항 이슈",
+            owner=owner,
+            n_results=200,
+            chunk_types=["issue"]
+        )
+    
+    print(f"[INFO] 벡터DB issue 검색 완료: {len(issue_results)}개 청크 발견")
+    
+    # 2-3. 계획 (plan 타입) 검색
+    plan_results = retriever.search_daily(
+        query=f"{owner} 월간 계획",
+        owner=owner,
+        period_start=first_day.isoformat(),
+        period_end=last_day.isoformat(),
+        n_results=200,
+        chunk_types=["plan"]
+    )
+    
+    if not plan_results:
+        plan_results = retriever.search_daily(
+            query=f"{owner} 월간 계획",
+            owner=owner,
+            n_results=200,
+            chunk_types=["plan"]
+        )
+    
+    print(f"[INFO] 벡터DB plan 검색 완료: {len(plan_results)}개 청크 발견")
+    
+    # 3. 벡터DB 검색 결과를 TaskItem, Issue, Plan으로 변환
+    tasks = []
+    seen_task_ids = set()
+    for result in task_results:
+        metadata = result.metadata
+        task_id = metadata.get("task_id", f"task_{len(tasks)}")
+        
+        if task_id in seen_task_ids:
+            continue
+        seen_task_ids.add(task_id)
+        
+        try:
+            task_item = TaskItem(
+                title=result.text[:100] if len(result.text) > 100 else result.text,
+                description=result.text,
+                category=metadata.get("category", "기타"),
+                time_range=metadata.get("time_slot", ""),
+                status=metadata.get("status", "완료")
+            )
+            tasks.append(task_item)
+        except Exception as e:
+            print(f"[WARNING] TaskItem 변환 실패: {e}, text={result.text[:50]}")
+            continue
+    
+    issues = []
+    seen_issue_ids = set()
+    for result in issue_results:
+        issue_id = result.chunk_id
+        if issue_id in seen_issue_ids:
+            continue
+        seen_issue_ids.add(issue_id)
+        issues.append(result.text)
+    
+    plans = []
+    seen_plan_ids = set()
+    for result in plan_results:
+        plan_id = result.chunk_id
+        if plan_id in seen_plan_ids:
+            continue
+        seen_plan_ids.add(plan_id)
+        plans.append(result.text)
+    
+    print(f"[INFO] 벡터DB 데이터 변환 완료: tasks={len(tasks)}개, issues={len(issues)}개, plans={len(plans)}개")
+    
+    if not tasks:
+        raise ValueError(f"해당 기간({first_day}~{last_day})에 벡터DB에서 업무 데이터를 찾을 수 없습니다.")
+    
+    # 4. KPIItem 변환 (KPI는 벡터DB에서 가져오지 않음, 빈 리스트)
+    kpis = []
+    
+    # 5. 완료율 계산
+    task_dicts = [{"status": task.status} for task in tasks]
+    completion_rate = calculate_completion_rate(task_dicts)
     
     # 7. CanonicalReport 생성
     report = CanonicalReport(
@@ -148,7 +207,9 @@ def generate_monthly_report(
         plans=aggregated["plans"],
         metadata={
             "source": "monthly_chain",
-            "daily_count": len(daily_reports),
+            "task_count": len(tasks),
+            "issue_count": len(issues),
+            "plan_count": len(plans),
             "completion_rate": round(completion_rate, 2),
             "month": f"{target_date.year}-{target_date.month:02d}"
         }

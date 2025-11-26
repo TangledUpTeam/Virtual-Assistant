@@ -46,29 +46,34 @@ class ChromaLocalService:
         print(f"📦 컬렉션 '{name}' 가져오기/생성 중...")
         
         try:
-            # get_or_create_collection 사용 (가장 안전한 방법)
-            collection = self.client.get_or_create_collection(name=name)
-            print(f"✅ 컬렉션 '{name}' 준비 완료")
-            return collection
-        
-        except KeyError as e:
-            # _type 오류 발생 시, 컬렉션이 이미 존재한다고 가정
-            print(f"⚠️  응답 파싱 오류 발생 (컬렉션은 생성되었을 가능성 높음)")
-            print(f"⚠️  재시도 중...")
-            
+            # 먼저 기존 컬렉션이 있는지 확인
             try:
-                # 다시 시도
-                collection = self.client.get_or_create_collection(name=name)
-                print(f"✅ 컬렉션 '{name}' 준비 완료 (재시도 성공)")
+                collection = self.client.get_collection(name=name)
+                print(f"✅ 컬렉션 '{name}' 준비 완료 (기존 컬렉션 사용)")
                 return collection
             except Exception:
-                # 최종 실패 시 에러 발생
-                print(f"❌ 컬렉션 생성 실패")
-                raise
-        
-        except Exception as e:
-            print(f"❌ 컬렉션 처리 오류: {e}")
-            raise
+                # 컬렉션이 없으면 새로 생성
+                collection = self.client.create_collection(
+                    name=name,
+                    metadata={"description": f"Collection: {name}"}
+                )
+                print(f"✅ 컬렉션 '{name}' 준비 완료 (새로 생성)")
+                return collection
+            
+        except (KeyError, Exception) as e:
+            # _type 오류나 다른 에러 발생 시 컬렉션 삭제 후 재생성
+            print(f"[WARNING] 컬렉션 접근 오류: {e}")
+            print(f"[INFO] 컬렉션 삭제 후 재생성 시도...")
+            try:
+                self.client.delete_collection(name=name)
+            except:
+                pass
+            collection = self.client.create_collection(
+                name=name,
+                metadata={"description": f"Collection: {name}"}
+            )
+            print(f"✅ 컬렉션 '{name}' 준비 완료 (재생성)")
+            return collection
     
     def get_reports_collection(self) -> Collection:
         """
