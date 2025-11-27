@@ -39,13 +39,13 @@ class MonthlyReportPDFGenerator(BasePDFGenerator):
         # ========================================
         # 헤더: 월, 작성일자, 성명
         # ========================================
-        월 = f"{report.period_start.year}년 {report.period_start.month}월"
+        월 = f"{report.period_start.month}"
         작성일자 = format_korean_date(report.period_end)
         성명 = report.owner
         
-        self.draw_text(70, self._to_pdf_y(80), 월, font_size=14)  # TODO: 좌표 조정
-        self.draw_text(420, self._to_pdf_y(80), 작성일자, font_size=11)  # TODO: 좌표 조정
-        self.draw_text(450, self._to_pdf_y(110), 성명, font_size=11)  # TODO: 좌표 조정
+        self.draw_text(50, self._to_pdf_y(106), 월, font_size=13)  # TODO: 좌표 조정
+        self.draw_text(170, self._to_pdf_y(106), 작성일자, font_size=11)  # TODO: 좌표 조정
+        self.draw_text(340, self._to_pdf_y(106), 성명, font_size=11)  # TODO: 좌표 조정
         
         # ========================================
         # 월간 핵심 지표 (KPIs)
@@ -56,7 +56,7 @@ class MonthlyReportPDFGenerator(BasePDFGenerator):
             for idx, kpi in enumerate(report.kpis[:5]):  # 최대 5개
                 kpi_text = f"{kpi.kpi_name}: {kpi.value} {kpi.unit or ''}"
                 self.draw_text(
-                    x=70,  # TODO: 좌표 조정
+                    x=170,  # TODO: 좌표 조정
                     y=self._to_pdf_y(kpi_start_y + (idx * 30)),
                     text=kpi_text,
                     font_size=10
@@ -67,15 +67,12 @@ class MonthlyReportPDFGenerator(BasePDFGenerator):
         # ========================================
         weeks = ['1주차', '2주차', '3주차', '4주차', '5주차']
         tasks_per_week = len(report.tasks) // 4 if len(report.tasks) >= 4 else 1
-        
-        table_start_y = 350  # TODO: 좌표 조정
-        row_height = 80  # TODO: 주차별 행 높이 조정
+        table_start_y = 391  # TODO: 좌표 조정
+        row_height = 60  # TODO: 주차별 행 높이 조정
         
         for week_idx, week in enumerate(weeks[:4]):  # 보통 4주차까지
             current_y = self._to_pdf_y(table_start_y + (week_idx * row_height))
             
-            # 주차
-            self.draw_text(70, current_y, week, font_size=10)  # TODO: 좌표 조정
             
             # 해당 주차의 업무들
             start_task = week_idx * tasks_per_week
@@ -87,7 +84,7 @@ class MonthlyReportPDFGenerator(BasePDFGenerator):
                 task_summary = "\n".join(task_texts)
                 
                 self.draw_multiline_text(
-                    x=150,  # TODO: 좌표 조정
+                    x=200,  # TODO: 좌표 조정
                     y=current_y,
                     text=task_summary,
                     font_size=9,
@@ -100,25 +97,13 @@ class MonthlyReportPDFGenerator(BasePDFGenerator):
         if report.plans:
             익월_계획 = "\n".join([f"• {plan}" for plan in report.plans[:5]])
             self.draw_multiline_text(
-                x=70,  # TODO: 좌표 조정
-                y=self._to_pdf_y(700),
+                x=130,  # TODO: 좌표 조정
+                y=self._to_pdf_y(720),
                 text=익월_계획,
                 font_size=10,
                 line_height=14
             )
         
-        # ========================================
-        # 특이사항 / 이슈
-        # ========================================
-        if report.issues:
-            이슈_텍스트 = "\n".join([f"• {issue}" for issue in report.issues[:3]])
-            self.draw_multiline_text(
-                x=70,  # TODO: 좌표 조정
-                y=self._to_pdf_y(780),
-                text=이슈_텍스트,
-                font_size=10,
-                line_height=14
-            )
         
         self.save_overlay()
         

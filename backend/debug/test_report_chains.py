@@ -154,30 +154,32 @@ def test_monthly_chain(owner: str = "김보험", target_date: date = None):
         db.close()
 
 
-def test_performance_chain(owner: str = "김보험", period_start: date = None, period_end: date = None):
+def test_performance_chain(owner: str = "김보험", target_date: date = None):
     """실적 보고서 생성 테스트"""
     print("=" * 80)
     print("📊 실적 보고서 Chain 테스트")
     print("=" * 80)
     
-    if period_start is None:
-        today = date.today()
-        period_start = date(today.year, today.month, 1)
-        period_end = today
+    # 실적보고서는 target_date가 속한 연도의 1월 1일~12월 31일 데이터를 사용
+    if target_date is None:
+        target_date = date.today()
+    
+    # 해당 연도의 범위 계산
+    year_start = date(target_date.year, 1, 1)
+    year_end = date(target_date.year, 12, 31)
     
     print(f"\n작성자: {owner}")
-    print(f"기간: {period_start} ~ {period_end}")
+    print(f"기준 날짜: {target_date} (해당 연도: {year_start} ~ {year_end})")
     
     db = SessionLocal()
     
     try:
-        # 생성
+        # 생성 (target_date가 속한 연도 전체 데이터 자동 수집)
         print(f"\n⏳ 실적 보고서 생성 중...")
         report = generate_performance_report(
             db=db,
             owner=owner,
-            period_start=period_start,
-            period_end=period_end
+            target_date=target_date
         )
         
         print(f"✅ 생성 완료!")
@@ -202,6 +204,26 @@ def test_performance_chain(owner: str = "김보험", period_start: date = None, 
         db_report, is_created = PerformanceReportRepository.create_or_update(db, report_create)
         action = "생성" if is_created else "업데이트"
         print(f"✅ DB 저장 완료 ({action})")
+        
+        # PDF 생성
+        print(f"\n⏳ PDF 생성 중...")
+        try:
+            from app.reporting.service.report_export_service import ReportExportService
+            
+            pdf_bytes = ReportExportService.export_performance_pdf(
+                db=db,
+                owner=report.owner,
+                period_start=report.period_start,
+                period_end=report.period_end
+            )
+            
+            print(f"✅ PDF 생성 완료!")
+            print(f"   파일 크기: {len(pdf_bytes):,} bytes")
+            print(f"   저장 경로: backend/output/report_result/performance/")
+        except Exception as pdf_error:
+            print(f"⚠️  PDF 생성 실패: {str(pdf_error)}")
+            import traceback
+            traceback.print_exc()
         
         return True
         
@@ -253,7 +275,7 @@ def main():
         print()
     
     if args.performance or args.all:
-        results.append(('실적', test_performance_chain(args.owner)))
+        results.append(('실적', test_performance_chain(args.owner, target_date)))
         print()
     
     if not any([args.weekly, args.monthly, args.performance, args.all]):

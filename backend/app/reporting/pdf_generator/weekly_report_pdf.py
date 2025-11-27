@@ -70,10 +70,12 @@ class WeeklyReportPDFGenerator(BasePDFGenerator):
         
         # ========================================
         # 요일별 세부 업무 (월~금)
+        # LLM이 생성한 요약 결과만 사용 (원본 task 사용 안 함)
         # ========================================
-        # tasks를 요일별로 그룹핑 (간단한 버전: 순서대로 배치)
         weekdays = ['월요일', '화요일', '수요일', '목요일', '금요일']
-        tasks_per_day = len(report.tasks) // 5 if len(report.tasks) >= 5 else 1
+        
+        # metadata에서 LLM 요약 결과 가져오기
+        daily_tasks_by_day = report.metadata.get('daily_tasks_by_day', {})
         
         table_start_y = 391  # TODO: 좌표 조정
         row_height = 49  # TODO: 요일별 행 높이 조정
@@ -81,15 +83,14 @@ class WeeklyReportPDFGenerator(BasePDFGenerator):
         for day_idx, weekday in enumerate(weekdays):
             current_y = self._to_pdf_y(table_start_y + (day_idx * row_height))
             
-            # 요일 출력 제거 - 양식에 이미 있음
+            # 해당 요일의 LLM 요약 결과만 사용
+            # 원본 task는 절대 사용하지 않음
+            day_summary_tasks = daily_tasks_by_day.get(weekday, [])
             
-            # 해당 요일의 업무들
-            start_task = day_idx * tasks_per_day
-            end_task = start_task + tasks_per_day
-            day_tasks = report.tasks[start_task:end_task]
-            
-            if day_tasks:
-                task_texts = [f"• {truncate_text(t.title, 30)}" for t in day_tasks[:3]]
+            # 요약 데이터가 있으면 출력, 없으면 비워둠 (fallback 없음)
+            if day_summary_tasks:
+                # LLM 요약 결과를 그대로 출력 (최대 3개)
+                task_texts = [f"• {truncate_text(task, 50)}" for task in day_summary_tasks[:3]]
                 task_summary = "\n".join(task_texts)
                 
                 self.draw_multiline_text(
@@ -99,6 +100,7 @@ class WeeklyReportPDFGenerator(BasePDFGenerator):
                     font_size=9,
                     line_height=12
                 )
+            # else: 요약 데이터가 없으면 해당 요일은 비워둠 (아무것도 출력하지 않음)
         
         # ========================================
         # 주간 중요 업무 (metadata에서 추출)

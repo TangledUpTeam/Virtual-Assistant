@@ -48,16 +48,14 @@ async def generate_performance(
     지정된 기간의 일일보고서를 집계하여 KPI 중심의 실적 보고서를 생성하고 DB에 저장합니다.
     """
     try:
-        # 기간 설정 (해당 연도의 1월 1일 ~ 12월 31일)
-        period_start = date(request.year, 1, 1)
-        period_end = date(request.year, 12, 31)
+        # 해당 연도의 마지막 날짜를 target_date로 사용 (매년 마지막 주에 작성)
+        target_date = date(request.year, 12, 31)
         
-        # 1. 실적 보고서 생성
+        # 1. 실적 보고서 생성 (target_date가 속한 연도의 1월 1일~12월 31일 데이터 자동 수집)
         report = generate_performance_report(
             db=db,
             owner=request.owner,
-            period_start=period_start,
-            period_end=period_end
+            target_date=target_date
         )
         
         # 2. DB에 저장

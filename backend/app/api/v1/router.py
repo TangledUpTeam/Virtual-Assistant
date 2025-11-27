@@ -13,6 +13,7 @@ from app.api.v1.endpoints.rag import router as rag_router
 from app.api.v1.endpoints.brainstorming import router as brainstorming_router
 from app.api.v1.endpoints.chatbot import router as chatbot_router
 from app.api.v1.endpoints.therapy import router as therapy_router
+from app.api.v1.endpoints.report_chat import router as report_chat_router
 
 api_router = APIRouter()
 
@@ -104,4 +105,10 @@ api_router.include_router(
     therapy_router,
     prefix="/therapy",
     tags=["Therapy"]
+)
+
+# Report Chat (일일보고서 RAG 챗봇) 엔드포인트
+api_router.include_router(
+    report_chat_router,
+    tags=["Report Chat"]
 )

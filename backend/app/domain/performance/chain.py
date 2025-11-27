@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 import uuid
 import json
 import os
+import re
 from pathlib import Path
 
 from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
@@ -90,6 +91,137 @@ def filter_kpi_tasks(all_tasks: List[dict]) -> List[dict]:
     return [task for task in all_tasks if is_kpi_related_task(task)]
 
 
+def calculate_performance_kpis(tasks: List[dict]) -> List[KPIItem]:
+    """
+    일일보고서 데이터를 기반으로 실적보고서 KPI 계산
+    
+    실적보고서는 일일보고서 데이터만 사용하여 KPI를 계산합니다.
+    KPI 문서(RAG 데이터)는 "KPI 설명/해설" 섹션 작성용으로만 사용되며,
+    실제 실적 수치는 여기서 계산된 값 또는 별도로 제공되는 데이터를 사용합니다.
+    
+    Args:
+        tasks: 해당 연도의 모든 TaskItem dict 리스트
+        
+    Returns:
+        KPIItem 리스트
+    """
+    kpis = []
+    
+    if not tasks:
+        return kpis
+    
+    # 모든 task 텍스트를 하나로 합침
+    all_text = " ".join([f"{task.get('title', '')} {task.get('description', '')}" for task in tasks]).lower()
+    
+    # 1. 신규 계약 건수 계산
+    new_contract_keywords = ["신규", "계약", "체결", "가입", "신규 계약"]
+    new_contract_count = 0
+    for task in tasks:
+        task_text = f"{task.get('title', '')} {task.get('description', '')}".lower()
+        if any(keyword in task_text for keyword in new_contract_keywords):
+            new_contract_count += 1
+    
+    if new_contract_count > 0:
+        kpis.append(KPIItem(
+            kpi_name="신규_계약_건수",
+            value=str(new_contract_count),
+            unit="건",
+            category="계약",
+            note=""
+        ))
+    
+    # 2. 유지 계약 건수 계산
+    maintain_keywords = ["유지", "갱신", "미납", "연체", "해지 방지"]
+    maintain_count = 0
+    renew_count = 0
+    non_payment_prevention_count = 0
+    
+    for task in tasks:
+        task_text = f"{task.get('title', '')} {task.get('description', '')}".lower()
+        if any(keyword in task_text for keyword in maintain_keywords):
+            if "갱신" in task_text:
+                renew_count += 1
+            elif "미납" in task_text or "연체" in task_text:
+                non_payment_prevention_count += 1
+            else:
+                maintain_count += 1
+    
+    if maintain_count > 0 or renew_count > 0 or non_payment_prevention_count > 0:
+        if maintain_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="유지_계약_유지",
+                value=str(maintain_count),
+                unit="건",
+                category="유지계약",
+                note=""
+            ))
+        if renew_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="유지_계약_갱신",
+                value=str(renew_count),
+                unit="건",
+                category="유지계약",
+                note=""
+            ))
+        if non_payment_prevention_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="유지_계약_미납_방지",
+                value=str(non_payment_prevention_count),
+                unit="건",
+                category="유지계약",
+                note=""
+            ))
+    
+    # 3. 상담 진행 건수 계산
+    consultation_keywords = ["상담", "통화", "전화", "방문", "온라인", "미팅"]
+    phone_count = 0
+    visit_count = 0
+    online_count = 0
+    
+    for task in tasks:
+        task_text = f"{task.get('title', '')} {task.get('description', '')}".lower()
+        if any(keyword in task_text for keyword in consultation_keywords):
+            if "전화" in task_text or "통화" in task_text:
+                phone_count += 1
+            elif "방문" in task_text:
+                visit_count += 1
+            elif "온라인" in task_text:
+                online_count += 1
+            else:
+                # 기본적으로 전화로 카운트
+                phone_count += 1
+    
+    if phone_count > 0 or visit_count > 0 or online_count > 0:
+        if phone_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="상담_전화",
+                value=str(phone_count),
+                unit="건",
+                category="상담",
+                note=""
+            ))
+        if visit_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="상담_방문",
+                value=str(visit_count),
+                unit="건",
+                category="상담",
+                note=""
+            ))
+        if online_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="상담_온라인",
+                value=str(online_count),
+                unit="건",
+                category="상담",
+                note=""
+            ))
+    
+    print(f"[INFO] 실적보고서 KPI 계산 완료: {len(kpis)}개 KPI 생성")
+    
+    return kpis
+
+
 def convert_kpi_docs_to_items(kpi_docs: List[dict]) -> List[KPIItem]:
     """
     KPI 문서를 KPIItem으로 변환
@@ -123,20 +255,36 @@ def convert_kpi_docs_to_items(kpi_docs: List[dict]) -> List[KPIItem]:
     return kpi_items
 
 
+def get_year_range(target_date: date) -> tuple[date, date]:
+    """
+    target_date가 속한 연도의 1월 1일~12월 31일 날짜 범위를 계산
+    
+    Args:
+        target_date: 기준 날짜
+        
+    Returns:
+        (first_day, last_day) 튜플
+    """
+    first_day = date(target_date.year, 1, 1)
+    last_day = date(target_date.year, 12, 31)
+    return (first_day, last_day)
+
+
 def generate_performance_report(
     db: Session,
     owner: str,
-    period_start: date,
-    period_end: date
+    target_date: date
 ) -> CanonicalReport:
     """
     실적 보고서 자동 생성
     
+    실적보고서는 매년 마지막 주에 작성하며, 해당 연도의 1월 1일~12월 31일 일일보고서 데이터를
+    ChromaDB에서 가져와서 KPI 문서와 함께 작성합니다.
+    
     Args:
         db: 데이터베이스 세션
         owner: 작성자
-        period_start: 시작일
-        period_end: 종료일
+        target_date: 기준 날짜 (해당 연도의 아무 날짜, 보통 마지막 주)
         
     Returns:
         CanonicalReport (performance)
@@ -144,6 +292,8 @@ def generate_performance_report(
     Raises:
         ValueError: 해당 기간에 일일보고서가 없는 경우
     """
+    # 1. 해당 연도의 1월 1일~12월 31일 날짜 계산
+    period_start, period_end = get_year_range(target_date)
     # 1. 벡터DB에서 실적 보고서 데이터 검색
     collection = get_unified_collection()
     retriever = UnifiedRetriever(
@@ -151,7 +301,7 @@ def generate_performance_report(
         openai_api_key=settings.OPENAI_API_KEY
     )
     
-    print(f"[DEBUG] 실적 보고서 데이터 검색: owner={owner}, period={period_start}~{period_end}")
+    print(f"[DEBUG] 실적 보고서 데이터 검색: owner={owner}, year={target_date.year}, period={period_start}~{period_end}")
     
     # 1-1. 요일별 세부 업무 (task 타입) 검색
     task_results = retriever.search_daily(
@@ -260,20 +410,43 @@ def generate_performance_report(
     if not all_tasks:
         raise ValueError(f"해당 기간({period_start}~{period_end})에 벡터DB에서 업무 데이터를 찾을 수 없습니다.")
     
-    # 3. KPI 관련 task만 필터링
-    kpi_tasks = filter_kpi_tasks(all_tasks)
+    # 3. 실적보고서는 일일보고서 데이터만 사용
+    # KPI 문서는 "KPI 설명/해설" 섹션 작성용으로만 사용되며, 
+    # 실제 실적 수치는 일일보고서 데이터에서 계산하거나 별도로 제공되는 데이터를 사용
+    # 따라서 여기서는 KPI 문서를 검색하지 않음
     
-    # 4. KPI 문서 로드
-    kpi_docs = load_kpi_documents()
+    # 일일보고서 데이터에서 KPI 계산 (월간보고서와 유사한 방식)
+    all_kpis = calculate_performance_kpis(all_tasks)
     
-    # 5. KPI 문서를 KPIItem으로 변환
-    kpi_items_from_docs = convert_kpi_docs_to_items(kpi_docs)
+    print(f"[INFO] 일일보고서 데이터 기반 KPI 계산 완료: {len(all_kpis)}개")
     
-    # 6. KPI 문서의 KPI만 사용 (벡터DB에서 KPI는 가져오지 않음)
-    all_kpis = kpi_items_from_docs
-    
-    # 7. TaskItem 변환
-    tasks = [TaskItem(**task) for task in kpi_tasks]
+    # 4. TaskItem 변환 (time_range를 time_start, time_end로 파싱)
+    tasks = []
+    for task_dict in all_tasks:
+        # time_range 파싱 (예: "09:00~10:00" -> time_start="09:00", time_end="10:00")
+        time_range = task_dict.get("time_range", "")
+        time_start, time_end = None, None
+        if time_range:
+            if "~" in time_range:
+                parts = time_range.split("~")
+                if len(parts) == 2:
+                    time_start = parts[0].strip()
+                    time_end = parts[1].strip()
+            elif "-" in time_range:
+                parts = time_range.split("-")
+                if len(parts) == 2:
+                    time_start = parts[0].strip()
+                    time_end = parts[1].strip()
+        
+        task = TaskItem(
+            task_id=task_dict.get("task_id", f"task_{len(tasks)}"),
+            title=task_dict.get("title", ""),
+            description=task_dict.get("description", ""),
+            time_start=time_start,
+            time_end=time_end,
+            status=task_dict.get("status", "완료")
+        )
+        tasks.append(task)
     
     # 8. CanonicalReport 생성
     report = CanonicalReport(
@@ -284,16 +457,15 @@ def generate_performance_report(
         period_end=period_end,
         tasks=tasks,
         kpis=all_kpis,
-        issues=aggregated["issues"],
-        plans=aggregated["plans"],
+        issues=issues,
+        plans=plans,
         metadata={
             "source": "performance_chain",
             "task_count": len(all_tasks),
-            "kpi_task_count": len(kpi_tasks),
             "issue_count": len(issues),
             "plan_count": len(plans),
-            "kpi_document_count": len(kpi_docs),
-            "total_kpi_count": len(all_kpis)
+            "total_kpi_count": len(all_kpis),
+            "note": "실적보고서는 일일보고서 데이터만 사용하여 작성됩니다. KPI 문서는 'KPI 설명/해설' 섹션 작성용으로만 사용됩니다."
         }
     )
     

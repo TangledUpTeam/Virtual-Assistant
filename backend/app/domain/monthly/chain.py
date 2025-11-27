@@ -9,6 +9,7 @@ from calendar import monthrange
 from typing import List
 from sqlalchemy.orm import Session
 import uuid
+import re
 
 from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
 from app.infrastructure.vector_store import get_unified_collection
@@ -47,6 +48,136 @@ def calculate_completion_rate(tasks: List[dict]) -> float:
     
     completed = sum(1 for task in tasks if task.get("status") == "완료")
     return completed / len(tasks)
+
+
+def calculate_monthly_kpis(tasks: List[TaskItem]) -> List[KPIItem]:
+    """
+    일일보고서 데이터를 기반으로 월간 핵심 지표 계산
+    
+    Args:
+        tasks: 해당 월의 모든 TaskItem 리스트
+        
+    Returns:
+        KPIItem 리스트
+    """
+    kpis = []
+    
+    if not tasks:
+        return kpis
+    
+    # 모든 task 텍스트를 하나로 합침
+    all_text = " ".join([f"{task.title} {task.description}" for task in tasks]).lower()
+    
+    # 1. 신규 계약 건수 계산
+    # "신규", "계약", "체결", "가입" 등의 키워드가 포함된 task 카운트
+    new_contract_keywords = ["신규", "계약", "체결", "가입", "신규 계약"]
+    new_contract_count = 0
+    for task in tasks:
+        task_text = f"{task.title} {task.description}".lower()
+        if any(keyword in task_text for keyword in new_contract_keywords):
+            new_contract_count += 1
+    
+    if new_contract_count > 0:
+        kpis.append(KPIItem(
+            kpi_name="신규_계약_건수",
+            value=str(new_contract_count),
+            unit="건",
+            category="계약",
+            note=""
+        ))
+    
+    # 2. 유지 계약 건수 계산
+    # "유지", "갱신", "미납 방지" 등의 키워드가 포함된 task 카운트
+    maintain_keywords = ["유지", "갱신", "미납", "연체", "해지 방지"]
+    maintain_count = 0
+    renew_count = 0
+    non_payment_prevention_count = 0
+    
+    for task in tasks:
+        task_text = f"{task.title} {task.description}".lower()
+        if any(keyword in task_text for keyword in maintain_keywords):
+            if "갱신" in task_text:
+                renew_count += 1
+            elif "미납" in task_text or "연체" in task_text:
+                non_payment_prevention_count += 1
+            else:
+                maintain_count += 1
+    
+    if maintain_count > 0 or renew_count > 0 or non_payment_prevention_count > 0:
+        if maintain_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="유지_계약_유지",
+                value=str(maintain_count),
+                unit="건",
+                category="유지계약",
+                note=""
+            ))
+        if renew_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="유지_계약_갱신",
+                value=str(renew_count),
+                unit="건",
+                category="유지계약",
+                note=""
+            ))
+        if non_payment_prevention_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="유지_계약_미납_방지",
+                value=str(non_payment_prevention_count),
+                unit="건",
+                category="유지계약",
+                note=""
+            ))
+    
+    # 3. 상담 진행 건수 계산
+    # "상담", "전화", "방문", "온라인" 등의 키워드가 포함된 task 카운트
+    consultation_keywords = ["상담", "통화", "전화", "방문", "온라인", "미팅"]
+    phone_count = 0
+    visit_count = 0
+    online_count = 0
+    
+    for task in tasks:
+        task_text = f"{task.title} {task.description}".lower()
+        if any(keyword in task_text for keyword in consultation_keywords):
+            if "전화" in task_text or "통화" in task_text:
+                phone_count += 1
+            elif "방문" in task_text:
+                visit_count += 1
+            elif "온라인" in task_text:
+                online_count += 1
+            else:
+                # 기본적으로 전화로 카운트
+                phone_count += 1
+    
+    if phone_count > 0 or visit_count > 0 or online_count > 0:
+        if phone_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="상담_전화",
+                value=str(phone_count),
+                unit="건",
+                category="상담",
+                note=""
+            ))
+        if visit_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="상담_방문",
+                value=str(visit_count),
+                unit="건",
+                category="상담",
+                note=""
+            ))
+        if online_count > 0:
+            kpis.append(KPIItem(
+                kpi_name="상담_온라인",
+                value=str(online_count),
+                unit="건",
+                category="상담",
+                note=""
+            ))
+    
+    print(f"[INFO] 월간 핵심 지표 계산 완료: {len(kpis)}개 KPI 생성")
+    
+    return kpis
 
 
 def generate_monthly_report(
@@ -152,11 +283,21 @@ def generate_monthly_report(
         seen_task_ids.add(task_id)
         
         try:
+            # time_slot 파싱 (예: "09:00~10:00" -> time_start="09:00", time_end="10:00")
+            time_slot = metadata.get("time_slot", "")
+            time_start, time_end = None, None
+            if time_slot and "~" in time_slot:
+                parts = time_slot.split("~")
+                if len(parts) == 2:
+                    time_start = parts[0].strip()
+                    time_end = parts[1].strip()
+            
             task_item = TaskItem(
+                task_id=task_id,
                 title=result.text[:100] if len(result.text) > 100 else result.text,
                 description=result.text,
-                category=metadata.get("category", "기타"),
-                time_range=metadata.get("time_slot", ""),
+                time_start=time_start,
+                time_end=time_end,
                 status=metadata.get("status", "완료")
             )
             tasks.append(task_item)
@@ -187,14 +328,14 @@ def generate_monthly_report(
     if not tasks:
         raise ValueError(f"해당 기간({first_day}~{last_day})에 벡터DB에서 업무 데이터를 찾을 수 없습니다.")
     
-    # 4. KPIItem 변환 (KPI는 벡터DB에서 가져오지 않음, 빈 리스트)
-    kpis = []
+    # 4. 월간 핵심 지표 계산 (일일보고서 데이터 기반)
+    kpis = calculate_monthly_kpis(tasks)
     
     # 5. 완료율 계산
     task_dicts = [{"status": task.status} for task in tasks]
     completion_rate = calculate_completion_rate(task_dicts)
     
-    # 7. CanonicalReport 생성
+    # 6. CanonicalReport 생성
     report = CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="monthly",
@@ -203,8 +344,8 @@ def generate_monthly_report(
         period_end=last_day,
         tasks=tasks,
         kpis=kpis,
-        issues=aggregated["issues"],
-        plans=aggregated["plans"],
+        issues=issues,
+        plans=plans,
         metadata={
             "source": "monthly_chain",
             "task_count": len(tasks),

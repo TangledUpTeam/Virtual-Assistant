@@ -19,7 +19,7 @@ def clean_task_description(text: str) -> str:
     업무 설명을 간결하게 정리
     
     예: "대상자 리스트를 업데이트합니다" → "대상자 리스트 업데이트"
-        "암보험 보장 구간을 점검하는" → "암보험 보장 구간 점검"
+        "자료를 점검하는" → "자료 점검"
     """
     if not text:
         return text

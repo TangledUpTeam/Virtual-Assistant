@@ -22,10 +22,10 @@ from app.domain.planner.schemas import (
 class TodayPlanGenerator:
     """오늘의 추천 일정 생성기"""
     
-    SYSTEM_PROMPT = """너는 보험 설계사의 AI 업무 플래너이다.
+    SYSTEM_PROMPT = """너는 AI 업무 플래너이다.
 
 전날의 미종결 업무(unresolved)와 익일 계획(next_day_plan)을 우선 참고하고,
-업무가 부족하면 과거 유사 업무 패턴(similar_tasks)과 일반적인 보험 설계사 업무를 활용하여
+업무가 부족하면 과거 유사 업무 패턴(similar_tasks)과 일반적인 업무를 활용하여
 오늘 하루 동안 수행할 추천 일정을 JSON 형식으로 구성해라.
 
 규칙:
@@ -33,11 +33,11 @@ class TodayPlanGenerator:
 2. 미종결 업무가 있으면 우선순위를 높게 설정하고 반드시 포함
 3. 익일 계획을 바탕으로 구체적인 작업 생성
 4. 전날 데이터가 부족하면 과거 유사 업무 패턴을 적극 활용
-5. 업무가 부족하면 일반적인 보험 설계사 업무를 추가:
+5. 업무가 부족하면 일반적인 업무를 추가:
    - 고객 연락 및 상담
    - 기존 고객 관리 및 계약 검토
    - 신규 고객 발굴 및 상담 준비
-   - 보험 상품 학습 및 업데이트 확인
+   - 상품 정보 학습 및 업데이트 확인
    - 보고서 작성 및 문서 정리
    - 네트워킹 및 관계 유지
 6. 각 작업은 실행 가능하고 명확해야 함
@@ -117,9 +117,9 @@ class TodayPlanGenerator:
                 # 다양한 카테고리의 검색 쿼리 (다양성 확보)
                 search_queries = [
                     f"{request.owner} 고객 상담 통화 연락",
-                    f"{request.owner} 보험 설계 제안서 플랜",
-                    f"{request.owner} 신규 고객 발굴 DB",
-                    f"{request.owner} 계약 갱신 유지 관리",
+                    f"{request.owner} 제안서 플랜",
+                    f"{request.owner} 고객 발굴",
+                    f"{request.owner} 계약 관리",
                 ]
                 
                 all_results = []
@@ -192,15 +192,15 @@ class TodayPlanGenerator:
                     category="고객 상담"
                 ),
                 TaskItem(
-                    title="신규 고객 발굴 활동",
-                    description="신규 고객 명단 검토 및 상담 준비",
+                    title="고객 발굴 활동",
+                    description="고객 명단 검토 및 상담 준비",
                     priority="medium",
                     expected_time="1시간",
                     category="영업"
                 ),
                 TaskItem(
-                    title="보험 상품 학습 및 정보 업데이트",
-                    description="최신 보험 상품 정보 확인 및 학습",
+                    title="상품 정보 학습 및 업데이트",
+                    description="최신 상품 정보 확인 및 학습",
                     priority="low",
                     expected_time="30분",
                     category="학습"
@@ -257,9 +257,9 @@ class TodayPlanGenerator:
                 # 다양한 카테고리의 검색 쿼리 (다양성 확보)
                 search_queries = [
                     f"{request.owner} 고객 상담 통화 연락",
-                    f"{request.owner} 보험 설계 제안서 플랜",
-                    f"{request.owner} 신규 고객 발굴 DB",
-                    f"{request.owner} 계약 갱신 유지 관리",
+                    f"{request.owner} 제안서 플랜",
+                    f"{request.owner} 고객 발굴",
+                    f"{request.owner} 계약 관리",
                 ]
                 
                 all_results = []
@@ -333,15 +333,15 @@ class TodayPlanGenerator:
                     category="고객 상담"
                 ),
                 TaskItem(
-                    title="신규 고객 발굴 활동",
-                    description="신규 고객 명단 검토 및 상담 준비",
+                    title="고객 발굴 활동",
+                    description="고객 명단 검토 및 상담 준비",
                     priority="medium",
                     expected_time="1시간",
                     category="영업"
                 ),
                 TaskItem(
-                    title="보험 상품 학습 및 정보 업데이트",
-                    description="최신 보험 상품 정보 확인 및 학습",
+                    title="상품 정보 학습 및 업데이트",
+                    description="최신 상품 정보 확인 및 학습",
                     priority="low",
                     expected_time="30분",
                     category="학습"
@@ -433,7 +433,7 @@ class TodayPlanGenerator:
 1. **최소 3개 이상의 업무를 반드시 포함** (매우 중요!)
 2. 전날 미종결 업무가 있으면 우선적으로 포함
 3. 미종결 업무가 부족하면 과거 유사 업무 패턴을 적극 활용
-4. 그래도 부족하면 일반적인 보험 설계사 업무를 추가
+4. 그래도 부족하면 일반적인 업무를 추가
 5. 전날 수행한 작업의 연속성과 익일 계획을 고려
 6. 각 업무는 실행 가능하고 구체적이어야 함
 
