@@ -65,7 +65,8 @@ class InsuranceRAGConfig:
     @property
     def INS_ROOT(self) -> Path:
         """Insurance 루트 디렉토리"""
-        return Path("./internal_insurance")
+        # Insurance 모듈 기준 상대 경로
+        return Path(__file__).parent / "internal_insurance"
     
     @property
     def UPLOAD_DIR(self) -> Path:
@@ -88,11 +89,15 @@ class InsuranceRAGConfig:
     # 번역용 모델 (GPT-4o-mini)
     TRANSLATION_MODEL: str = "gpt-4o-mini"
     
-    # 청크 설정
+    # 청크 설정 (문자 기반 - 하위 호환성)
     RAG_CHUNK_SIZE: int = 400
     RAG_CHUNK_OVERLAP: int = 50
     RAG_MIN_CHUNK_SIZE: int = 300
     RAG_MAX_CHUNK_SIZE: int = 500
+    
+    # 청크 설정 (토큰 기반 - 새 청킹 시스템)
+    RAG_CHUNK_TOKENS: int = 500
+    RAG_CHUNK_OVERLAP_TOKENS: int = 80
     
     # 검색 설정
     RAG_TOP_K: int = 3
