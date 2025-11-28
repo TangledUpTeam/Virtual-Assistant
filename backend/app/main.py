@@ -127,12 +127,12 @@ async def root():
 
 @app.get("/landing")
 async def landing_page():
-    """랜딩 페이지 (첫 화면)"""
-    landing_page = FRONTEND_DIR / "Landing" / "index.html"
-    if landing_page.exists():
-        return FileResponse(landing_page)
+    """랜딩 페이지 (첫 화면) - Start 페이지 반환"""
+    start_page = FRONTEND_DIR / "Start" / "index.html"
+    if start_page.exists():
+        return FileResponse(start_page)
     else:
-        return {"error": "Landing page not found"}
+        return {"error": "Start page not found"}
 
 
 @app.get("/login")
@@ -147,9 +147,12 @@ async def login_page():
 
 @app.get("/start")
 async def start_page():
-    """시작 페이지 (로그인 완료 후) - /landing으로 리다이렉트"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/landing", status_code=302)
+    """시작 페이지 (로그인 완료 후)"""
+    start_page = FRONTEND_DIR / "Start" / "index.html"
+    if start_page.exists():
+        return FileResponse(start_page)
+    else:
+        return {"error": "Start page not found"}
 
 
 @app.get("/main")
