@@ -73,10 +73,61 @@ class RAGTherapySystem:
         
         # 감정/상담 키워드 목록
         self.counseling_keywords = [
+            # 기본 감정 키워드
             '힘들어', '상담', '짜증', '우울', '불안', '스트레스',
             '고민', '걱정', '슬프', '외로', '화나', '답답',
             '아들러', 'adler', 'counseling', 'therapy', 'help',
-            'depressed', 'anxious', '심리'
+            'depressed', 'anxious', '심리',
+            
+            # 부정적 감정 키워드
+            '절망', '포기', '무기력', '자책', '후회', '미안',
+            '두려움', '공포', '불안감', '초조', '조마조마',
+            '분노', '화남', '짜증나', '성가심', '불쾌',
+            '슬픔', '비참', '절망적', '우울함', '침체',
+            '외로움', '고독', '쓸쓸', '허전', '외톨이',
+            '답답함', '막막', '막힘', '난처', '곤란',
+            '피곤', '지침', '무력감', '무기력', '의욕없음',
+            
+            # 관계/대인관계 관련
+            '갈등', '싸움', '다툼', '오해', '불화',
+            '이별', '헤어짐', '이혼', '결별',
+            '배신', '상처', '아픔', '서운',
+            '소외', '왕따', '따돌림', '무시',
+            
+            # 직장/학업 스트레스
+            '직장', '업무', '과로', '번아웃', 'burnout',
+            '시험', '공부', '학업', '성적', '압박',
+            '실패', '좌절', '낙담', '실망',
+            
+            # 자기존중감/자신감 관련
+            '자존감', '자신감', '열등감', '비교', '열등',
+            '자책', '자기비하', '자기혐오', '부족함',
+            '능력부족', '무능력', '쓸모없음',
+            
+            # 트라우마/과거 상처
+            '트라우마', 'trauma', '상처', '과거', '기억',
+            '악몽', '플래시백', 'ptsd',
+            
+            # 영어 감정 키워드
+            'sad', 'angry', 'lonely', 'frustrated', 'stressed',
+            'worried', 'scared', 'afraid', 'fear', 'panic',
+            'hopeless', 'helpless', 'worthless', 'empty',
+            'guilt', 'shame', 'regret', 'remorse',
+            'jealous', 'envy', 'resentment', 'bitter',
+            'tired', 'exhausted', 'burnout', 'overwhelmed',
+            'confused', 'lost', 'directionless', 'purposeless',
+            
+            # 상담/치료 관련 용어
+            '심리상담', '정신건강', '치료', '치유', '회복',
+            '마음', '감정', '기분', '상태', '조언',
+            '도움', '지원', '위로', '격려', '공감',
+            'psychology', 'mental health', 'counselor', 'therapist',
+            'support', 'comfort', 'encouragement', 'empathy',
+            
+            # 일상적 표현
+            '안좋아', '안좋음', '나쁨', '최악', '끔찍',
+            '괴로워', '괴롭', '아파', '아픔', '고통',
+            '힘듦', '어려움', '난감', '막막함'
         ]
         
         # 대화 히스토리 (단기 기억)
@@ -583,7 +634,7 @@ Keep it concise but comprehensive."""
         # OpenAI API 호출
         try:
             response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5o-mini",
                 messages=messages,
                 temperature=0.3,  # 낮은 temperature로 일관된 답변 생성
                 max_tokens=80  # 답변 길이 제한 (1000 -> 200 -> 100 -> 80)
