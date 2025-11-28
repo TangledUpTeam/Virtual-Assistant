@@ -377,13 +377,19 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         issues = []
         미종결_업무 = raw_json.get("미종결_업무사항", "")
         if 미종결_업무:
-            issues.append(미종결_업무)
+            if isinstance(미종결_업무, list):
+                issues = 미종결_업무
+            else:
+                issues.append(미종결_업무)
         
         # Plans (익일 업무계획)
         plans = []
         익일_계획 = raw_json.get("익일_업무계획", "")
         if 익일_계획:
-            plans.append(익일_계획)
+            if isinstance(익일_계획, list):
+                plans = 익일_계획
+            else:
+                plans.append(익일_계획)
         
         # Metadata
         metadata = {
