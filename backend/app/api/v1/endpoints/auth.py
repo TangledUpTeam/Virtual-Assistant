@@ -92,7 +92,7 @@ async def google_callback(
             except Exception as e:
                 print(f"⚠️ OAuth 토큰 저장 실패: {e}")
         
-        # 쿠키에 토큰 저장하고 /start로 리다이렉트
+        # 쿠키에 토큰 저장하고 /landing으로 리다이렉트
         print(f"\n{'='*60}")
         print(f"🍪 Google OAuth 콜백 - 쿠키 설정 시작")
         print(f"{'='*60}")
@@ -102,7 +102,7 @@ async def google_callback(
         print(f"   - Access Token 길이: {len(result.access_token)}")
         print(f"   - Refresh Token 길이: {len(result.refresh_token)}")
         
-        response = RedirectResponse(url="/start", status_code=302)
+        response = RedirectResponse(url="/landing", status_code=302)
         
         # Access Token 쿠키 (HttpOnly, Secure)
         response.set_cookie(
@@ -167,7 +167,7 @@ async def google_callback(
             domain=None
         )
         print(f"   ✅ logged_in 쿠키 설정 완료")
-        print(f"\n🔄 /start로 리다이렉트")
+        print(f"\n🔄 /landing으로 리다이렉트")
         print(f"   Set-Cookie 헤더:")
         for key, value in response.headers.items():
             if key.lower() == 'set-cookie':
@@ -222,8 +222,8 @@ async def kakao_callback(
         auth_service = AuthService(db)
         result = auth_service.oauth_login(user_info)
         
-        # 쿠키에 토큰 저장하고 /start로 리다이렉트
-        response = RedirectResponse(url="/start", status_code=302)
+        # 쿠키에 토큰 저장하고 /landing으로 리다이렉트
+        response = RedirectResponse(url="/landing", status_code=302)
         
         # Access Token 쿠키
         response.set_cookie(
@@ -327,8 +327,8 @@ async def naver_callback(
         auth_service = AuthService(db)
         result = auth_service.oauth_login(user_info)
         
-        # 쿠키에 토큰 저장하고 /start로 리다이렉트
-        response = RedirectResponse(url="/start", status_code=302)
+        # 쿠키에 토큰 저장하고 /landing으로 리다이렉트
+        response = RedirectResponse(url="/landing", status_code=302)
         
         # Access Token 쿠키
         response.set_cookie(
@@ -399,6 +399,117 @@ async def naver_callback(
         
         error_params = {'error': str(e)}
         redirect_url = f"/login?{urlencode(error_params)}"
+        return RedirectResponse(url=redirect_url)
+
+
+# ========================================
+# Slack OAuth (사용자 개인 연동)
+# ========================================
+
+@router.get("/slack/login")
+async def slack_login():
+    """
+    Slack OAuth 로그인 URL 반환
+    
+    프론트엔드에서 이 URL로 리다이렉트
+    """
+    # Slack OAuth URL 생성
+    params = {
+        "client_id": settings.SLACK_CLIENT_ID,
+        "scope": "chat:write,channels:read,users:read,im:write",  # 필요한 권한
+        "redirect_uri": settings.SLACK_REDIRECT_URI,
+        "response_type": "code"
+    }
+    authorization_url = f"https://slack.com/oauth/v2/authorize?{urlencode(params)}"
+    return {"authorization_url": authorization_url}
+
+
+@router.get("/slack/callback")
+async def slack_callback(
+    code: str = Query(..., description="Slack Authorization Code"),
+    db: Session = Depends(get_db)
+):
+    """
+    Slack OAuth 콜백
+    
+    Slack에서 인증 후 이 엔드포인트로 리다이렉트됨
+    """
+    try:
+        print(f"\n🔵 Slack OAuth 콜백 시작")
+        print(f"📦 Code: {code[:20]}...")
+        
+        # 1. Slack에서 Access Token 교환
+        import httpx
+        async with httpx.AsyncClient() as client:
+            token_response = await client.post(
+                "https://slack.com/api/oauth.v2.access",
+                data={
+                    "client_id": settings.SLACK_CLIENT_ID,
+                    "client_secret": settings.SLACK_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": settings.SLACK_REDIRECT_URI
+                }
+            )
+            
+            token_data = token_response.json()
+            
+            if not token_data.get("ok"):
+                error_msg = token_data.get("error", "Unknown error")
+                print(f"❌ Slack 토큰 교환 실패: {error_msg}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Slack OAuth 실패: {error_msg}"
+                )
+            
+            access_token = token_data.get("access_token")
+            team_id = token_data.get("team", {}).get("id")
+            team_name = token_data.get("team", {}).get("name")
+            
+            print(f"✅ Slack 토큰 획득 성공")
+            print(f"📋 Team: {team_name} ({team_id})")
+        
+        # 2. 현재 로그인된 사용자 확인 (쿠키에서)
+        # 실제로는 Request에서 쿠키를 읽어야 하지만, 
+        # 여기서는 간단히 리다이렉트로 처리
+        # 프론트엔드에서 user_id를 전달하거나, 쿠키에서 JWT를 파싱해야 함
+        
+        # 임시: 쿠키에 Slack 토큰 저장 (나중에 user_id와 연결)
+        response = RedirectResponse(url="/landing?slack_connected=true", status_code=302)
+        
+        # Slack 토큰을 쿠키에 임시 저장
+        response.set_cookie(
+            key="slack_access_token",
+            value=access_token,
+            httponly=True,
+            secure=False,
+            samesite="Lax",
+            max_age=60 * 60 * 24 * 365,  # 1년 (Slack 토큰은 만료되지 않음)
+            path="/",
+            domain=None
+        )
+        
+        response.set_cookie(
+            key="slack_team_name",
+            value=team_name,
+            httponly=False,
+            secure=False,
+            samesite="Lax",
+            max_age=60 * 60 * 24 * 365,
+            path="/",
+            domain=None
+        )
+        
+        print(f"✅ Slack 연동 완료 - 쿠키 설정 완료: {team_name}")
+        
+        return response
+    
+    except Exception as e:
+        print(f"\n❌ Slack OAuth 콜백 에러: {type(e).__name__} - {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        error_params = {'error': str(e), 'slack_error': 'true'}
+        redirect_url = f"/landing?{urlencode(error_params)}"
         return RedirectResponse(url=redirect_url)
 
 
