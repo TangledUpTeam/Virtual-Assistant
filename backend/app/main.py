@@ -47,13 +47,12 @@ async def lifespan(app: FastAPI):
     print("✅ Database tables created")
     
     # Vector DB 자동 생성 (심리 상담 시스템용)
-    print("\n🧠 Initializing Therapy Vector DB...")
     try:
         success = automatic_save()
         if success:
-            print("✅ Therapy Vector DB initialized successfully")
+            pass
         else:
-            print("⚠️  Therapy Vector DB initialization failed (may already exist)")
+            print("⚠️  Therapy Vector DB initialization failed")
     except Exception as e:
         print(f"⚠️  Therapy Vector DB initialization error: {e}")
     
@@ -126,6 +125,16 @@ async def root():
         }
 
 
+@app.get("/landing")
+async def landing_page():
+    """랜딩 페이지 (첫 화면)"""
+    landing_page = FRONTEND_DIR / "Landing" / "index.html"
+    if landing_page.exists():
+        return FileResponse(landing_page)
+    else:
+        return {"error": "Landing page not found"}
+
+
 @app.get("/login")
 async def login_page():
     """로그인 페이지"""
@@ -138,12 +147,9 @@ async def login_page():
 
 @app.get("/start")
 async def start_page():
-    """시작 페이지 (로그인 완료 후)"""
-    start_page = FRONTEND_DIR / "Start" / "index.html"
-    if start_page.exists():
-        return FileResponse(start_page)
-    else:
-        return {"error": "Start page not found"}
+    """시작 페이지 (로그인 완료 후) - /landing으로 리다이렉트"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/landing", status_code=302)
 
 
 @app.get("/main")

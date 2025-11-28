@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     NAVER_CLIENT_SECRET: str
     NAVER_REDIRECT_URI: str
     
+    # OAuth - Slack (사용자 개인 연동)
+    SLACK_CLIENT_ID: str = ""
+    SLACK_CLIENT_SECRET: str = ""
+    SLACK_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/slack/callback"
+    
     # OpenAI
     OPENAI_API_KEY: str
     
