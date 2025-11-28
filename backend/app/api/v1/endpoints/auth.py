@@ -97,33 +97,39 @@ async def google_callback(
         print(f"🍪 Google OAuth 콜백 - 쿠키 설정 시작")
         print(f"{'='*60}")
         print(f"   - DEBUG 모드: {settings.DEBUG}")
-        print(f"   - Secure 설정: {not settings.DEBUG}")
-        print(f"   - 사용자: {result.user.email}")
+        
+        # 개발 환경(localhost)에서는 Secure=False, SameSite=Lax로 설정해야 쿠키가 전송됨
+        secure_cookie = not settings.DEBUG
+        samesite_policy = "Lax" if settings.DEBUG else "None"
+        
+        print(f"   - Secure 설정: {secure_cookie}")
+        print(f"   - SameSite 설정: {samesite_policy}")
+        print(f"   - 사용자: {result.user.email} (ID: {result.user.id})")
         print(f"   - Access Token 길이: {len(result.access_token)}")
         print(f"   - Refresh Token 길이: {len(result.refresh_token)}")
         
         response = RedirectResponse(url="/landing", status_code=302)
         
-        # Access Token 쿠키 (HttpOnly, Secure)
+        # Access Token 쿠키 (HttpOnly)
         response.set_cookie(
             key="access_token",
             value=result.access_token,
             httponly=True,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",  # 대문자 L (크롬 정책)
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
-            domain=None  # localhost에서는 domain 지정 안 함
+            domain=None
         )
         print(f"   ✅ access_token 쿠키 설정 완료")
         
-        # Refresh Token 쿠키 (HttpOnly, Secure)
+        # Refresh Token 쿠키 (HttpOnly)
         response.set_cookie(
             key="refresh_token",
             value=result.refresh_token,
             httponly=True,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",
             domain=None
@@ -134,6 +140,7 @@ async def google_callback(
         import json
         from urllib.parse import quote
         user_data = {
+            "id": result.user.id,  # ID 추가
             "email": result.user.email,
             "name": result.user.name or ""
         }
@@ -145,23 +152,21 @@ async def google_callback(
             key="user",
             value=user_encoded,
             httponly=False,  # JavaScript에서 읽을 수 있도록
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",
             domain=None
         )
-        print(f"   ✅ user 쿠키 설정 완료 (URL 인코딩)")
+        print(f"   ✅ user 쿠키 설정 완료 (URL 인코딩, ID 포함)")
         
         # 로그인 상태 확인용 쿠키 (HttpOnly=false)
-        # access_token은 HttpOnly라서 JavaScript에서 읽을 수 없으므로
-        # 별도의 플래그 쿠키 추가
         response.set_cookie(
             key="logged_in",
             value="true",
             httponly=False,  # JavaScript에서 읽을 수 있도록
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
             domain=None
@@ -222,16 +227,20 @@ async def kakao_callback(
         auth_service = AuthService(db)
         result = auth_service.oauth_login(user_info)
         
-        # 쿠키에 토큰 저장하고 /landing으로 리다이렉트
-        response = RedirectResponse(url="/landing", status_code=302)
+        # 쿠키 설정 준비
+        secure_cookie = not settings.DEBUG
+        samesite_policy = "Lax" if settings.DEBUG else "None"
+        
+        # 쿠키에 토큰 저장하고 /start로 리다이렉트
+        response = RedirectResponse(url="/start", status_code=302)
         
         # Access Token 쿠키
         response.set_cookie(
             key="access_token",
             value=result.access_token,
             httponly=True,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
             domain=None
@@ -242,8 +251,8 @@ async def kakao_callback(
             key="refresh_token",
             value=result.refresh_token,
             httponly=True,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",
             domain=None
@@ -253,6 +262,7 @@ async def kakao_callback(
         import json
         from urllib.parse import quote
         user_data = {
+            "id": result.user.id,
             "email": result.user.email,
             "name": result.user.name or ""
         }
@@ -264,8 +274,8 @@ async def kakao_callback(
             key="user",
             value=user_encoded,
             httponly=False,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",
             domain=None
@@ -276,8 +286,8 @@ async def kakao_callback(
             key="logged_in",
             value="true",
             httponly=False,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
             domain=None
@@ -327,16 +337,20 @@ async def naver_callback(
         auth_service = AuthService(db)
         result = auth_service.oauth_login(user_info)
         
-        # 쿠키에 토큰 저장하고 /landing으로 리다이렉트
-        response = RedirectResponse(url="/landing", status_code=302)
+        # 쿠키 설정 준비
+        secure_cookie = not settings.DEBUG
+        samesite_policy = "Lax" if settings.DEBUG else "None"
+        
+        # 쿠키에 토큰 저장하고 /start로 리다이렉트
+        response = RedirectResponse(url="/start", status_code=302)
         
         # Access Token 쿠키
         response.set_cookie(
             key="access_token",
             value=result.access_token,
             httponly=True,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
             domain=None
@@ -347,8 +361,8 @@ async def naver_callback(
             key="refresh_token",
             value=result.refresh_token,
             httponly=True,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",
             domain=None
@@ -358,6 +372,7 @@ async def naver_callback(
         import json
         from urllib.parse import quote
         user_data = {
+            "id": result.user.id,
             "email": result.user.email,
             "name": result.user.name or ""
         }
@@ -369,8 +384,8 @@ async def naver_callback(
             key="user",
             value=user_encoded,
             httponly=False,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
             path="/",
             domain=None
@@ -381,8 +396,8 @@ async def naver_callback(
             key="logged_in",
             value="true",
             httponly=False,
-            secure=False,  # 로컬 개발 환경
-            samesite="Lax",
+            secure=secure_cookie,
+            samesite=samesite_policy,
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/",
             domain=None

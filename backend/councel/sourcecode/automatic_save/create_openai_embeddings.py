@@ -1,6 +1,7 @@
 """
 OpenAI 임베딩 모델을 사용하여 청크 파일의 임베딩을 생성하는 스크립트
 생성날짜: 2025.11.21
+리팩토링: 2025.11.25 - 1차 코드 리팩토링(쓸데 없는 print문 제거 및 코드 정리)
 설명: text-embedding-3-large 모델을 사용하여 Adler 청크 파일의 임베딩 생성
 """
 
@@ -121,10 +122,6 @@ def save_embeddings(chunks: List[Dict[str, Any]], embeddings: List[List[float]],
 # 메인 함수
 # 쓸데 없는 print문 및 예외처리 print문은 나중에 삭제 예정
 def main():
-
-    print("=" * 60)
-    print("OpenAI 임베딩 생성 스크립트")
-    print("=" * 60)
     
     # API 키 확인
     api_key = os.getenv("OPENAI_API_KEY")
@@ -173,23 +170,12 @@ def main():
             # 4. 결과 저장
             if save_embeddings(chunks, embeddings, str(output_path)):
                 total_processed += 1
-                print(f"완료: {output_filename}") # 배포 전 삭제 예정
             else:
                 total_failed += 1
                 
         except Exception as e:
             print(f"파일 처리 중 예외 발생: {e}") # 예외처리 print문은 배포 전 삭제 예정
             total_failed += 1
-    
-    # 최종 결과 출력
-    # 배포 전 삭제 예정
-    print(f"\n{'='*60}")
-    print("전체 작업 완료!")
-    print(f"{'='*60}")
-    print(f"성공: {total_processed}개")
-    print(f"실패: {total_failed}개")
-    print(f"저장 위치: {OUTPUT_DIR}")
-    print(f"{'='*60}")
 
 # 호출
 if __name__ == "__main__":

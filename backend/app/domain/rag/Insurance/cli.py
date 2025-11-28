@@ -53,6 +53,10 @@ def main():
     process_parser = subparsers.add_parser("process", help="PDF 파일 처리 (Extract → Chunk → Embed)")
     process_parser.add_argument("input_path", help="PDF 파일 또는 디렉토리 경로")
     
+    # upload 명령어 (process의 별칭)
+    upload_parser = subparsers.add_parser("upload", help="PDF 파일 업로드 및 처리 (process와 동일)")
+    upload_parser.add_argument("input_path", help="PDF 파일 또는 디렉토리 경로")
+    
     # query 명령어
     query_parser = subparsers.add_parser("query", help="질의응답")
     query_parser.add_argument("question", nargs="?", help="질문 (없으면 대화형 모드)")
@@ -73,6 +77,9 @@ def main():
     # 명령어 실행
     if args.command == "process":
         process_command(args.input_path)
+    elif args.command == "upload":
+        # upload는 process의 별칭
+        process_command(args.input_path)
     elif args.command == "query":
         query_command(args.question, args.top_k)
     elif args.command == "stats":
@@ -88,8 +95,16 @@ def process_command(input_path: str):
     """PDF 처리 명령어 (Extract → Chunk → Embed)"""
     input_path = Path(input_path)
     
+    # 경로 자동 보정: internal_docs → internal_insurance
+    if "internal_docs" in str(input_path):
+        corrected_path = str(input_path).replace("internal_docs", "internal_insurance")
+        print(f"⚠️  경로 자동 보정: {input_path} → {corrected_path}")
+        logger.info(f"경로 자동 보정: {input_path} → {corrected_path}")
+        input_path = Path(corrected_path)
+    
     if not input_path.exists():
         print(f"❌ 오류: 경로를 찾을 수 없습니다: {input_path}")
+        print(f"💡 팁: Insurance RAG는 'internal_insurance/uploads' 디렉토리를 사용합니다.")
         logger.error(f"경로를 찾을 수 없습니다: {input_path}")
         sys.exit(1)
     

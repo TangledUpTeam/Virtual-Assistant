@@ -29,3 +29,6 @@ class QueryResponse(BaseModel):
     processing_time: float
     model_used: str
 
+
+
+
