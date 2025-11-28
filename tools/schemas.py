@@ -13,10 +13,7 @@ function_definitions = [
     {"name": "list_messages", "description": "Gmail 메시지 목록을 조회합니다.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "검색 쿼리 (예: 'is:unread')", "default": "is:unread"}, "max_results": {"type": "integer", "description": "최대 결과 수 (기본값: 20)", "default": 20}}, "required": []}},
     {"name": "get_message", "description": "Gmail 메시지의 상세 정보를 조회합니다.", "parameters": {"type": "object", "properties": {"message_id": {"type": "string", "description": "조회할 메시지 ID"}, "format": {"type": "string", "description": "응답 형식 ('full', 'metadata', 'minimal', 'raw')", "default": "full"}}, "required": ["message_id"]}},
     
-    # Slack
-    {"name": "send_dm", "description": "Slack DM (Direct Message)을 전송합니다.", "parameters": {"type": "object", "properties": {"to_user": {"type": "string", "description": "수신자 Slack User ID"}, "text": {"type": "string", "description": "메시지 텍스트"}}, "required": ["to_user", "text"]}},
-    {"name": "send_channel_message", "description": "Slack 채널에 메시지를 전송합니다.", "parameters": {"type": "object", "properties": {"channel_id": {"type": "string", "description": "채널 ID"}, "text": {"type": "string", "description": "메시지 텍스트"}}, "required": ["channel_id", "text"]}},
-    
+
     # Notion
     {"name": "create_page", "description": "Notion에 새 페이지를 생성합니다.", "parameters": {"type": "object", "properties": {"parent_page_id": {"type": "string", "description": "부모 페이지 ID"}, "title": {"type": "string", "description": "페이지 제목"}}, "required": ["parent_page_id", "title"]}},
     {"name": "add_database_item", "description": "Notion 데이터베이스에 항목을 추가합니다.", "parameters": {"type": "object", "properties": {"database_id": {"type": "string", "description": "데이터베이스 ID"}, "properties_dict": {"type": "object", "description": "속성 딕셔너리 (Notion properties 형식)"}}, "required": ["database_id", "properties_dict"]}},

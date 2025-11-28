@@ -56,7 +56,7 @@ class ChatService:
         
         # Tool 함수 매핑 (Function Calling 실행용)
         if TOOLS_AVAILABLE:
-            from tools import drive_tool, gmail_tool, slack_tool, notion_tool
+            from tools import drive_tool, gmail_tool, notion_tool
             self.tool_map = {
                 "create_folder": drive_tool.create_folder,
                 "upload_file": drive_tool.upload_file,
@@ -65,8 +65,7 @@ class ChatService:
                 "send_email": gmail_tool.send_email,
                 "list_messages": gmail_tool.list_messages,
                 "get_message": gmail_tool.get_message,
-                "send_dm": slack_tool.send_dm,
-                "send_channel_message": slack_tool.send_channel_message,
+
                 "create_page": notion_tool.create_page,
                 "add_database_item": notion_tool.add_database_item,
             }
@@ -222,7 +221,6 @@ class ChatService:
                         
                         # 모든 도구는 user_id가 필요함
                         if function_name in ["send_email", "list_messages", "get_message", 
-                                            "send_dm", "send_channel_message", 
                                             "create_page", "add_database_item",
                                             "create_folder", "upload_file", "search_files", "download_file"]:
                             # user_id를 문자열로 변환하여 전달

@@ -50,10 +50,7 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     
-    # Slack
-    SLACK_BOT_TOKEN: str = ""
-    SLACK_SIGNING_SECRET: str = ""
-    
+
     # Application
     APP_NAME: str = "Virtual Desk Assistant"
     APP_VERSION: str = "1.0.0"
