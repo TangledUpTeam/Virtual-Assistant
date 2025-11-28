@@ -117,7 +117,7 @@ class RAGEvaluator:
 ### 출력 형식
 반드시 다음 JSON 포맷으로 응답하세요:
 {{
-  "score": 점수 (1,2,3,4,5 중 하나),
+  "score": 점수 (1, 2, 3, 4, 5 중 하나),
   "reason": "채점 이유 설명"
 }}
 """
@@ -245,7 +245,7 @@ class RAGEvaluator:
                 "question": question,
                 "context": "(참고용)",
                 "answer": answer,
-                "ground_truth": "(참고용)"
+                "ground_truth": "N/A (Not used for Answer Relevancy)"
             })
         except Exception as e:
             return {"score": 0, "reason": f"Error: {str(e)}"}
@@ -398,7 +398,11 @@ if __name__ == "__main__":
     evaluator = RAGEvaluator()
     
     input_path = "backend/data/HR_RAG/HR_RAG_GTA/ground_truth_annotations.xlsx"
-    output_path = "backend/data/HR_RAG/HR_RAG_result/HR_RAG_result.json"
+    
+    # 결과 파일명에 타임스탬프 추가
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = f"backend/data/HR_RAG/HR_RAG_result/HR_RAG_result_{timestamp}.json"
     
     # 절대 경로로 변환 (실행 위치에 따라 다를 수 있음)
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))

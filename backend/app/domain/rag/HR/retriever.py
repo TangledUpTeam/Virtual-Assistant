@@ -430,7 +430,6 @@ class RAGRetriever:
                 print(f"  - 연관성 (Answer Relevancy): {eval_result.get('answer_relevancy_score')}점")
                 print(f"  - 정밀도 (Context Precision): {eval_result.get('context_precision_score')}점")
                 print(f"  - 일치도 (Answer Correctness): {eval_result.get('answer_correctness_score')}점")
-                print("="*50 + "\n")
                 
                 # 결과 JSON 저장
                 try:
@@ -467,12 +466,18 @@ class RAGRetriever:
                         json.dump(save_data, f, ensure_ascii=False, indent=4)
                         
                     logger.info(f"평가 결과 저장 완료: {result_file}")
+                    print(f"  - 결과 파일 저장: {result_file}")
                     
                 except Exception as save_e:
                     logger.error(f"평가 결과 저장 실패: {save_e}")
+                    print(f"  - 결과 파일 저장 실패: {save_e}")
+
+                print("="*50 + "\n")
                     
             except Exception as eval_e:
                 logger.warning(f"실시간 평가 중 오류 발생: {eval_e}")
+                print(f"❌ 실시간 평가 중 오류 발생: {eval_e}")
+                print("="*50 + "\n")
             
             # LangSmith 메타데이터 로깅
             from langsmith import traceable
