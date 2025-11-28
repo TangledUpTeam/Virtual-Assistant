@@ -1,22 +1,44 @@
 """
 RAG 기반 상담 시스템
 생성날짜: 2025.11.18
-수정날짜: 2025.11.25
+수정날짜: 2025.11.28
 설명: 사용자의 질문을 받아 관련 상담 데이터 청크를 검색하고, 이를 바탕으로 적절한 답변 또는 상담을 진행
 OpenAI API를 사용한 임베딩 및 답변 생성
-주요 변경: RAG 기반 동적 페르소나 생성 (Vector DB + 웹 검색)
+주요 변경: 
+  - RAG 기반 동적 페르소나 생성 (Vector DB + 웹 검색)
+  - LLM 기반 답변 품질 자동 평가 (스코어링 시스템)
+  - 청크 한국어 요약 기능
+  - Re-ranker 적용 (검색 결과 재정렬)
+  - 코드 구조 정리: 상담 관련 기능 / 로그 관련 기능 분리
 """
 
 import os
 import json
 import chromadb
+import sys
+import re
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from threading import Thread
 from openai import OpenAI
 from dotenv import load_dotenv
 
 # .env 파일 로드
 load_dotenv()
+
+# TherapyLogger 임포트 (직접 실행 시와 모듈 import 시 모두 지원)
+try:
+    from .therapy_logger import TherapyLogger
+except ImportError:
+    # 직접 실행 시 상대 import가 실패하면 절대 import 시도
+    import sys
+    from pathlib import Path
+    # 현재 파일의 디렉토리를 sys.path에 추가
+    current_dir = Path(__file__).parent
+    if str(current_dir) not in sys.path:
+        sys.path.insert(0, str(current_dir))
+    from therapy_logger import TherapyLogger
 
 # RAG 기반 상담 시스템
 class RAGTherapySystem:
@@ -46,39 +68,72 @@ class RAGTherapySystem:
         # 컬렉션 로드
         try:
             self.collection = self.client.get_collection(name=self.collection_name)
-            print(f"컬렉션 로드 완료")
         except Exception as e:
             raise ValueError(f"컬렉션 '{self.collection_name}'을 찾을 수 없습니다: {e}")
         
         # 감정/상담 키워드 목록
         self.counseling_keywords = [
-            "힘들어", "상담", "짜증", "우울", "불안", "스트레스", 
-            "고민", "걱정", "슬프", "외로", "화나", "답답",
-            "counseling", "therapy", "help", "depressed", "anxious"
+            '힘들어', '상담', '짜증', '우울', '불안', '스트레스',
+            '고민', '걱정', '슬프', '외로', '화나', '답답',
+            '아들러', 'adler', 'counseling', 'therapy', 'help',
+            'depressed', 'anxious', '심리'
         ]
         
         # 대화 히스토리 (단기 기억)
         self.chat_history = []
         
-        # ========================================
-        # 페르소나 생성 방식 선택 (테스트용)
-        # ========================================
-        # 아래 두 함수 중 하나를 주석 처리하여 사용할 방식을 선택
+        # 로거 초기화 (스코어링 로그 저장용)
+        base_dir = Path(__file__).parent.parent.parent  # backend/councel/
+        test_dir = base_dir / "test"  # backend/councel/test/
+        log_file_prefix = "scoring_log_v3"  # 로그 파일명 (필요시 변경)
         
-        # [함수 A] RAG 기반 페르소나 생성 (Vector DB + 웹 검색)
-        self.adler_persona = self.generate_persona_with_rag()
+        self.therapy_logger = TherapyLogger(
+            openai_client=self.openai_client,
+            log_dir=str(test_dir),
+            log_file_prefix=log_file_prefix
+        )
         
-        # [함수 B] 프롬프트 엔지니어링 기반 페르소나 생성 (하드코딩)
-        # self.adler_persona = self.generate_persona_with_prompt_engineering()
+        # ========================================
+        # 페르소나 초기화 (Lazy Loading + Background Task + Caching)
+        # ========================================
+        
+        # 캐시 파일 경로 설정
+        cache_dir = base_dir / "cache"
+        cache_dir.mkdir(exist_ok=True)
+        self.persona_cache_path = cache_dir / "adler_persona_cache.json"
+        
+        # 페르소나 상태 플래그
+        self._persona_ready = False
+        self._rag_persona_ready = False
+        
+        # 캐시된 페르소나 로드 시도
+        cached_persona = self._load_cached_persona()
+        if cached_persona:
+            self.adler_persona = cached_persona
+            self._persona_ready = True
+            self._rag_persona_ready = True
+            print("[정보] 캐시된 RAG 페르소나 로드 완료")
+        else:
+            # 기본 페르소나로 빠르게 시작
+            self.adler_persona = self._get_default_persona()
+            self._persona_ready = True
+            self._rag_persona_ready = False
+            print("[정보] 기본 페르소나로 시작 (백그라운드에서 RAG 페르소나 생성 중...)")
+            # 백그라운드에서 RAG 페르소나 생성
+            self._start_background_persona_generation()
         
         # ========================================
     
-    # [함수 A] RAG 기반 페르소나 생성
-    # Vector DB와 웹 검색을 활용하여 RAG 기반 페르소나 생성
+    # ============================================================
+    # 상담 관련 기능
+    # ============================================================
+    
+    # 페르소나 생성 함수
+    # RAG 기반 페르소나 생성(Vector DB + 웹 검색)
     def generate_persona_with_rag(self) -> str:
         return self._generate_persona_from_rag()
     
-    # [함수 B] 프롬프트 엔지니어링 기반 페르소나 생성(하드코딩)
+    # 프롬프트 엔지니어링으로만 페르소나 생성 
     def generate_persona_with_prompt_engineering(self) -> str:
 
         return """
@@ -108,7 +163,66 @@ class RAGTherapySystem:
 
         """
     
-    # 웹 검색을 통한 아들러 정보 수집(페르소나 생성 용도)
+    # 페로스나 디폴트 값(프롬프트 엔지니어링 사용한 페르소나)
+    def _get_default_persona(self) -> str:
+        return self.generate_persona_with_prompt_engineering()
+    
+    # 캐시된 페르소나 로드(캐시는 24시간 유효)
+    def _load_cached_persona(self) -> Optional[str]:
+
+        try:
+            if self.persona_cache_path.exists():
+                with open(self.persona_cache_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # 캐시 유효성 검사 (24시간 이내)
+                    cache_timestamp = data.get('timestamp', 0)
+                    current_time = time.time()
+                    if current_time - cache_timestamp < 86400:  # 24시간 = 86400초
+                        return data.get('persona')
+                    else:
+                        print(f"[정보] 캐시가 만료되었습니다 (생성 시각: {time.ctime(cache_timestamp)})")
+        except Exception as e:
+            print(f"[경고] 캐시 로드 실패: {e}")
+        return None
+    
+    # 페르소나를 캐시에 저장
+    def _save_persona_cache(self, persona: str):
+
+        try:
+            data = {
+                'persona': persona,
+                'timestamp': time.time()
+            }
+            with open(self.persona_cache_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[경고] 캐시 저장 실패: {e}")
+    
+    # 백그라운드에서 RAG 페르소나 생성 및 캐싱
+    def _start_background_persona_generation(self):
+
+        def generate_in_background():
+            try:
+                rag_persona = self._generate_persona_from_rag()
+                self.adler_persona = rag_persona
+                self._rag_persona_ready = True
+                self._save_persona_cache(rag_persona)
+                print("[정보] RAG 페르소나 로딩 완료!")
+            except Exception as e:
+                print(f"[경고] 백그라운드 페르소나 생성 실패: {e}")
+                print("[정보] 기본 페르소나를 계속 사용합니다.")
+                import traceback
+                traceback.print_exc()
+        
+        # 백그라운드 스레드 시작 (daemon=True로 서버 종료 시 자동 정리)
+        thread = Thread(target=generate_in_background, daemon=True)
+        thread.start()
+    
+    # RAG 페르소나 생성 완료 여부 확인
+    def is_rag_persona_ready(self) -> bool:
+        return self._rag_persona_ready
+    
+    # 웹 검색 -> 아들러 정보 수집(페르소나 생성 용도)
     def _search_web_for_adler(self) -> str:
 
         try:
@@ -131,7 +245,7 @@ class RAGTherapySystem:
 Keep it concise but comprehensive."""
                     }
                 ],
-                temperature=0.7,
+                temperature=0.3,
                 max_tokens=800
             )
             return response.choices[0].message.content.strip()
@@ -139,12 +253,7 @@ Keep it concise but comprehensive."""
             print(f"[경고] 웹 검색 실패: {e}")
             return ""
     
-    # 디폴트 페르소나(페르소나 생성 실패 시 사용 -> 하드코딩 페르소나 사용)
-    def _get_default_persona(self) -> str:
-        return self.generate_persona_with_prompt_engineering()
-    
-    # RAG 기반 페르소나 생성
-    # Vector DB와 웹 검색 사용 -> 페르소나 생성
+    # RAG 기반 페르소나 생성(Vector DB + 웹 검색)
     def _generate_persona_from_rag(self) -> str:
 
         # 아들러 핵심 개념 검색 쿼리들
@@ -246,11 +355,12 @@ Keep it concise but comprehensive."""
                         - 사회적 관심과 공동체 감각 강조
                         - 목표 지향적 관점 제시
                         - 격려적이고 희망적인 톤 유지
+                        - 상대방의 감정에 공감하고 이해하도록 노력
 
                         페르소나 프롬프트만 출력해주세요. 다른 설명은 불필요합니다."""
                     }
                 ],
-                temperature=0.7,
+                temperature=0.3,
                 max_tokens=500
             )
             
@@ -261,7 +371,7 @@ Keep it concise but comprehensive."""
             print(f"[경고] 페르소나 생성 실패, 기본 페르소나 사용: {e}")
             return self._get_default_persona()
     
-    # 사용자 입력을 영어로 번역하는 함수
+    # 사용자의 입력값을 영어로 변역하는 함수
     def translate_to_english(self, text: str) -> str:
 
         try:
@@ -279,8 +389,7 @@ Keep it concise but comprehensive."""
             print(f"[경고] 번역 실패: {e}")
             return text  # 번역 실패 시 원문 반환
     
-    # 사용자 질문을 임베딩 벡터로 변환하는 함수 (OpenAI)
-    # OpenAI text-embedding-3-large를 사용하여 임베딩 생성
+    # 사용자의 질문을 임베딩 벡터로 변환
     def create_query_embedding(self, query_text: str) -> List[float]:
 
         try:
@@ -293,7 +402,7 @@ Keep it concise but comprehensive."""
             print(f"[오류] 임베딩 생성 실패: {e}")
             raise
     
-    # 사용자 입력 분류 함수
+    # 사용자의 입력 분류(아들러, 감정/상담, 일반)
     def classify_input(self, user_input: str) -> str:
 
         user_input_lower = user_input.lower()
@@ -309,15 +418,82 @@ Keep it concise but comprehensive."""
         
         return "general"
     
-    # 입력된 질문이 심리 상담 관련인지 확인하는 함수
+    # 입력된 질문이 심리 상담 관련인지 확인
     def is_therapy_related(self, user_input: str) -> bool:
+
         input_type = self.classify_input(user_input)
         return input_type in ["adler", "counseling"]
     
+    # Re-ranker 사용 -> 검색된 청크들을 관련성 기준으로 재정렬
+    # LLM 사용
+    def rerank_chunks(self, user_input: str, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+
+        if not chunks or len(chunks) <= 1:
+            return chunks
+        
+        try:
+            # 각 청크의 관련성 평가를 위한 프롬프트 구성
+            chunks_text = "\n\n".join([
+                f"[청크 {i+1}]\n{chunk['text'][:300]}..." 
+                for i, chunk in enumerate(chunks)
+            ])
+            
+            evaluation_prompt = f"""다음은 사용자 질문과 검색된 청크들입니다.
+
+                사용자 질문: {user_input}
+
+                검색된 청크들:
+                {chunks_text}
+
+                위 청크들을 사용자 질문과의 관련성 순서대로 번호만 나열해주세요.
+                예: 3, 1, 2, 5, 4 (가장 관련성 높은 것부터)
+
+                번호만 출력해주세요. 다른 설명은 불필요합니다."""
+            
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert at evaluating document relevance. Rank documents by their relevance to the user's question."
+                    },
+                    {
+                        "role": "user",
+                        "content": evaluation_prompt
+                    }
+                ],
+                temperature=0.1,  # 매우 낮은 temperature로 일관된 평가
+                max_tokens=50
+            )
+            
+            # 순위 파싱
+            ranking_text = response.choices[0].message.content.strip()
+            # 숫자만 추출
+            ranked_indices = [int(x) - 1 for x in re.findall(r'\d+', ranking_text)]  # 1-based to 0-based
+            
+            # 유효한 인덱스만 필터링
+            valid_indices = [idx for idx in ranked_indices if 0 <= idx < len(chunks)]
+            
+            # 재정렬
+            if valid_indices and len(valid_indices) == len(chunks):
+                reranked_chunks = [chunks[idx] for idx in valid_indices]
+                # 재정렬된 청크에 rerank_score 추가
+                for i, chunk in enumerate(reranked_chunks):
+                    chunk['rerank_score'] = len(chunks) - i  # 높은 순위일수록 높은 점수
+                return reranked_chunks
+            else:
+                # 파싱 실패 시 원본 반환
+                print(f"[경고] Re-ranker 순위 파싱 실패. 원본 순서 유지.")
+                return chunks
+                
+        except Exception as e:
+            print(f"[경고] Re-ranker 실행 실패: {e}")
+            return chunks
     
-    # 사용자 질문과 관련된 데이터를 상담 청크로부터 검색하는 함수
     # Vector DB에서 관련 청크 검색
-    def retrieve_chunks(self, user_input: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    # top_n -> 5개 청크 검색(n_results)
+    # reranker -> true
+    def retrieve_chunks(self, user_input: str, n_results: int = 5, use_reranker: bool = True) -> List[Dict[str, Any]]:
 
         # 질문을 임베딩으로 변환
         query_embedding = self.create_query_embedding(user_input)
@@ -340,29 +516,44 @@ Keep it concise but comprehensive."""
                 }
                 retrieved_chunks.append(chunk)
         
+        # Re-ranker 적용
+        if use_reranker and retrieved_chunks:
+            retrieved_chunks = self.rerank_chunks(user_input, retrieved_chunks)
+        
         return retrieved_chunks
     
-    # 페르소나 기반 답변 생성 (RAG + Persona)
+    # 페르소나 기반 답변 생성
     def generate_response_with_persona(self, user_input: str, retrieved_chunks: List[Dict[str, Any]], mode: str = "adler") -> Dict[str, Any]:
 
         # 검색된 청크가 없는 경우
-        # 고민중인건 RAG를 여기에서 사용해서 자가학습 RAG를 만들지 안할지 고민중
         if not retrieved_chunks:
             return {
                 "answer": "죄송합니다. 관련된 자료를 찾을 수 없습니다. 다른 질문을 해주시겠어요?",
                 "used_chunks": [],
+                "used_chunks_detailed": [],
                 "continue_conversation": True
             }
         
         # 컨텍스트 구성
         context_parts = []
         used_chunks = []
+        used_chunks_detailed = []
         
-        for i, chunk in enumerate(retrieved_chunks[:2], 1):  # 상위 2개 청크 사용(3개로 하니까 답변이 너무 길어짐)
+        for i, chunk in enumerate(retrieved_chunks[:3], 1):  # 상위 3개 청크 사용
             chunk_text = chunk['text']
             source = chunk['metadata'].get('source', '알 수 없음')
             context_parts.append(f"[자료 {i}]\n{chunk_text}\n(출처: {source})")
             used_chunks.append(f"{source}: {chunk_text[:50]}...")
+            
+            # 상세 청크 정보 (로깅용 - summarize_chunk는 로그 섹션에 정의)
+            chunk_summary = self.summarize_chunk(chunk_text)
+            used_chunks_detailed.append({
+                "chunk_id": chunk['id'],
+                "source": source,
+                "metadata": chunk['metadata'],
+                "summary_kr": chunk_summary,
+                "distance": chunk.get('distance')
+            })
         
         context = "\n\n".join(context_parts)
         
@@ -382,8 +573,8 @@ Keep it concise but comprehensive."""
         # 대화 히스토리 추가 (단기 기억)
         messages = [{"role": "system", "content": persona_prompt}]
         
-        # 최근 2개의 대화만 포함 (컨텍스트 길이 관리)
-        for history in self.chat_history[-2:]:
+        # 최근 3개의 대화만 포함 (컨텍스트 길이 관리)
+        for history in self.chat_history[-3:]:
             messages.append({"role": "user", "content": history["user"]})
             messages.append({"role": "assistant", "content": history["assistant"]})
         
@@ -394,7 +585,7 @@ Keep it concise but comprehensive."""
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                temperature=0.7,
+                temperature=0.3,  # 낮은 temperature로 일관된 답변 생성
                 max_tokens=80  # 답변 길이 제한 (1000 -> 200 -> 100 -> 80)
             )
             
@@ -403,6 +594,7 @@ Keep it concise but comprehensive."""
             return {
                 "answer": answer,
                 "used_chunks": used_chunks,
+                "used_chunks_detailed": used_chunks_detailed,
                 "mode": mode,
                 "continue_conversation": True
             }
@@ -412,13 +604,13 @@ Keep it concise but comprehensive."""
             return {
                 "answer": "죄송합니다. 답변 생성 중 오류가 발생했습니다. 다시 시도해주세요.",
                 "used_chunks": [],
+                "used_chunks_detailed": [],
                 "mode": mode,
                 "continue_conversation": True
             }
     
-    # 상담 함수 
-    # 사용자 입력을 받아 페르소나 기반 답변 생성
-    def chat(self, user_input: str) -> Dict[str, Any]:
+    # 상담 함수(사용자 입력 -> 답변 생성 + 품질 평가)
+    def chat(self, user_input: str, enable_scoring: bool = True) -> Dict[str, Any]:
 
         # 종료 키워드 확인 (exit, 고마워, 끝)
         user_input_lower = user_input.strip().lower()
@@ -427,6 +619,7 @@ Keep it concise but comprehensive."""
             return {
                 "answer": "상담을 마무리하겠습니다. 오늘 함께 시간을 보내주셔서 감사합니다. 언제든 다시 찾아주세요.",
                 "used_chunks": [],
+                "used_chunks_detailed": [],
                 "mode": "exit",
                 "continue_conversation": False
             }
@@ -442,6 +635,14 @@ Keep it concise but comprehensive."""
         
         response = self.generate_response_with_persona(user_input, retrieved_chunks, mode=input_type)
         
+        # 4. 로그 저장 (TherapyLogger 사용)
+        response = self.therapy_logger.log_conversation(
+            user_input=user_input,
+            response=response,
+            retrieved_chunks=retrieved_chunks,
+            enable_scoring=enable_scoring
+        )
+        
         # 대화 히스토리에 추가 (단기 기억)
         self.chat_history.append({
             "user": user_input,
@@ -453,10 +654,41 @@ Keep it concise but comprehensive."""
             self.chat_history = self.chat_history[-10:]
         
         return response
-
-# 메인
-def main():
     
+    # ============================================================
+    # 로그 관련 기능
+    # ============================================================
+    
+    # 청크를 한국어로 요약(로그에 저장하기 위함)
+    def summarize_chunk(self, chunk_text: str) -> str:
+
+        try:
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "당신은 텍스트를 간결하게 요약하는 전문가입니다. 주어진 텍스트를 한국어로 1-2줄로 요약해주세요."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"다음 텍스트를 한국어로 1-2줄로 요약해주세요:\n\n{chunk_text[:500]}"
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=100
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[경고] 청크 요약 실패: {e}")
+            return chunk_text[:100] + "..."
+
+# ============================================================
+# 메인 함수 (테스트용)
+# ============================================================
+
+def main():
+
     # 경로 설정 (sourcecode/rag 기준)
     base_dir = Path(__file__).parent.parent.parent
     vector_db_dir = base_dir / "vector_db"
@@ -473,14 +705,8 @@ def main():
             if not user_input:
                 continue
             
-            # 상담 진행
-            response = rag_system.chat(user_input)
-            
-            # 사용된 청크 정보 (디버깅용, 필요시 주석 해제)
-            if response.get('used_chunks'):
-                print("\n[참고한 자료]")
-                for i, chunk in enumerate(response['used_chunks'], 1):
-                    print(f"  {i}. {chunk}")
+            # 상담 진행 (스코어링 활성화)
+            response = rag_system.chat(user_input, enable_scoring=True)
             
             # 종료 확인
             if not response['continue_conversation']:
@@ -497,4 +723,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
