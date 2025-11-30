@@ -10,10 +10,31 @@ from sqlalchemy.orm import Session
 import uuid
 import re
 
-from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
+from app.domain.report.canonical_models import CanonicalReport
+# 하위 호환성을 위해 TaskItem, KPIItem은 임시로 유지 (나중에 제거 예정)
+try:
+    from app.domain.report.schemas import TaskItem, KPIItem
+except ImportError:
+    # 임시 호환성 클래스
+    from typing import Optional
+    from pydantic import BaseModel, Field
+    class TaskItem(BaseModel):
+        task_id: Optional[str] = None
+        title: str = ""
+        description: str = ""
+        time_start: Optional[str] = None
+        time_end: Optional[str] = None
+        status: Optional[str] = None
+        note: str = ""
+    class KPIItem(BaseModel):
+        kpi_name: str = ""
+        value: str = ""
+        unit: Optional[str] = None
+        category: Optional[str] = None
+        note: str = ""
 from app.domain.daily.repository import DailyReportRepository
 from app.domain.daily.models import DailyReport
-from app.infrastructure.vector_store import get_unified_collection
+from app.infrastructure.vector_store_advanced import get_vector_store
 from app.domain.search.retriever import UnifiedRetriever
 from app.llm.client import get_llm
 from app.core.config import settings
@@ -140,7 +161,8 @@ def generate_weekly_important_tasks(
     """
     try:
         # 1. 벡터DB에서 주간 데이터 검색
-        collection = get_unified_collection()
+        vector_store = get_vector_store()
+        collection = vector_store.get_collection()
         retriever = UnifiedRetriever(
             collection=collection,
             openai_api_key=settings.OPENAI_API_KEY
@@ -155,7 +177,7 @@ def generate_weekly_important_tasks(
             period_start=period_start.isoformat(),
             period_end=period_end.isoformat(),
             n_results=50,  # 충분한 데이터 수집
-            chunk_types=["task"]  # task 타입만 검색
+            chunk_types=["detail_chunk"]  # detail_chunk 타입만 검색
         )
         
         # 날짜 필터로 검색 결과가 없으면, 날짜 필터 없이 검색 (최근 데이터 사용)
@@ -166,7 +188,7 @@ def generate_weekly_important_tasks(
                 query=f"{owner} 주간 중요 업무",
                 owner=owner,
                 n_results=50,
-                chunk_types=["task"]
+                chunk_types=["detail_chunk"]
             )
             if not all_results:
                 print(f"[WARNING] 데이터를 찾을 수 없음: {owner}")
@@ -288,7 +310,8 @@ def generate_daily_tasks_summary(
     """
     try:
         # 1. 벡터DB에서 해당 날짜의 일일보고서 데이터 검색
-        collection = get_unified_collection()
+        vector_store = get_vector_store()
+        collection = vector_store.get_collection()
         retriever = UnifiedRetriever(
             collection=collection,
             openai_api_key=settings.OPENAI_API_KEY
@@ -302,7 +325,7 @@ def generate_daily_tasks_summary(
             owner=owner,
             single_date=target_date.isoformat(),
             n_results=50,  # 충분한 데이터 수집
-            chunk_types=["task"]
+            chunk_types=["detail_chunk"]
         )
         
         # 날짜 필터로 검색 결과가 없으면, 날짜 필터 없이 검색
@@ -312,7 +335,7 @@ def generate_daily_tasks_summary(
                 query=f"{owner} 업무",
                 owner=owner,
                 n_results=30,
-                chunk_types=["task"]
+                chunk_types=["detail_chunk"]
             )
         
         if not task_results:
@@ -504,7 +527,8 @@ def generate_weekly_goals(
     """
     try:
         # 1. 벡터DB에서 주간 데이터 검색
-        collection = get_unified_collection()
+        vector_store = get_vector_store()
+        collection = vector_store.get_collection()
         retriever = UnifiedRetriever(
             collection=collection,
             openai_api_key=settings.OPENAI_API_KEY
@@ -542,7 +566,7 @@ def generate_weekly_goals(
             query=f"{owner} 업무",
             owner=owner,
             n_results=10,
-            chunk_types=["task", "plan"]
+            chunk_types=["detail_chunk", "plan_chunk"]
         )
         print(f"[DEBUG] owner 필터 검색 결과: {len(test_results)}개")
         if test_results:
@@ -555,7 +579,7 @@ def generate_weekly_goals(
             period_start=period_start.isoformat(),
             period_end=period_end.isoformat(),
             n_results=50,  # 충분한 데이터 수집
-            chunk_types=["task", "plan"]
+            chunk_types=["detail_chunk", "plan_chunk"]
         )
         
         # 날짜 필터로 검색 결과가 없으면, 날짜 필터 없이 검색 (최근 데이터 사용)
@@ -566,7 +590,7 @@ def generate_weekly_goals(
                 query=f"{owner} 주간 업무 계획 목표",
                 owner=owner,
                 n_results=50,  # 충분한 데이터 수집
-                chunk_types=["task", "plan"]
+                chunk_types=["detail_chunk", "plan_chunk"]
             )
             if all_results:
                 print(f"[INFO] 날짜 필터 없이 {len(all_results)}개 청크 발견 (최근 데이터 사용)")
@@ -732,7 +756,8 @@ def generate_weekly_report(
     monday, friday = get_week_range(target_date)
     
     # 2. 벡터DB에서 주간 데이터 검색
-    collection = get_unified_collection()
+    vector_store = get_vector_store()
+    collection = vector_store.get_collection()
     retriever = UnifiedRetriever(
         collection=collection,
         openai_api_key=settings.OPENAI_API_KEY
@@ -747,7 +772,7 @@ def generate_weekly_report(
         period_start=monday.isoformat(),
         period_end=friday.isoformat(),
         n_results=200,  # 충분한 데이터 수집
-        chunk_types=["task"]
+        chunk_types=["detail_chunk"]
     )
     
     # 날짜 필터로 검색 결과가 없으면, 날짜 필터 없이 검색
@@ -758,7 +783,7 @@ def generate_weekly_report(
             query=f"{owner} 주간 업무",
             owner=owner,
             n_results=200,
-            chunk_types=["task"]
+            chunk_types=["detail_chunk"]
         )
     
     print(f"[INFO] 벡터DB task 검색 완료: {len(task_results)}개 청크 발견")
@@ -770,7 +795,7 @@ def generate_weekly_report(
         period_start=monday.isoformat(),
         period_end=friday.isoformat(),
         n_results=100,
-        chunk_types=["issue"]
+        chunk_types=["pending_chunk"]
     )
     
     if not issue_results:
@@ -778,7 +803,7 @@ def generate_weekly_report(
             query=f"{owner} 주간 특이사항 이슈",
             owner=owner,
             n_results=100,
-            chunk_types=["issue"]
+            chunk_types=["pending_chunk"]
         )
     
     print(f"[INFO] 벡터DB issue 검색 완료: {len(issue_results)}개 청크 발견")
@@ -790,7 +815,7 @@ def generate_weekly_report(
         period_start=monday.isoformat(),
         period_end=friday.isoformat(),
         n_results=100,
-        chunk_types=["plan"]
+        chunk_types=["plan_chunk"]
     )
     
     if not plan_results:
@@ -798,7 +823,7 @@ def generate_weekly_report(
             query=f"{owner} 주간 계획",
             owner=owner,
             n_results=100,
-            chunk_types=["plan"]
+            chunk_types=["plan_chunk"]
         )
     
     print(f"[INFO] 벡터DB plan 검색 완료: {len(plan_results)}개 청크 발견")

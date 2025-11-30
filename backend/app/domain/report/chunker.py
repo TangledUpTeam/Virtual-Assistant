@@ -1,578 +1,683 @@
 """
-보고서 청킹 유틸리티
-
-CanonicalReport를 RAG용 청크로 변환하는 기능 제공
-LLM 없이 Python 코드만으로 처리
+새로운 청킹 파이프라인
+의미 단위 기반 직접 생성 + 선택적 CharacterTextSplitter
 """
-import uuid
+import os
 import hashlib
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from datetime import date
 
-from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
+from langchain.text_splitter import CharacterTextSplitter
+from openai import OpenAI
+
+from app.domain.report.canonical_models import CanonicalReport
+from app.domain.report.utils_text import (
+    extract_customer_names,
+    extract_time_range,
+    is_pending_related,
+    is_summary_related,
+    classify_task_category
+)
 
 
-# ========================================
-# 설정
-# ========================================
-MAX_CHUNK_LENGTH = 1000  # 최대 청크 텍스트 길이 (글자 수)
+# CharacterTextSplitter 설정 (2차 보조 청킹용)
+CHUNK_SIZE = 300
+CHUNK_OVERLAP = 50
+_text_splitter = CharacterTextSplitter(
+    separator="\n\n",
+    chunk_size=CHUNK_SIZE,
+    chunk_overlap=CHUNK_OVERLAP,
+    length_function=len
+)
 
 
-# ========================================
-# ID 생성 함수
-# ========================================
 def generate_chunk_id(*parts: str) -> str:
-    """
-    결정적(deterministic) chunk ID 생성
-    
-    동일한 입력에 대해 항상 동일한 ID를 생성합니다.
-    이를 통해 재실행 시 중복 데이터가 쌓이지 않습니다.
-    
-    Args:
-        *parts: ID 생성에 사용할 문자열들
-        
-    Returns:
-        SHA256 해시 기반 ID (32자)
-    """
-    # 모든 부분을 결합
+    """청크 ID 생성"""
     combined = "|".join(str(p) for p in parts)
-    # SHA256 해시 생성 (32자로 축약)
     hash_obj = hashlib.sha256(combined.encode('utf-8'))
     return hash_obj.hexdigest()[:32]
 
 
-# ========================================
-# 메타데이터 생성 함수
-# ========================================
-def build_chunk_metadata(
-    chunk_type: str,
-    canonical: CanonicalReport,
-    **kwargs
-) -> Dict[str, Any]:
-    """
-    청크 메타데이터 자동 생성
+def _build_base_metadata(canonical: CanonicalReport) -> Dict[str, Any]:
+    """공통 메타데이터 생성"""
+    report_date = canonical.period_start if canonical.period_start else date.today()
     
-    Args:
-        chunk_type: 청크 타입 (task|kpi|issue|plan|summary)
-        canonical: CanonicalReport 객체
-        **kwargs: 청크 타입별 추가 메타데이터
-        
-    Returns:
-        메타데이터 딕셔너리
-    """
-    # 공통 메타데이터
-    metadata = {
-        "chunk_type": chunk_type,
+    return {
         "report_id": canonical.report_id,
         "report_type": canonical.report_type,
+        "date": report_date.isoformat(),
+        "week_id": f"{report_date.isocalendar()[0]}-W{report_date.isocalendar()[1]:02d}",
+        "month_id": report_date.strftime("%Y-%m"),
         "owner": canonical.owner,
-        "doc_type": canonical.report_type,  # retriever에서 doc_type으로 필터링
+        "doc_id": f"{canonical.report_type}_{report_date.strftime('%Y_%m_%d')}"
+    }
+
+
+def _build_metadata_for_chunk(
+    chunk_type: str,
+    text: str,
+    base_meta: Dict[str, Any],
+    chunk_index: int,
+    time_range: Optional[str] = None
+) -> Dict[str, Any]:
+    """청크별 메타데이터 생성"""
+    customers = extract_customer_names(text)
+    task_categories = classify_task_category(text)
+    
+    metadata = {
+        **base_meta,
+        "chunk_type": chunk_type,
+        "chunk_index": chunk_index,
+        "customer": ", ".join(customers) if customers else "",
+        "tasks": ", ".join(task_categories) if task_categories else "",
+        "is_pending": is_pending_related(text),
+        "is_summary_related": is_summary_related(text)
     }
     
-    # 날짜 정보 추가
-    if canonical.period_start:
-        metadata["period_start"] = canonical.period_start.isoformat()
-        # 일일보고서의 경우 date 필드도 추가 (retriever에서 date로 검색)
-        if canonical.report_type == "daily":
-            metadata["date"] = canonical.period_start.isoformat()
-    
-    if canonical.period_end:
-        metadata["period_end"] = canonical.period_end.isoformat()
-    
-    # 청크 타입별 추가 필드
-    if chunk_type == "task":
-        # task_id, task_status, time_slot
-        if "task_id" in kwargs:
-            metadata["task_id"] = kwargs["task_id"]
-        if "task_status" in kwargs:
-            metadata["task_status"] = kwargs["task_status"]
-        if "time_slot" in kwargs:
-            metadata["time_slot"] = kwargs["time_slot"]
-    
-    elif chunk_type == "kpi":
-        # kpi_name, kpi_tags
-        if "kpi_name" in kwargs:
-            metadata["kpi_name"] = kwargs["kpi_name"]
-        if "kpi_tags" in kwargs:
-            metadata["kpi_tags"] = kwargs["kpi_tags"]
-        elif "category" in kwargs:
-            # category를 kpi_tags로 변환
-            metadata["kpi_tags"] = [kwargs["category"]] if kwargs["category"] else []
-    
-    elif chunk_type == "issue":
-        # issue_flag
-        metadata["issue_flag"] = True
-    
-    elif chunk_type == "plan":
-        # plan_flag
-        metadata["plan_flag"] = True
-    
-    elif chunk_type == "summary":
-        # 통계 정보
-        if "task_count" in kwargs:
-            metadata["task_count"] = kwargs["task_count"]
-        if "kpi_count" in kwargs:
-            metadata["kpi_count"] = kwargs["kpi_count"]
-        if "issue_count" in kwargs:
-            metadata["issue_count"] = kwargs["issue_count"]
-        if "plan_count" in kwargs:
-            metadata["plan_count"] = kwargs["plan_count"]
-    
-    # 분할 청크인 경우
-    if "part" in kwargs:
-        metadata["part"] = kwargs["part"]
-        metadata["total_parts"] = kwargs["total_parts"]
+    if time_range:
+        metadata["time_range"] = time_range
     
     return metadata
 
 
-# ========================================
-# 헬퍼 함수
-# ========================================
-def _split_text_by_length(text: str, max_length: int) -> List[str]:
+def _apply_secondary_split(text: str, base_meta: Dict[str, Any], chunk_index: int, chunk_type: str) -> List[Dict[str, Any]]:
     """
-    긴 텍스트를 최대 길이 기준으로 분할
+    2차 보조 청킹 (300자 이상일 때만)
     
     Args:
         text: 분할할 텍스트
-        max_length: 최대 길이
+        base_meta: 공통 메타데이터
+        chunk_index: 시작 청크 인덱스
+        chunk_type: 청크 타입
         
     Returns:
-        분할된 텍스트 리스트
+        분할된 청크 리스트
     """
-    if len(text) <= max_length:
-        return [text]
+    if len(text) < CHUNK_SIZE:
+        return []
     
+    split_texts = _text_splitter.split_text(text)
     chunks = []
-    start = 0
-    while start < len(text):
-        end = start + max_length
-        chunk = text[start:end]
-        chunks.append(chunk)
-        start = end
+    
+    for idx, split_text in enumerate(split_texts):
+        if not split_text.strip():
+            continue
+        
+        time_range = extract_time_range(split_text) if chunk_type == "detail_task_chunk" else None
+        metadata = _build_metadata_for_chunk(
+            chunk_type=chunk_type,
+            text=split_text,
+            base_meta=base_meta,
+            chunk_index=chunk_index + idx,
+            time_range=time_range
+        )
+        
+        chunks.append({
+            "id": generate_chunk_id(base_meta["report_id"], "split", str(chunk_index + idx)),
+            "text": split_text,
+            "metadata": metadata
+        })
     
     return chunks
 
 
-def _create_chunk(
-    chunk_id: str,
-    text: str,
-    metadata: Dict[str, Any]
-) -> Dict[str, Any]:
+def _apply_llm_refine(chunk: Dict[str, Any], api_key: Optional[str] = None) -> Dict[str, Any]:
     """
-    청크 딕셔너리 생성
+    LLM 재정제 (청킹 이후에만 수행)
     
     Args:
-        chunk_id: 청크 ID
-        text: 임베딩할 텍스트
-        metadata: 메타데이터
+        chunk: 청크 딕셔너리
+        api_key: OpenAI API 키
         
     Returns:
-        청크 딕셔너리
+        재정제된 청크 (원문 text는 유지, refined_text는 metadata에 저장)
     """
-    return {
-        "id": chunk_id,
-        "text": text,
-        "metadata": metadata
-    }
-
-
-# ========================================
-# Task 청킹
-# ========================================
-def _chunk_task(
-    task: TaskItem,
-    canonical: CanonicalReport
-) -> List[Dict[str, Any]]:
-    """
-    TaskItem을 청크로 변환
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
     
-    Args:
-        task: TaskItem 객체
-        canonical: CanonicalReport 객체
+    if not api_key:
+        return chunk
+    
+    client = OpenAI(api_key=api_key)
+    
+    try:
+        prompt = f"""다음 텍스트를 의미 단위의 문장 묶음으로 재정렬하세요.
+불필요한 부분은 제거하고, 핵심 의미만 유지하세요.
+
+원본:
+{chunk["text"]}
+
+재정렬된 텍스트:"""
         
-    Returns:
-        청크 리스트
-    """
-    # 텍스트 구성: title + description + 시간
-    text_parts = []
-    
-    if task.title:
-        text_parts.append(task.title)
-    
-    if task.description and task.description != task.title:
-        text_parts.append(task.description)
-    
-    # 시간대 추가
-    time_slot = None
-    if task.time_start and task.time_end:
-        time_slot = f"{task.time_start}~{task.time_end}"
-        text_parts.append(time_slot)
-    
-    # 비고 추가
-    if task.note:
-        text_parts.append(f"비고: {task.note}")
-    
-    text = "\n".join(text_parts)
-    
-    # 메타데이터 생성
-    metadata = build_chunk_metadata(
-        chunk_type="task",
-        canonical=canonical,
-        task_id=task.task_id,
-        task_status=task.status,
-        time_slot=time_slot
-    )
-    
-    # 텍스트 길이 체크 및 분할
-    if len(text) <= MAX_CHUNK_LENGTH:
-        # deterministic ID 생성
-        chunk_id = generate_chunk_id(canonical.report_id, "task", task.task_id or "", "0")
-        return [_create_chunk(chunk_id, text, metadata)]
-    else:
-        # 긴 텍스트는 분할
-        text_parts = _split_text_by_length(text, MAX_CHUNK_LENGTH)
-        chunks = []
-        for idx, part in enumerate(text_parts):
-            # deterministic ID 생성 (part index 포함)
-            chunk_id = generate_chunk_id(canonical.report_id, "task", task.task_id or "", str(idx))
-            # 분할 청크용 메타데이터 재생성
-            part_metadata = build_chunk_metadata(
-                chunk_type="task",
-                canonical=canonical,
-                task_id=task.task_id,
-                task_status=task.status,
-                time_slot=time_slot,
-                part=idx + 1,
-                total_parts=len(text_parts)
-            )
-            chunks.append(_create_chunk(chunk_id, part, part_metadata))
-        return chunks
-
-
-# ========================================
-# KPI 청킹
-# ========================================
-def _chunk_kpi(
-    kpi: KPIItem,
-    canonical: CanonicalReport
-) -> List[Dict[str, Any]]:
-    """
-    KPIItem을 청크로 변환
-    
-    Args:
-        kpi: KPIItem 객체
-        canonical: CanonicalReport 객체
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=1000
+        )
         
-    Returns:
-        청크 리스트
-    """
-    # 텍스트 구성: kpi_name: value (unit)
-    text_parts = [f"{kpi.kpi_name}: {kpi.value}"]
+        refined_text = response.choices[0].message.content.strip()
+        if refined_text:
+            chunk["metadata"]["refined_text"] = refined_text
+    except Exception:
+        # 재정제 실패 시 원문 유지
+        pass
     
-    if kpi.unit:
-        text_parts.append(f"({kpi.unit})")
-    
-    if kpi.note:
-        text_parts.append(f"\n비고: {kpi.note}")
-    
-    text = " ".join(text_parts)
-    
-    # 메타데이터 생성
-    metadata = build_chunk_metadata(
-        chunk_type="kpi",
-        canonical=canonical,
-        kpi_name=kpi.kpi_name,
-        category=kpi.category
-    )
-    
-    # 텍스트 길이 체크 및 분할
-    if len(text) <= MAX_CHUNK_LENGTH:
-        chunk_id = generate_chunk_id(canonical.report_id, "kpi", kpi.name or kpi.kpi_name or "", "0")
-        return [_create_chunk(chunk_id, text, metadata)]
-    else:
-        text_parts = _split_text_by_length(text, MAX_CHUNK_LENGTH)
-        chunks = []
-        for idx, part in enumerate(text_parts):
-            chunk_id = generate_chunk_id(canonical.report_id, "kpi", kpi.name or kpi.kpi_name or "", str(idx))
-            # 분할 청크용 메타데이터 재생성
-            part_metadata = build_chunk_metadata(
-                chunk_type="kpi",
-                canonical=canonical,
-                kpi_name=kpi.kpi_name,
-                category=kpi.category,
-                part=idx + 1,
-                total_parts=len(text_parts)
-            )
-            chunks.append(_create_chunk(chunk_id, part, part_metadata))
-        return chunks
+    return chunk
 
 
-# ========================================
-# Issue 청킹
-# ========================================
-def _chunk_issue(
-    issue: str,
+def chunk_daily_report(
     canonical: CanonicalReport,
-    issue_idx: int = 0
+    api_key: Optional[str] = None,
+    use_llm_refine: bool = True
 ) -> List[Dict[str, Any]]:
     """
-    Issue 문자열을 청크로 변환
+    일일 보고서 청킹 (의미 단위 직접 생성)
     
     Args:
-        issue: 이슈 텍스트
-        canonical: CanonicalReport 객체
+        canonical: CanonicalReport 객체 (daily 필드 필수)
+        api_key: OpenAI API 키 (LLM 재정제용)
+        use_llm_refine: LLM 재정제 사용 여부
         
     Returns:
         청크 리스트
     """
-    # 메타데이터 생성
-    metadata = build_chunk_metadata(
-        chunk_type="issue",
-        canonical=canonical
-    )
+    if not canonical.daily:
+        return []
     
-    # 텍스트 길이 체크 및 분할
-    if len(issue) <= MAX_CHUNK_LENGTH:
-        chunk_id = generate_chunk_id(canonical.report_id, "issue", str(issue_idx), "0")
-        return [_create_chunk(chunk_id, issue, metadata)]
-    else:
-        text_parts = _split_text_by_length(issue, MAX_CHUNK_LENGTH)
-        chunks = []
-        for idx, part in enumerate(text_parts):
-            chunk_id = generate_chunk_id(canonical.report_id, "issue", str(issue_idx), str(idx))
-            # 분할 청크용 메타데이터 재생성
-            part_metadata = build_chunk_metadata(
-                chunk_type="issue",
-                canonical=canonical,
-                part=idx + 1,
-                total_parts=len(text_parts)
-            )
-            chunks.append(_create_chunk(chunk_id, part, part_metadata))
-        return chunks
-
-
-# ========================================
-# Plan 청킹
-# ========================================
-def _chunk_plan(
-    plan: str,
-    canonical: CanonicalReport,
-    plan_idx: int = 0
-) -> List[Dict[str, Any]]:
-    """
-    Plan 문자열을 청크로 변환
-    
-    Args:
-        plan: 계획 텍스트
-        canonical: CanonicalReport 객체
-        
-    Returns:
-        청크 리스트
-    """
-    # 메타데이터 생성
-    metadata = build_chunk_metadata(
-        chunk_type="plan",
-        canonical=canonical
-    )
-    
-    # 텍스트 길이 체크 및 분할
-    if len(plan) <= MAX_CHUNK_LENGTH:
-        chunk_id = generate_chunk_id(canonical.report_id, "plan", str(plan_idx), "0")
-        return [_create_chunk(chunk_id, plan, metadata)]
-    else:
-        text_parts = _split_text_by_length(plan, MAX_CHUNK_LENGTH)
-        chunks = []
-        for idx, part in enumerate(text_parts):
-            chunk_id = generate_chunk_id(canonical.report_id, "plan", str(plan_idx), str(idx))
-            # 분할 청크용 메타데이터 재생성
-            part_metadata = build_chunk_metadata(
-                chunk_type="plan",
-                canonical=canonical,
-                part=idx + 1,
-                total_parts=len(text_parts)
-            )
-            chunks.append(_create_chunk(chunk_id, part, part_metadata))
-        return chunks
-
-
-# ========================================
-# Summary 청킹 (전체 보고서 요약)
-# ========================================
-def _chunk_summary(canonical: CanonicalReport) -> List[Dict[str, Any]]:
-    """
-    전체 보고서를 요약 청크로 변환
-    
-    Args:
-        canonical: CanonicalReport 객체
-        
-    Returns:
-        청크 리스트
-    """
-    text_parts = []
-    
-    # 보고서 기본 정보
-    text_parts.append(f"보고서 타입: {canonical.report_type}")
-    text_parts.append(f"작성자: {canonical.owner}")
-    
-    if canonical.period_start:
-        text_parts.append(f"기간: {canonical.period_start} ~ {canonical.period_end}")
-    
-    # Tasks 요약
-    if canonical.tasks:
-        text_parts.append(f"\n작업 {len(canonical.tasks)}건:")
-        for task in canonical.tasks[:5]:  # 최대 5개만
-            text_parts.append(f"- {task.title}")
-        if len(canonical.tasks) > 5:
-            text_parts.append(f"... 외 {len(canonical.tasks) - 5}건")
-    
-    # KPIs 요약
-    if canonical.kpis:
-        text_parts.append(f"\nKPI {len(canonical.kpis)}건:")
-        for kpi in canonical.kpis[:5]:  # 최대 5개만
-            text_parts.append(f"- {kpi.kpi_name}: {kpi.value}")
-        if len(canonical.kpis) > 5:
-            text_parts.append(f"... 외 {len(canonical.kpis) - 5}건")
-    
-    # Issues
-    if canonical.issues:
-        text_parts.append(f"\n이슈 {len(canonical.issues)}건:")
-        for issue in canonical.issues:
-            text_parts.append(f"- {issue}")
-    
-    # Plans
-    if canonical.plans:
-        text_parts.append(f"\n계획 {len(canonical.plans)}건:")
-        for plan in canonical.plans:
-            text_parts.append(f"- {plan}")
-    
-    text = "\n".join(text_parts)
-    
-    # 메타데이터 생성
-    metadata = build_chunk_metadata(
-        chunk_type="summary",
-        canonical=canonical,
-        task_count=len(canonical.tasks),
-        kpi_count=len(canonical.kpis),
-        issue_count=len(canonical.issues),
-        plan_count=len(canonical.plans)
-    )
-    
-    # 텍스트 길이 체크 및 분할
-    if len(text) <= MAX_CHUNK_LENGTH:
-        chunk_id = generate_chunk_id(canonical.report_id, "summary", "0")
-        return [_create_chunk(chunk_id, text, metadata)]
-    else:
-        text_parts = _split_text_by_length(text, MAX_CHUNK_LENGTH)
-        chunks = []
-        for idx, part in enumerate(text_parts):
-            chunk_id = generate_chunk_id(canonical.report_id, "summary", str(idx))
-            # 분할 청크용 메타데이터 재생성
-            part_metadata = build_chunk_metadata(
-                chunk_type="summary",
-                canonical=canonical,
-                task_count=len(canonical.tasks),
-                kpi_count=len(canonical.kpis),
-                issue_count=len(canonical.issues),
-                plan_count=len(canonical.plans),
-                part=idx + 1,
-                total_parts=len(text_parts)
-            )
-            chunks.append(_create_chunk(chunk_id, part, part_metadata))
-        return chunks
-
-
-# ========================================
-# 메인 청킹 함수
-# ========================================
-def chunk_report(
-    canonical_report: CanonicalReport,
-    include_summary: bool = True
-) -> List[Dict[str, Any]]:
-    """
-    CanonicalReport를 RAG용 청크 리스트로 변환
-    
-    Args:
-        canonical_report: 정규화된 보고서 객체
-        include_summary: 전체 요약 청크 포함 여부 (기본값: True)
-        
-    Returns:
-        청크 리스트, 각 청크는 다음 구조:
-        {
-            "id": "uuid",
-            "text": "임베딩할 텍스트",
-            "metadata": {...}
-        }
-    """
+    base_meta = _build_base_metadata(canonical)
     chunks = []
+    chunk_index = 0
     
-    # (1) Tasks 청킹
-    for task in canonical_report.tasks:
-        task_chunks = _chunk_task(task, canonical_report)
-        chunks.extend(task_chunks)
+    daily = canonical.daily
     
-    # (2) KPIs 청킹
-    for kpi in canonical_report.kpis:
-        kpi_chunks = _chunk_kpi(kpi, canonical_report)
-        chunks.extend(kpi_chunks)
+    # 1. header_chunk
+    header_text = f"작성일자: {daily.header.get('작성일자', '')}\n작성자: {daily.header.get('성명', '')}"
+    if header_text.strip():
+        metadata = _build_metadata_for_chunk("header_chunk", header_text, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "header", "0"),
+            "text": header_text,
+            "metadata": metadata
+        })
+        chunk_index += 1
     
-    # (3) Issues 청킹
-    for idx, issue in enumerate(canonical_report.issues):
-        issue_chunks = _chunk_issue(issue, canonical_report, issue_idx=idx)
-        chunks.extend(issue_chunks)
+    # 2. summary_task_chunk (각 항목을 개별 청크로)
+    for idx, summary_task in enumerate(daily.summary_tasks):
+        if not summary_task.strip():
+            continue
+        
+        # 2차 분할 필요 여부 확인
+        if len(summary_task) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(summary_task, base_meta, chunk_index, "summary_task_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+                continue
+        
+        metadata = _build_metadata_for_chunk("summary_task_chunk", summary_task, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "summary_task", str(idx)),
+            "text": summary_task,
+            "metadata": metadata
+        })
+        chunk_index += 1
     
-    # (4) Plans 청킹
-    for idx, plan in enumerate(canonical_report.plans):
-        plan_chunks = _chunk_plan(plan, canonical_report, plan_idx=idx)
-        chunks.extend(plan_chunks)
+    # 3. detail_task_chunk (각 시간대별 업무를 개별 청크로)
+    for idx, detail_task in enumerate(daily.detail_tasks):
+        if not detail_task.text.strip():
+            continue
+        
+        # 시간 범위 구성
+        time_range = None
+        if detail_task.time_start and detail_task.time_end:
+            time_range = f"{detail_task.time_start}-{detail_task.time_end}"
+        
+        # 텍스트 구성
+        task_text = detail_task.text
+        if detail_task.note:
+            task_text += f"\n비고: {detail_task.note}"
+        
+        # 2차 분할 필요 여부 확인
+        if len(task_text) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(task_text, base_meta, chunk_index, "detail_task_chunk")
+            if split_chunks:
+                # time_range를 각 분할 청크에 추가
+                for split_chunk in split_chunks:
+                    if time_range:
+                        split_chunk["metadata"]["time_range"] = time_range
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+                continue
+        
+        metadata = _build_metadata_for_chunk(
+            "detail_task_chunk",
+            task_text,
+            base_meta,
+            chunk_index,
+            time_range=time_range
+        )
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "detail_task", str(idx)),
+            "text": task_text,
+            "metadata": metadata
+        })
+        chunk_index += 1
     
-    # (5) Summary 청킹 (옵션)
-    if include_summary:
-        summary_chunks = _chunk_summary(canonical_report)
-        chunks.extend(summary_chunks)
+    # 4. pending_chunk (각 미종결 항목을 개별 청크로)
+    for idx, pending_item in enumerate(daily.pending):
+        if not pending_item.strip():
+            continue
+        
+        # 2차 분할 필요 여부 확인
+        if len(pending_item) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(pending_item, base_meta, chunk_index, "pending_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+                continue
+        
+        metadata = _build_metadata_for_chunk("pending_chunk", pending_item, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "pending", str(idx)),
+            "text": pending_item,
+            "metadata": metadata
+        })
+        chunk_index += 1
+    
+    # 5. plan_chunk (각 계획 항목을 개별 청크로)
+    for idx, plan_item in enumerate(daily.plans):
+        if not plan_item.strip():
+            continue
+        
+        # 2차 분할 필요 여부 확인
+        if len(plan_item) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(plan_item, base_meta, chunk_index, "plan_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+                continue
+        
+        metadata = _build_metadata_for_chunk("plan_chunk", plan_item, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "plan", str(idx)),
+            "text": plan_item,
+            "metadata": metadata
+        })
+        chunk_index += 1
+    
+    # 6. note_chunk (특이사항)
+    if daily.notes and daily.notes.strip():
+        # 2차 분할 필요 여부 확인
+        if len(daily.notes) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(daily.notes, base_meta, chunk_index, "note_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+        else:
+            metadata = _build_metadata_for_chunk("note_chunk", daily.notes, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "note", "0"),
+                "text": daily.notes,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # 7. LLM 재정제 적용 (청킹 이후)
+    if use_llm_refine:
+        for chunk in chunks:
+            if chunk["metadata"]["chunk_type"] != "header_chunk":
+                chunk = _apply_llm_refine(chunk, api_key)
     
     return chunks
 
 
-# ========================================
-# 청크 통계 함수
-# ========================================
-def get_chunk_statistics(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+def chunk_weekly_report(
+    canonical: CanonicalReport,
+    api_key: Optional[str] = None,
+    use_llm_refine: bool = True
+) -> List[Dict[str, Any]]:
     """
-    청크 통계 정보 반환
+    주간 보고서 청킹 (의미 단위 직접 생성)
     
     Args:
-        chunks: 청크 리스트
+        canonical: CanonicalReport 객체 (weekly 필드 필수)
+        api_key: OpenAI API 키
+        use_llm_refine: LLM 재정제 사용 여부
         
     Returns:
-        통계 정보 딕셔너리
+        청크 리스트
     """
-    stats = {
-        "total_chunks": len(chunks),
-        "chunk_types": {},
-        "avg_text_length": 0,
-        "max_text_length": 0,
-        "min_text_length": float('inf')
-    }
+    if not canonical.weekly:
+        return []
     
-    total_length = 0
+    base_meta = _build_base_metadata(canonical)
+    chunks = []
+    chunk_index = 0
     
-    for chunk in chunks:
-        # 타입별 카운트
-        chunk_type = chunk["metadata"].get("chunk_type", "unknown")
-        stats["chunk_types"][chunk_type] = stats["chunk_types"].get(chunk_type, 0) + 1
+    weekly = canonical.weekly
+    
+    # 1. header_chunk
+    header_text = f"작성일자: {weekly.header.get('작성일자', '')}\n작성자: {weekly.header.get('성명', '')}"
+    if header_text.strip():
+        metadata = _build_metadata_for_chunk("header_chunk", header_text, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "header", "0"),
+            "text": header_text,
+            "metadata": metadata
+        })
+        chunk_index += 1
+    
+    # 2. weekly_goal_chunk (각 목표를 개별 청크로)
+    for idx, goal in enumerate(weekly.weekly_goals):
+        if not goal.strip():
+            continue
         
-        # 텍스트 길이 통계 (chunk_text 또는 text 키 모두 지원)
-        text = chunk.get("chunk_text") or chunk.get("text", "")
-        text_length = len(text)
-        total_length += text_length
-        stats["max_text_length"] = max(stats["max_text_length"], text_length)
-        stats["min_text_length"] = min(stats["min_text_length"], text_length)
+        if len(goal) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(goal, base_meta, chunk_index, "weekly_goal_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+                continue
+        
+        metadata = _build_metadata_for_chunk("weekly_goal_chunk", goal, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "weekly_goal", str(idx)),
+            "text": goal,
+            "metadata": metadata
+        })
+        chunk_index += 1
     
-    if chunks:
-        stats["avg_text_length"] = total_length / len(chunks)
-        stats["min_text_length"] = stats["min_text_length"] if stats["min_text_length"] != float('inf') else 0
+    # 3. weekday_task_chunk (요일별 업무)
+    for 요일, tasks in weekly.weekday_tasks.items():
+        for idx, task in enumerate(tasks):
+            if not task.strip():
+                continue
+            
+            task_text = f"[{요일}] {task}"
+            
+            if len(task_text) >= CHUNK_SIZE:
+                split_chunks = _apply_secondary_split(task_text, base_meta, chunk_index, "weekday_task_chunk")
+                if split_chunks:
+                    chunks.extend(split_chunks)
+                    chunk_index += len(split_chunks)
+                    continue
+            
+            metadata = _build_metadata_for_chunk("weekday_task_chunk", task_text, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "weekday_task", f"{요일}_{idx}"),
+                "text": task_text,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # 4. weekly_highlight_chunk
+    for idx, highlight in enumerate(weekly.weekly_highlights):
+        if not highlight.strip():
+            continue
+        
+        if len(highlight) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(highlight, base_meta, chunk_index, "weekly_highlight_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+                continue
+        
+        metadata = _build_metadata_for_chunk("weekly_highlight_chunk", highlight, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "weekly_highlight", str(idx)),
+            "text": highlight,
+            "metadata": metadata
+        })
+        chunk_index += 1
+    
+    # 5. note_chunk
+    if weekly.notes and weekly.notes.strip():
+        if len(weekly.notes) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(weekly.notes, base_meta, chunk_index, "note_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+        else:
+            metadata = _build_metadata_for_chunk("note_chunk", weekly.notes, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "note", "0"),
+                "text": weekly.notes,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # LLM 재정제
+    if use_llm_refine:
+        for chunk in chunks:
+            if chunk["metadata"]["chunk_type"] != "header_chunk":
+                chunk = _apply_llm_refine(chunk, api_key)
+    
+    return chunks
+
+
+def chunk_monthly_report(
+    canonical: CanonicalReport,
+    api_key: Optional[str] = None,
+    use_llm_refine: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    월간 보고서 청킹
+    """
+    if not canonical.monthly:
+        return []
+    
+    base_meta = _build_base_metadata(canonical)
+    chunks = []
+    chunk_index = 0
+    
+    monthly = canonical.monthly
+    
+    # header_chunk
+    header_text = f"월: {monthly.header.get('월', '')}\n작성일자: {monthly.header.get('작성일자', '')}\n작성자: {monthly.header.get('성명', '')}"
+    if header_text.strip():
+        metadata = _build_metadata_for_chunk("header_chunk", header_text, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "header", "0"),
+            "text": header_text,
+            "metadata": metadata
+        })
+        chunk_index += 1
+    
+    # kpi_chunk (각 KPI를 개별 청크로)
+    # 신규_계약_건수
+    for key, value in monthly.kpis.신규_계약_건수.items():
+        if value:
+            kpi_text = f"신규_계약_건수 {key}: {value}"
+            metadata = _build_metadata_for_chunk("kpi_chunk", kpi_text, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "kpi", f"신규_{key}"),
+                "text": kpi_text,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # 유지_계약_건수
+    for key, value in monthly.kpis.유지_계약_건수.items():
+        if value:
+            kpi_text = f"유지_계약_건수 {key}: {value}"
+            metadata = _build_metadata_for_chunk("kpi_chunk", kpi_text, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "kpi", f"유지_{key}"),
+                "text": kpi_text,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # 상담_진행_건수
+    for key, value in monthly.kpis.상담_진행_건수.items():
+        if value:
+            kpi_text = f"상담_진행_건수 {key}: {value}"
+            metadata = _build_metadata_for_chunk("kpi_chunk", kpi_text, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "kpi", f"상담_{key}"),
+                "text": kpi_text,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # weekly_summary_chunk
+    for 주차, summaries in monthly.weekly_summaries.items():
+        for idx, summary in enumerate(summaries):
+            if not summary.strip():
+                continue
+            
+            summary_text = f"[{주차}] {summary}"
+            
+            if len(summary_text) >= CHUNK_SIZE:
+                split_chunks = _apply_secondary_split(summary_text, base_meta, chunk_index, "weekly_summary_chunk")
+                if split_chunks:
+                    chunks.extend(split_chunks)
+                    chunk_index += len(split_chunks)
+                    continue
+            
+            metadata = _build_metadata_for_chunk("weekly_summary_chunk", summary_text, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "weekly_summary", f"{주차}_{idx}"),
+                "text": summary_text,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # next_month_plan_chunk
+    if monthly.next_month_plan and monthly.next_month_plan.strip():
+        if len(monthly.next_month_plan) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(monthly.next_month_plan, base_meta, chunk_index, "next_month_plan_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+        else:
+            metadata = _build_metadata_for_chunk("next_month_plan_chunk", monthly.next_month_plan, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "next_month_plan", "0"),
+                "text": monthly.next_month_plan,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # LLM 재정제
+    if use_llm_refine:
+        for chunk in chunks:
+            if chunk["metadata"]["chunk_type"] != "header_chunk":
+                chunk = _apply_llm_refine(chunk, api_key)
+    
+    return chunks
+
+
+def chunk_performance_report(
+    canonical: CanonicalReport,
+    api_key: Optional[str] = None,
+    use_llm_refine: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    실적 보고서 청킹
+    """
+    if not canonical.performance:
+        return []
+    
+    base_meta = _build_base_metadata(canonical)
+    chunks = []
+    chunk_index = 0
+    
+    performance = canonical.performance
+    
+    # header_chunk
+    header_text = f"작성일자: {performance.header.get('작성일자', '')}\n작성자: {performance.header.get('성명', '')}"
+    if header_text.strip():
+        metadata = _build_metadata_for_chunk("header_chunk", header_text, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "header", "0"),
+            "text": header_text,
+            "metadata": metadata
+        })
+        chunk_index += 1
+    
+    # kpi_chunk
+    for key, value in performance.kpis.items():
+        if value:
+            kpi_text = f"{key}: {value}"
+            metadata = _build_metadata_for_chunk("kpi_chunk", kpi_text, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "kpi", key),
+                "text": kpi_text,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # issue_chunk
+    for idx, issue in enumerate(performance.issues):
+        if not issue.strip():
+            continue
+        
+        if len(issue) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(issue, base_meta, chunk_index, "issue_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+                continue
+        
+        metadata = _build_metadata_for_chunk("issue_chunk", issue, base_meta, chunk_index)
+        chunks.append({
+            "id": generate_chunk_id(canonical.report_id, "issue", str(idx)),
+            "text": issue,
+            "metadata": metadata
+        })
+        chunk_index += 1
+    
+    # note_chunk
+    if performance.notes and performance.notes.strip():
+        if len(performance.notes) >= CHUNK_SIZE:
+            split_chunks = _apply_secondary_split(performance.notes, base_meta, chunk_index, "note_chunk")
+            if split_chunks:
+                chunks.extend(split_chunks)
+                chunk_index += len(split_chunks)
+        else:
+            metadata = _build_metadata_for_chunk("note_chunk", performance.notes, base_meta, chunk_index)
+            chunks.append({
+                "id": generate_chunk_id(canonical.report_id, "note", "0"),
+                "text": performance.notes,
+                "metadata": metadata
+            })
+            chunk_index += 1
+    
+    # LLM 재정제
+    if use_llm_refine:
+        for chunk in chunks:
+            if chunk["metadata"]["chunk_type"] != "header_chunk":
+                chunk = _apply_llm_refine(chunk, api_key)
+    
+    return chunks
+
+
+def chunk_canonical_report(
+    canonical: CanonicalReport,
+    api_key: Optional[str] = None,
+    use_llm_refine: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    CanonicalReport를 타입에 따라 청킹
+    
+    Args:
+        canonical: CanonicalReport 객체
+        api_key: OpenAI API 키
+        use_llm_refine: LLM 재정제 사용 여부
+        
+    Returns:
+        청크 리스트
+    """
+    if canonical.report_type == "daily":
+        return chunk_daily_report(canonical, api_key, use_llm_refine)
+    elif canonical.report_type == "weekly":
+        return chunk_weekly_report(canonical, api_key, use_llm_refine)
+    elif canonical.report_type == "monthly":
+        return chunk_monthly_report(canonical, api_key, use_llm_refine)
+    elif canonical.report_type == "performance":
+        return chunk_performance_report(canonical, api_key, use_llm_refine)
     else:
-        stats["min_text_length"] = 0
-    
-    return stats
+        return []
 

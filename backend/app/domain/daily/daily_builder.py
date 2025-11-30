@@ -14,10 +14,10 @@ import numpy as np
 import openai
 from functools import lru_cache
 
-from app.domain.report.schemas import (
+from app.domain.report.canonical_models import (
     CanonicalReport,
-    TaskItem,
-    KPIItem
+    CanonicalDaily,
+    DetailTask
 )
 from app.core.config import settings
 
@@ -268,32 +268,36 @@ def build_daily_report(
         if title and title.strip():
             next_day_plans.append(title.strip())
     
-    # 🔥 tasks = time_tasks만 (실제 완료 업무)
-    tasks = []
+    # detail_tasks = time_tasks만 (실제 완료 업무)
+    detail_tasks = []
     for i, task_dict in enumerate(time_tasks):
         time_range = task_dict.get("time_range", "")
-        time_start, time_end = "", ""
+        time_start, time_end = None, None
         
         if "~" in time_range:
             parts = time_range.split("~")
-            time_start = parts[0].strip()
-            time_end = parts[1].strip() if len(parts) > 1 else ""
+            if len(parts) >= 2:
+                time_start = parts[0].strip()
+                time_end = parts[1].strip()
         
-        task = TaskItem(
-            task_id=f"time_{i+1}",
-            title=task_dict.get("title", ""),
-            description=task_dict.get("description", ""),
-            time_start=time_start,
-            time_end=time_end,
-            status="completed",  # 실제 완료됨
-            note=f"카테고리: {task_dict.get('category', '')}"
-        )
-        tasks.append(task)
+        task_text = task_dict.get("description", "") or task_dict.get("title", "")
+        note = f"카테고리: {task_dict.get('category', '')}"
+        
+        if task_text:
+            detail_tasks.append(DetailTask(
+                time_start=time_start,
+                time_end=time_end,
+                text=task_text,
+                note=note
+            ))
+    
+    # summary_tasks = planned_tasks (금일 예정 업무)
+    summary_tasks = [task.get("title", "") for task in main_tasks if task.get("title")]
     
     # 로그 출력
     print(f"\n📊 일일보고서 생성 요약:")
     print(f"  - 금일 예정 업무: {len(main_tasks)}개")
-    print(f"  - 실제 완료(tasks): {len(time_tasks)}개")
+    print(f"  - 실제 완료(detail_tasks): {len(detail_tasks)}개")
     print(f"  - 특이사항: {len(special_notes)}개")
     print(f"  - 미종결 업무: {len(unresolved_tasks)}개")
     print(f"  - 익일 계획(next_day_plans): {len(next_day_plans)}개")
@@ -302,28 +306,26 @@ def build_daily_report(
     if unresolved_tasks:
         print(f"  - 미종결 목록: {', '.join(unresolved_tasks)}")
     
-    # CanonicalReport 생성
+    # 새 Canonical 구조로 생성
+    canonical_daily = CanonicalDaily(
+        header={
+            "작성일자": target_date.isoformat(),
+            "성명": owner
+        },
+        summary_tasks=summary_tasks,
+        detail_tasks=detail_tasks,
+        pending=unresolved_tasks,
+        plans=next_day_plans,
+        notes="\n".join(special_notes) if special_notes else ""
+    )
+    
     return CanonicalReport(
         report_id=report_id,
         report_type="daily",
         owner=owner,
         period_start=target_date,
         period_end=target_date,
-        tasks=tasks,  # 🔥 실제 완료 업무만
-        kpis=[],
-        issues=unresolved_tasks,  # 🔥 미종결 업무만
-        plans=planned_tasks,  # 🔥 금일 예정 업무 (main_tasks)
-        metadata={
-            "source": "daily_fsm",
-            "planned_task_count": len(main_tasks),
-            "completed_task_count": len(time_tasks),
-            "unresolved_task_count": len(unresolved_tasks),
-            "completion_rate": f"{len(completed_main_indices)}/{len(main_tasks)}" if main_tasks else "0/0",
-            "fsm_issues_count": len(issues),
-            "fsm_plans_count": len(plans),
-            "notes": "\n".join(special_notes) if special_notes else "",  # 🔥 특이사항 (FSM 이슈사항)
-            "next_day_plans": next_day_plans  # 🔥 익일 업무 계획 (FSM 입력)
-        }
+        daily=canonical_daily
     )
 
 

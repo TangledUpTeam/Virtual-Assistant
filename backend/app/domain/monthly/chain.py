@@ -11,8 +11,28 @@ from sqlalchemy.orm import Session
 import uuid
 import re
 
-from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
-from app.infrastructure.vector_store import get_unified_collection
+from app.domain.report.canonical_models import CanonicalReport
+# 하위 호환성을 위해 TaskItem, KPIItem은 임시로 유지
+try:
+    from app.domain.report.schemas import TaskItem, KPIItem
+except ImportError:
+    from typing import Optional
+    from pydantic import BaseModel, Field
+    class TaskItem(BaseModel):
+        task_id: Optional[str] = None
+        title: str = ""
+        description: str = ""
+        time_start: Optional[str] = None
+        time_end: Optional[str] = None
+        status: Optional[str] = None
+        note: str = ""
+    class KPIItem(BaseModel):
+        kpi_name: str = ""
+        value: str = ""
+        unit: Optional[str] = None
+        category: Optional[str] = None
+        note: str = ""
+from app.infrastructure.vector_store_advanced import get_vector_store
 from app.domain.search.retriever import UnifiedRetriever
 from app.core.config import settings
 
@@ -203,7 +223,8 @@ def generate_monthly_report(
     first_day, last_day = get_month_range(target_date)
     
     # 2. 벡터DB에서 월간 데이터 검색
-    collection = get_unified_collection()
+    vector_store = get_vector_store()
+    collection = vector_store.get_collection()
     retriever = UnifiedRetriever(
         collection=collection,
         openai_api_key=settings.OPENAI_API_KEY
@@ -218,7 +239,7 @@ def generate_monthly_report(
         period_start=first_day.isoformat(),
         period_end=last_day.isoformat(),
         n_results=500,  # 월간이므로 더 많은 데이터
-        chunk_types=["task"]
+        chunk_types=["detail_chunk"]
     )
     
     if not task_results:
@@ -226,7 +247,7 @@ def generate_monthly_report(
             query=f"{owner} 월간 업무",
             owner=owner,
             n_results=500,
-            chunk_types=["task"]
+            chunk_types=["detail_chunk"]
         )
     
     print(f"[INFO] 벡터DB task 검색 완료: {len(task_results)}개 청크 발견")
@@ -238,7 +259,7 @@ def generate_monthly_report(
         period_start=first_day.isoformat(),
         period_end=last_day.isoformat(),
         n_results=200,
-        chunk_types=["issue"]
+        chunk_types=["pending_chunk"]
     )
     
     if not issue_results:
@@ -246,7 +267,7 @@ def generate_monthly_report(
             query=f"{owner} 월간 특이사항 이슈",
             owner=owner,
             n_results=200,
-            chunk_types=["issue"]
+            chunk_types=["pending_chunk"]
         )
     
     print(f"[INFO] 벡터DB issue 검색 완료: {len(issue_results)}개 청크 발견")
@@ -258,7 +279,7 @@ def generate_monthly_report(
         period_start=first_day.isoformat(),
         period_end=last_day.isoformat(),
         n_results=200,
-        chunk_types=["plan"]
+        chunk_types=["plan_chunk"]
     )
     
     if not plan_results:
@@ -266,7 +287,7 @@ def generate_monthly_report(
             query=f"{owner} 월간 계획",
             owner=owner,
             n_results=200,
-            chunk_types=["plan"]
+            chunk_types=["plan_chunk"]
         )
     
     print(f"[INFO] 벡터DB plan 검색 완료: {len(plan_results)}개 청크 발견")

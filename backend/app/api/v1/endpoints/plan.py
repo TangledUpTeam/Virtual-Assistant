@@ -30,10 +30,10 @@ def get_today_plan_generator(db: Session = Depends(get_db)) -> TodayPlanGenerato
     # VectorDB에서 유사 업무 패턴 검색 (선택적)
     vector_retriever = None
     try:
-        # unified_documents 컬렉션 사용 (로컬 ChromaDB)
-        from ingestion.chroma_client import get_chroma_service
-        chroma_service = get_chroma_service()
-        collection = chroma_service.get_or_create_collection(name="unified_documents")
+        # daily_reports_advanced 컬렉션 사용 (로컬 ChromaDB)
+        from app.infrastructure.vector_store_advanced import get_vector_store
+        vector_store = get_vector_store()
+        collection = vector_store.get_collection()
         
         vector_retriever = UnifiedRetriever(
             collection=collection,
@@ -41,7 +41,7 @@ def get_today_plan_generator(db: Session = Depends(get_db)) -> TodayPlanGenerato
         )
         
         doc_count = collection.count()
-        print(f"✅ VectorDB 초기화 완료: unified_documents 컬렉션 ({doc_count}개 문서)")
+        print(f"✅ VectorDB 초기화 완료: daily_reports_advanced 컬렉션 ({doc_count}개 문서)")
     except Exception as e:
         print(f"[WARNING] VectorDB 초기화 실패 (추천 기능 제한): {e}")
         import traceback

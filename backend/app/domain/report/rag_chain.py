@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timedelta
 import re
 
-from app.infrastructure.vector_store import get_unified_collection
+from app.infrastructure.vector_store_advanced import get_vector_store
 from app.domain.search.retriever import UnifiedRetriever, UnifiedSearchResult
 from app.llm.client import LLMClient
 
@@ -37,7 +37,9 @@ class ReportRAGChain:
         
         # Retriever 초기화
         if retriever is None:
-            collection = get_unified_collection()
+            # daily_reports_advanced 컬렉션 사용
+            vector_store = get_vector_store()
+            collection = vector_store.get_collection()
             self.retriever = UnifiedRetriever(collection)
         else:
             self.retriever = retriever
@@ -120,7 +122,7 @@ class ReportRAGChain:
                 owner=self.owner,
                 single_date=next_day.strftime("%Y-%m-%d"),
                 n_results=10,
-                chunk_types=["task"]  # task 타입만
+                chunk_types=["detail_chunk"]  # detail_chunk 타입만
             )
             
             # 유사도가 높은 task가 있으면 수행된 것으로 간주
@@ -181,7 +183,7 @@ class ReportRAGChain:
                 period_start=period_start,
                 period_end=period_end,
                 n_results=self.top_k * 2,  # 필터링 전 더 많이 가져오기
-                chunk_types=["issue"]  # issue 타입만
+                chunk_types=["pending_chunk"]  # pending_chunk 타입만
             )
             
             # 다음 날 수행된 업무 제외
@@ -197,7 +199,7 @@ class ReportRAGChain:
                 period_start=period_start,
                 period_end=period_end,
                 n_results=self.top_k,
-                chunk_types=["task", "issue", "plan"]
+                chunk_types=["detail_chunk", "pending_chunk", "plan_chunk"]
             )
         
         # 날짜 기준 정렬 (최신순, 연도 포함 정확한 정렬)
@@ -253,8 +255,11 @@ class ReportRAGChain:
             # 청크 타입
             type_map = {
                 "task": "업무",
+                "detail_chunk": "업무",
                 "issue": "이슈/미종결",
-                "plan": "계획"
+                "pending_chunk": "이슈/미종결",
+                "plan": "계획",
+                "plan_chunk": "계획"
             }
             context_line += f", 유형: {type_map.get(chunk_type, chunk_type)}"
             

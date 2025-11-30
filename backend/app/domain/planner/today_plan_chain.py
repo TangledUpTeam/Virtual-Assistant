@@ -128,7 +128,7 @@ class TodayPlanGenerator:
                         query=query,
                         owner=request.owner,
                         n_results=5,  # 각 쿼리당 5개
-                        chunk_types=["task"]  # task 타입 청크만 검색
+                        chunk_types=["detail_chunk"]  # detail_chunk 타입 청크만 검색
                     )
                     all_results.extend(results)
                 
@@ -268,7 +268,7 @@ class TodayPlanGenerator:
                         query=query,
                         owner=request.owner,
                         n_results=5,  # 각 쿼리당 5개
-                        chunk_types=["task"]  # task 타입 청크만 검색
+                        chunk_types=["detail_chunk"]  # detail_chunk 타입 청크만 검색
                     )
                     all_results.extend(results)
                 
@@ -401,13 +401,13 @@ class TodayPlanGenerator:
             for idx, result in enumerate(similar_tasks[:10]):
                 print(f"  [{idx+1}] chunk_type={result.chunk_type}, score={result.score:.3f}, text={result.text[:50]}...")
             
-            # task 타입 청크만 필터링하여 업무 패턴 추출
+            # detail_chunk 타입 청크만 필터링하여 업무 패턴 추출
             task_patterns = []
             for result in similar_tasks[:5]:  # 상위 5개만
-                if result.chunk_type == "task":
+                if result.chunk_type == "detail_chunk":
                     task_patterns.append(f"- {result.text}")
             
-            print(f"[DEBUG] task 타입 필터링 결과: {len(task_patterns)}개")
+            print(f"[DEBUG] detail_chunk 타입 필터링 결과: {len(task_patterns)}개")
             
             if task_patterns:
                 similar_tasks_text = "\n".join(task_patterns)

@@ -41,6 +41,11 @@ try:
     if env_path.exists():
         load_dotenv(env_path)
         print(f"✅ .env 파일 로드됨: {env_path}")
+    # 보고서 전용 환경 변수 로드
+    report_env_path = project_root / ".env.report"
+    if report_env_path.exists():
+        load_dotenv(report_env_path, override=False)
+        print(f"✅ .env.report 파일 로드됨: {report_env_path}")
 except ImportError:
     print("⚠️  python-dotenv가 설치되지 않았습니다.")
 except Exception as e:
