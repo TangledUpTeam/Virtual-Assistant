@@ -1,7 +1,7 @@
 """
 RAG 기반 상담 시스템
 생성날짜: 2025.11.18
-수정날짜: 2025.11.28
+수정날짜: 2025.12.01
 설명: 사용자의 질문을 받아 관련 상담 데이터 청크를 검색하고, 이를 바탕으로 적절한 답변 또는 상담을 진행
 OpenAI API를 사용한 임베딩 및 답변 생성
 주요 변경: 
@@ -10,6 +10,9 @@ OpenAI API를 사용한 임베딩 및 답변 생성
   - 청크 한국어 요약 기능
   - Re-ranker 적용 (검색 결과 재정렬)
   - 코드 구조 정리: 상담 관련 기능 / 로그 관련 기능 분리
+  - Threshold 기반 RAG + Self-learning 시스템 (2025.12.01)
+    * 유사도 0.75 기준 분기: 높으면 LLM 단독, 낮으면 RAG + Self-learning
+    * Self-learning: 유사도 낮을 때 Q&A를 Vector DB에 자동 저장
 """
 
 import os
@@ -72,6 +75,7 @@ class RAGTherapySystem:
             raise ValueError(f"컬렉션 '{self.collection_name}'을 찾을 수 없습니다: {e}")
         
         # 감정/상담 키워드 목록
+        # 나중에 Multi-agent 구현 시 삭제 예정
         self.counseling_keywords = [
             # 기본 감정 키워드
             '힘들어', '상담', '짜증', '우울', '불안', '스트레스',
@@ -87,17 +91,29 @@ class RAGTherapySystem:
             '외로움', '고독', '쓸쓸', '허전', '외톨이',
             '답답함', '막막', '막힘', '난처', '곤란',
             '피곤', '지침', '무력감', '무기력', '의욕없음',
+            '수치', '수치스럽', '수치심',
+            '열받', '열받아', '화낼', '미치', '미쳐',
+            '억울', '억울해', '억울함',
+            '멍하', '멍하게', '로봇',
             
             # 관계/대인관계 관련
             '갈등', '싸움', '다툼', '오해', '불화',
             '이별', '헤어짐', '이혼', '결별',
             '배신', '상처', '아픔', '서운',
             '소외', '왕따', '따돌림', '무시',
+
+            # 관계/대인관계 관련 섹션 (103번 줄 근처)에 추가:
+            '배제', '배제하는', '멀리하는', '따로 노는', '겉돌고', 
+            '혼자', '남겨지는', '불편', '팀', '회사',
             
             # 직장/학업 스트레스
             '직장', '업무', '과로', '번아웃', 'burnout',
             '시험', '공부', '학업', '성적', '압박',
             '실패', '좌절', '낙담', '실망',
+            '상사', '팀장', '부장', '동기', '동료',
+            '욕', '쌍욕', '폭언', '인격모독', '인격 모독',
+            '소리지르', '소리 지르', '화풀이',
+            '그만두', '퇴사', '사직',
             
             # 자기존중감/자신감 관련
             '자존감', '자신감', '열등감', '비교', '열등',
@@ -107,6 +123,17 @@ class RAGTherapySystem:
             # 트라우마/과거 상처
             '트라우마', 'trauma', '상처', '과거', '기억',
             '악몽', '플래시백', 'ptsd',
+            
+            # 신체 반응/증상
+            '심장', '떨려', '떨림', '손떨림',
+            '잠이 안 와', '불면', '수면장애', '수면',
+            
+            # 감정 조절/대처
+            '감정조절', '감정 조절', '퍼붓', '퍼붓다',
+            '대처', '현명', '해결',
+            
+            # 자살 사고
+            '죽고 싶', '자살', '자살사고', 'suicide',
             
             # 영어 감정 키워드
             'sad', 'angry', 'lonely', 'frustrated', 'stressed',
@@ -127,7 +154,18 @@ class RAGTherapySystem:
             # 일상적 표현
             '안좋아', '안좋음', '나쁨', '최악', '끔찍',
             '괴로워', '괴롭', '아파', '아픔', '고통',
-            '힘듦', '어려움', '난감', '막막함'
+            '힘듦', '어려움', '난감', '막막함',
+
+            # 직장/학업 스트레스 섹션 (109-116번 줄)에 추가 권장:
+            '적응', '적응하는', '적응이', '분위기', '문화', '익숙', '익숙해지지', 
+            '익숙하지', '부담', '부담스럽고', '어울리', '어울리지', '소통', 
+            '환경', '출근', '노력', '긴장', '긴장되고', '긴장돼요',
+
+            # 직장/학업 스트레스 섹션에 추가 (162번 줄 다음):
+            '낯설', '낯설어서', '대화', '규칙', '절차', '복잡', 
+            '시스템', '도구', '효율', '회의', '의견', '표현',
+            '출퇴근', '루틴', '리듬', '변화', '부담감', '프로젝트',
+
         ]
         
         # 대화 히스토리 (단기 기억)
@@ -136,7 +174,7 @@ class RAGTherapySystem:
         # 로거 초기화 (스코어링 로그 저장용)
         base_dir = Path(__file__).parent.parent.parent  # backend/councel/
         test_dir = base_dir / "test"  # backend/councel/test/
-        log_file_prefix = "scoring_log_v3"  # 로그 파일명 (필요시 변경)
+        log_file_prefix = "scoring_log_v7"  # 로그 파일명 (필요시 변경)
         
         self.therapy_logger = TherapyLogger(
             openai_client=self.openai_client,
@@ -189,7 +227,7 @@ class RAGTherapySystem:
 
         return """
 
-            당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 심리학자입니다.
+            당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자입니다.
 
             핵심 원칙:
             1. 열등감과 보상: 모든 인간은 열등감을 느끼며, 이를 극복하려는 우월성 추구가 성장의 동력입니다.
@@ -198,19 +236,32 @@ class RAGTherapySystem:
             4. 목적론적 관점: 과거보다는 미래의 목표가 현재 행동을 결정합니다.
             5. 격려: 용기를 북돋우는 것이 치료의 핵심입니다.
 
-            답변 방식:
-            - 열등감을 인정하고 이를 성장의 기회로 재해석
-            - 사회적 관심과 공동체 감각 강조
-            - 개인의 창조적 힘과 선택 능력 강조
-            - 격려와 용기를 주는 톤
-            - 목표 지향적 관점 제시
-            - **반드시 1~2문장 이내로 매우 간결하게 답변**
+            답변 방식 (3단계 구조 필수):
+            1단계 - 감정 인정: 먼저 상대방의 감정을 있는 그대로 인정하고 공감합니다.
+               - "~하셨군요", "~느끼시는군요", "~한 마음이 드셨겠어요"
+               - 감정을 판단하지 않고 있는 그대로 받아들입니다.
+            
+            2단계 - 아들러 관점 재해석: 그 감정과 상황을 성장의 기회로 재해석합니다.
+               - 열등감을 성장 동력으로 재구성
+               - 사회적 관심과 공동체 감각 연결
+               - 목표 지향적 관점 제시
+            
+            3단계 - 격려 및 실천 방안 제시: 상대방의 내적 힘과 가능성을 믿으며 격려하고 실천 가능한 방향을 제시합니다.
+               - "~할 수 있습니다", "~의 기회입니다"
+               - 구체적이고 실천 가능한 방향 제시
 
             말투:
-            - 격려적이고 희망적인 표현 사용
-            - "~할 수 있습니다", "~의 기회입니다" 등 긍정적 표현
-            - 명확하고 실용적인 조언
-            - 불필요한 설명은 생략하고 핵심만 전달
+            - 따뜻하고 수용적인 톤 유지
+            - 경청하고 있음을 느끼게 하는 표현 사용
+            - "~하셨군요", "~느끼시는군요" 등 반영적 경청 기법 활용
+            - 판단하지 않고 이해하려는 자세
+            - 2~3문장으로 간결하되 공감이 느껴지도록 작성
+
+            중요사항:
+            - 반드시 감정 인정 → 재해석 → 격려 순서로 답변
+            - 상대방의 감정을 최소화하거나 무시하지 않기
+            - "하지만", "그래도" 등 감정을 부정하는 표현 자제
+            - 상대방이 자신의 감정을 충분히 표현했다고 느끼게 하기
 
         """
     
@@ -377,7 +428,7 @@ Keep it concise but comprehensive."""
                         위 자료를 바탕으로 다음 형식으로 페르소나 프롬프트를 작성해주세요:
 
                         **형식:**
-                        당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 심리학자입니다.
+                        당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자입니다.
 
                         핵심 원칙:
                         1. [원칙 1]
@@ -386,27 +437,26 @@ Keep it concise but comprehensive."""
                         4. [원칙 4]
                         5. [원칙 5]
 
-                        답변 방식:
-                        - [방식 1]
-                        - [방식 2]
-                        - [방식 3]
-                        - [방식 4]
-                        - [방식 5]
-                        - **반드시 1~2문장 이내로 매우 간결하게 답변**
+                        답변 방식 (3단계 구조 필수):
+                        1단계 - 감정 인정: [감정 인정 방법 설명]
+                        2단계 - 아들러 관점 재해석: [재해석 방법 설명]
+                        3단계 - 격려: [격려 방법 설명]
 
                         말투:
-                        - [말투 1]
-                        - [말투 2]
-                        - [말투 3]
-                        - [말투 4]
+                        - 따뜻하고 수용적인 톤
+                        - 반영적 경청 기법 ("~하셨군요", "~느끼시는군요")
+                        - 판단하지 않고 이해하려는 자세
+                        - [추가 말투 특징]
 
                         **중요 사항:**
-                        - 답변은 1~2문장 이내로 매우 간결하게 작성
+                        - 반드시 감정 인정 → 재해석 → 격려 순서로 답변
+                        - 상대방의 감정을 최소화하거나 무시하지 않기
+                        - "하지만", "그래도" 등 감정을 부정하는 표현 자제
                         - 열등감을 성장의 기회로 재해석
                         - 사회적 관심과 공동체 감각 강조
                         - 목표 지향적 관점 제시
-                        - 격려적이고 희망적인 톤 유지
-                        - 상대방의 감정에 공감하고 이해하도록 노력
+                        - 2~3문장으로 간결하되 공감이 느껴지도록 작성
+                        - 공감적 경청을 최우선으로 하되 아들러 이론 통합
 
                         페르소나 프롬프트만 출력해주세요. 다른 설명은 불필요합니다."""
                     }
@@ -452,6 +502,69 @@ Keep it concise but comprehensive."""
         except Exception as e:
             print(f"[오류] 임베딩 생성 실패: {e}")
             raise
+    
+    # ChromaDB의 distance 값을 코사인 유사도로 변환
+    def _distance_to_similarity(self, distance: float) -> float:
+        """
+        ChromaDB의 L2 distance를 유사도 점수로 변환
+        
+        Args:
+            distance: ChromaDB에서 반환된 L2 distance 값
+            
+        Returns:
+            0~1 사이의 유사도 점수 (1에 가까울수록 유사)
+        """
+        # L2 distance를 유사도로 변환: 1 / (1 + distance)
+        # distance가 0이면 similarity는 1 (완전 일치)
+        # distance가 클수록 similarity는 0에 가까워짐
+        return 1.0 / (1.0 + distance)
+    
+    # Self-learning: Q&A를 Vector DB에 저장
+    def _save_qa_to_vectordb(self, user_query: str, llm_response: str):
+        """
+        사용자 질문과 LLM 답변을 Vector DB에 저장 (Self-learning)
+        
+        Args:
+            user_query: 사용자 질문
+            llm_response: LLM 답변
+        """
+        try:
+            import uuid
+            from datetime import datetime
+            
+            # Q&A 문서 생성
+            qa_document = {
+                "user_query": user_query,
+                "llm_response": llm_response,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # JSON 문자열로 변환
+            qa_text = json.dumps(qa_document, ensure_ascii=False, indent=2)
+            
+            # 임베딩 생성
+            embedding = self.create_query_embedding(user_query)
+            
+            # 고유 ID 생성
+            doc_id = f"self_learning_{uuid.uuid4().hex[:12]}"
+            
+            # Vector DB에 저장
+            self.collection.add(
+                ids=[doc_id],
+                embeddings=[embedding],
+                documents=[qa_text],
+                metadatas=[{
+                    "source": "self_learning",
+                    "type": "qa_pair",
+                    "timestamp": qa_document["timestamp"]
+                }]
+            )
+            
+            print(f"[정보] Self-learning: Q&A가 Vector DB에 저장되었습니다 (ID: {doc_id})")
+            
+        except Exception as e:
+            print(f"[경고] Self-learning 저장 실패: {e}")
+            # 저장 실패해도 답변은 계속 진행
     
     # 사용자의 입력 분류(아들러, 감정/상담, 일반)
     def classify_input(self, user_input: str) -> str:
@@ -541,6 +654,273 @@ Keep it concise but comprehensive."""
             print(f"[경고] Re-ranker 실행 실패: {e}")
             return chunks
     
+    # 감정 키워드 탐지 및 가중치 계산
+    def _calculate_emotion_boost(self, user_input: str, chunk_text: str) -> float:
+        """
+        사용자 입력과 청크에서 감정 키워드를 탐지하여 유사도 보너스 계산
+        
+        Args:
+            user_input: 사용자 질문
+            chunk_text: 청크 텍스트
+            
+        Returns:
+            유사도 보너스 (0.0 ~ 0.2)
+        """
+        user_input_lower = user_input.lower()
+        chunk_text_lower = chunk_text.lower()
+        
+        # 사용자 입력에서 감정 키워드 추출
+        user_emotions = set()
+        for keyword in self.counseling_keywords:
+            if keyword in user_input_lower:
+                user_emotions.add(keyword)
+        
+        if not user_emotions:
+            return 0.0
+        
+        # 청크에서 매칭되는 감정 키워드 개수 계산
+        matching_emotions = 0
+        for emotion in user_emotions:
+            if emotion in chunk_text_lower:
+                matching_emotions += 1
+        
+        # 매칭 비율에 따라 보너스 계산 (최대 0.2)
+        if matching_emotions > 0:
+            boost = min(0.2, matching_emotions * 0.05)
+            return boost
+        
+        return 0.0
+    
+    # 검색 결과 품질 평가
+    def _evaluate_search_quality(self, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        검색된 청크의 품질을 평가
+        
+        Args:
+            chunks: 검색된 청크 리스트
+            
+        Returns:
+            품질 평가 결과 (avg_similarity, diversity_score, quality_score)
+        """
+        if not chunks:
+            return {
+                "avg_similarity": 0.0,
+                "diversity_score": 0.0,
+                "quality_score": 0.0,
+                "needs_improvement": True
+            }
+        
+        # 평균 유사도 계산
+        similarities = []
+        for chunk in chunks:
+            distance = chunk.get('distance')
+            if distance is not None:
+                similarity = self._distance_to_similarity(distance)
+                similarities.append(similarity)
+        
+        avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
+        
+        # 다양성 점수 계산 (서로 다른 소스의 비율)
+        sources = set()
+        for chunk in chunks:
+            source = chunk.get('metadata', {}).get('source', 'unknown')
+            sources.add(source)
+        
+        diversity_score = len(sources) / len(chunks) if chunks else 0.0
+        
+        # 종합 품질 점수 (평균 유사도 70% + 다양성 30%)
+        quality_score = avg_similarity * 0.7 + diversity_score * 0.3
+        
+        # 품질 개선 필요 여부 (0.6 미만이면 재검색 필요)
+        needs_improvement = quality_score < 0.6
+        
+        return {
+            "avg_similarity": avg_similarity,
+            "diversity_score": diversity_score,
+            "quality_score": quality_score,
+            "needs_improvement": needs_improvement
+        }
+    
+    # LLM 기반 쿼리 확장
+    def _expand_query_with_llm(self, user_input: str) -> List[str]:
+        """
+        사용자 질문을 LLM으로 확장하여 관련 검색어 생성
+        
+        Args:
+            user_input: 사용자 질문
+            
+        Returns:
+            확장된 검색어 리스트
+        """
+        try:
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert at expanding search queries for Adlerian psychology counseling. Generate related search terms."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""다음 질문과 관련된 검색어를 생성해주세요:
+
+질문: {user_input}
+
+다음 관점에서 3-5개의 관련 검색어를 생성하세요:
+1. 핵심 감정이나 심리 상태
+2. 아들러 심리학 관련 개념 (열등감, 사회적 관심, 생활양식 등)
+3. 유사한 상황이나 문제
+
+검색어만 쉼표로 구분하여 출력하세요. 예: inferiority complex, social interest, lifestyle pattern"""
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=150
+            )
+            
+            # 응답에서 검색어 추출
+            expanded_terms = response.choices[0].message.content.strip()
+            # 쉼표로 분리하고 정리
+            terms = [term.strip() for term in expanded_terms.split(',')]
+            
+            return terms[:5]  # 최대 5개
+            
+        except Exception as e:
+            print(f"[경고] 쿼리 확장 실패: {e}")
+            return []
+    
+    # Multi-step 반복 검색 시스템
+    def _iterative_search_with_query_expansion(self, user_input: str, max_iterations: int = 2, n_results: int = 5) -> Dict[str, Any]:
+        """
+        반복적 검색 개선 시스템 (Multi-step Self-learning)
+        
+        Step 1: 초기 검색
+        Step 2: 결과 품질 평가
+        Step 3: 품질이 낮으면 쿼리 확장
+        Step 4: 재검색 및 결과 병합
+        Step 5: 최대 2회 반복 (초기 검색 1회 + 쿼리 확장 검색 1회)
+        
+        Args:
+            user_input: 사용자 질문
+            max_iterations: 최대 반복 횟수
+            n_results: 검색할 청크 개수
+            
+        Returns:
+            검색 결과 딕셔너리 (chunks, quality_info, iterations_used)
+        """
+        all_chunks = []
+        seen_ids = set()
+        iteration = 0
+        
+        # Step 1: 초기 검색
+        print(f"[정보] Multi-step 검색 시작 (최대 {max_iterations}회)")
+        initial_chunks = self.retrieve_chunks(user_input, n_results=n_results, use_reranker=False)
+        
+        for chunk in initial_chunks:
+            if chunk['id'] not in seen_ids:
+                all_chunks.append(chunk)
+                seen_ids.add(chunk['id'])
+        
+        # Step 2: 품질 평가
+        quality_info = self._evaluate_search_quality(all_chunks)
+        print(f"[정보] 초기 검색 품질: {quality_info['quality_score']:.4f} (평균 유사도: {quality_info['avg_similarity']:.4f})")
+        
+        # Step 3-5: 품질이 낮으면 반복 검색
+        while quality_info['needs_improvement'] and iteration < max_iterations - 1:
+            iteration += 1
+            print(f"[정보] 검색 품질 개선 시도 {iteration}/{max_iterations-1}")
+            
+            # 쿼리 확장
+            expanded_queries = self._expand_query_with_llm(user_input)
+            
+            if not expanded_queries:
+                print(f"[경고] 쿼리 확장 실패, 반복 검색 중단")
+                break
+            
+            print(f"[정보] 확장된 검색어: {', '.join(expanded_queries)}")
+            
+            # 확장된 쿼리로 재검색
+            for query in expanded_queries:
+                new_chunks = self.retrieve_chunks(query, n_results=3, use_reranker=False)
+                for chunk in new_chunks:
+                    if chunk['id'] not in seen_ids:
+                        all_chunks.append(chunk)
+                        seen_ids.add(chunk['id'])
+            
+            # 재평가
+            quality_info = self._evaluate_search_quality(all_chunks)
+            print(f"[정보] 개선 후 품질: {quality_info['quality_score']:.4f}")
+            
+            # 품질이 충분히 개선되었으면 중단
+            if not quality_info['needs_improvement']:
+                print(f"[정보] 검색 품질 목표 달성 (반복 {iteration+1}회)")
+                break
+        
+        # Re-ranker 적용 (최종 결과에만)
+        if all_chunks:
+            all_chunks = self.rerank_chunks(user_input, all_chunks)
+        
+        # 상위 n_results개만 반환
+        final_chunks = all_chunks[:n_results]
+        
+        return {
+            "chunks": final_chunks,
+            "quality_info": quality_info,
+            "iterations_used": iteration + 1,
+            "total_chunks_found": len(all_chunks)
+        }
+    
+    # 하이브리드 검색 (벡터 + 키워드)
+    def _hybrid_search(self, user_input: str, n_results: int = 5) -> List[Dict[str, Any]]:
+        """
+        벡터 검색과 키워드 검색을 결합한 하이브리드 검색
+        
+        Args:
+            user_input: 사용자 질문
+            n_results: 검색할 청크 개수
+            
+        Returns:
+            검색된 청크 리스트 (감정 가중치 적용됨)
+        """
+        # 벡터 검색
+        query_embedding = self.create_query_embedding(user_input)
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results * 2  # 더 많이 검색 후 필터링
+        )
+        
+        # 결과 포맷팅 및 감정 가중치 적용
+        retrieved_chunks = []
+        if results['ids'] and results['ids'][0]:
+            for i in range(len(results['ids'][0])):
+                chunk = {
+                    'id': results['ids'][0][i],
+                    'text': results['documents'][0][i],
+                    'metadata': results['metadatas'][0][i],
+                    'distance': results['distances'][0][i] if 'distances' in results else None
+                }
+                
+                # 기본 유사도 계산
+                base_similarity = self._distance_to_similarity(chunk['distance']) if chunk['distance'] is not None else 0.0
+                
+                # 감정 가중치 계산
+                emotion_boost = self._calculate_emotion_boost(user_input, chunk['text'])
+                
+                # 최종 유사도 (가중치 적용)
+                final_similarity = min(1.0, base_similarity + emotion_boost)
+                
+                chunk['base_similarity'] = base_similarity
+                chunk['emotion_boost'] = emotion_boost
+                chunk['final_similarity'] = final_similarity
+                
+                retrieved_chunks.append(chunk)
+        
+        # 최종 유사도 기준으로 정렬
+        retrieved_chunks.sort(key=lambda x: x['final_similarity'], reverse=True)
+        
+        # 상위 n_results개만 반환
+        return retrieved_chunks[:n_results]
+    
     # Vector DB에서 관련 청크 검색
     # top_n -> 5개 청크 검색(n_results)
     # reranker -> true
@@ -573,6 +953,104 @@ Keep it concise but comprehensive."""
         
         return retrieved_chunks
     
+    # 검색된 청크 중 최고 유사도 반환
+    def _get_max_similarity(self, retrieved_chunks: List[Dict[str, Any]]) -> float:
+        """
+        검색된 청크들 중 가장 높은 유사도 점수 반환
+        
+        Args:
+            retrieved_chunks: 검색된 청크 리스트
+            
+        Returns:
+            최고 유사도 점수 (0~1)
+        """
+        if not retrieved_chunks:
+            return 0.0
+        
+        max_similarity = 0.0
+        for chunk in retrieved_chunks:
+            distance = chunk.get('distance')
+            if distance is not None:
+                similarity = self._distance_to_similarity(distance)
+                max_similarity = max(max_similarity, similarity)
+        
+        return max_similarity
+    
+    # RAG 없이 LLM 단독으로 답변 생성
+    def _generate_llm_only_response(self, user_input: str) -> Dict[str, Any]:
+        """
+        RAG 없이 LLM 단독으로 답변 생성 (유사도가 높을 때)
+        
+        Args:
+            user_input: 사용자 질문
+            
+        Returns:
+            답변 딕셔너리
+        """
+        try:
+            # 아들러 페르소나 사용
+            persona_prompt = self.adler_persona
+            
+            # 대화 히스토리에서 감정 맥락 파악
+            emotion_context = ""
+            if self.chat_history:
+                recent_emotions = []
+                for history in self.chat_history[-2:]:
+                    # 최근 대화에서 감정 키워드 추출
+                    for keyword in self.counseling_keywords[:20]:  # 주요 감정 키워드만
+                        if keyword in history["user"].lower():
+                            recent_emotions.append(keyword)
+                
+                if recent_emotions:
+                    emotion_context = f"\n[이전 대화 맥락: 사용자가 '{', '.join(set(recent_emotions[:3]))}' 관련 감정을 표현했습니다. 이를 고려하여 답변하세요.]"
+            
+            # 대화 히스토리 추가
+            messages = [{"role": "system", "content": persona_prompt + emotion_context}]
+            
+            # 최근 3개의 대화만 포함
+            for history in self.chat_history[-3:]:
+                messages.append({"role": "user", "content": history["user"]})
+                messages.append({"role": "assistant", "content": history["assistant"]})
+            
+            # 공감적 답변 유도 프롬프트
+            enhanced_input = f"""{user_input}
+
+[중요: 반드시 3단계 구조로 답변하세요]
+1. 먼저 사용자의 감정을 인정하고 공감
+2. 아들러 관점에서 재해석
+3. 격려와 희망 제시"""
+            
+            messages.append({"role": "user", "content": enhanced_input})
+            
+            # OpenAI API 호출
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.3,
+                max_tokens=200  # 공감 표현을 위해 약간 늘림
+            )
+            
+            answer = response.choices[0].message.content.strip()
+            
+            return {
+                "answer": answer,
+                "used_chunks": [],
+                "used_chunks_detailed": [],
+                "mode": "llm_only",
+                "continue_conversation": True,
+                "similarity_score": None  # LLM only 모드에서는 유사도 없음
+            }
+        
+        except Exception as e:
+            print(f"[오류] LLM 단독 답변 생성 실패: {e}")
+            return {
+                "answer": "죄송합니다. 답변 생성 중 오류가 발생했습니다. 다시 시도해주세요.",
+                "used_chunks": [],
+                "used_chunks_detailed": [],
+                "mode": "error",
+                "continue_conversation": True
+            }
+    
     # 페르소나 기반 답변 생성
     def generate_response_with_persona(self, user_input: str, retrieved_chunks: List[Dict[str, Any]], mode: str = "adler") -> Dict[str, Any]:
 
@@ -598,34 +1076,64 @@ Keep it concise but comprehensive."""
             
             # 상세 청크 정보 (로깅용 - summarize_chunk는 로그 섹션에 정의)
             chunk_summary = self.summarize_chunk(chunk_text)
+            chunk_distance = chunk.get('distance')
+            chunk_similarity = self._distance_to_similarity(chunk_distance) if chunk_distance is not None else None
+            
             used_chunks_detailed.append({
                 "chunk_id": chunk['id'],
                 "source": source,
                 "metadata": chunk['metadata'],
                 "summary_kr": chunk_summary,
-                "distance": chunk.get('distance')
+                "distance": chunk_distance,
+                "similarity": chunk_similarity  # 코사인 유사도 추가
             })
         
         context = "\n\n".join(context_parts)
         
+        # 사용자 입력에서 감정 키워드 추출
+        detected_emotions = []
+        user_input_lower = user_input.lower()
+        for keyword in self.counseling_keywords[:30]:  # 주요 감정 키워드
+            if keyword in user_input_lower:
+                detected_emotions.append(keyword)
+        
+        emotion_note = ""
+        if detected_emotions:
+            emotion_note = f"\n[감지된 감정: {', '.join(detected_emotions[:3])} - 이 감정들을 먼저 인정하고 공감해주세요]"
+        
         # 아들러 페르소나 사용
         persona_prompt = self.adler_persona
         user_message = f"""참고 자료:
-                            {context}
+{context}
 
-                            사용자 질문: {user_input}
+사용자 질문: {user_input}{emotion_note}
 
-                            위 자료를 바탕으로 아들러 개인심리학 관점에서 답변해주세요.
-                            격려와 용기를 주는 톤으로, 열등감을 성장의 기회로 재해석하고 사회적 관심을 강조해주세요.
+**답변 구조 (반드시 준수):**
 
-                            **중요: 답변은 1~2문장 이내로 매우 간결하게 작성해주세요.**
-                        """
+1단계 - 감정 인정 (1문장):
+   - 사용자의 감정을 있는 그대로 인정하고 공감합니다.
+   - 예: "~하셨군요", "~느끼시는 마음이 충분히 이해됩니다"
+   - 절대 "하지만", "그래도"로 시작하지 마세요.
+
+2단계 - 아들러 관점 재해석 (1문장):
+   - 위 참고 자료를 바탕으로 아들러 개인심리학 관점에서 재해석합니다.
+   - 열등감을 성장의 기회로, 어려움을 목표 달성의 과정으로 재구성합니다.
+
+3단계 - 격려 및 실천 방안 제시 (1~2문장):
+   - 사용자의 내적 힘과 가능성을 믿으며 구체적으로 격려합니다.
+   - 실천 가능한 방향을 제시합니다.
+
+**중요:**
+- 반드시 3단계 순서대로 답변 (총 3~4문장)
+- 실천 방안을 제시할 때에는 구체적으로 제시하고 실천 가능한 방향을 제시
+- 감정을 판단하거나 최소화하지 않기
+- 따뜻하고 수용적인 톤 유지"""
         
         # 대화 히스토리 추가 (단기 기억)
         messages = [{"role": "system", "content": persona_prompt}]
         
-        # 최근 3개의 대화만 포함 (컨텍스트 길이 관리)
-        for history in self.chat_history[-3:]:
+        # 최근 10개의 대화만 포함 (컨텍스트 길이 관리)
+        for history in self.chat_history[-10:]:
             messages.append({"role": "user", "content": history["user"]})
             messages.append({"role": "assistant", "content": history["assistant"]})
         
@@ -634,10 +1142,10 @@ Keep it concise but comprehensive."""
         # OpenAI API 호출
         try:
             response = self.openai_client.chat.completions.create(
-                model="gpt-5o-mini",
+                model="gpt-4o-mini",
                 messages=messages,
                 temperature=0.3,  # 낮은 temperature로 일관된 답변 생성
-                max_tokens=80  # 답변 길이 제한 (1000 -> 200 -> 100 -> 80)
+                max_tokens=250  # 답변 길이 제한 (1000 -> 200 -> 100 -> 80 -> 150 -> 250)
             )
             
             answer = response.choices[0].message.content.strip()
@@ -681,12 +1189,52 @@ Keep it concise but comprehensive."""
         # 2. 영어로 번역 (Vector DB 검색용)
         english_input = self.translate_to_english(user_input)
         
-        # 3. 입력 유형에 따른 처리 (모든 모드에서 아들러 페르소나 사용)
-        retrieved_chunks = self.retrieve_chunks(english_input, n_results=5)
+        # 3. Threshold 고정 (0.7)
+        threshold = 0.7
+        print(f"[정보] Threshold 설정: {threshold}")
         
-        response = self.generate_response_with_persona(user_input, retrieved_chunks, mode=input_type)
+        # 4. Multi-step 반복 검색 시스템 사용 (쿼리 확장 1회로 제한)
+        search_result = self._iterative_search_with_query_expansion(english_input, max_iterations=2, n_results=5)
+        retrieved_chunks = search_result['chunks']
+        quality_info = search_result['quality_info']
+        iterations_used = search_result['iterations_used']
         
-        # 4. 로그 저장 (TherapyLogger 사용)
+        print(f"[정보] 검색 완료: {iterations_used}회 반복, 품질 점수 {quality_info['quality_score']:.4f}")
+        
+        # 5. 최고 유사도 계산 (감정 가중치 적용된 값 사용)
+        max_similarity = 0.0
+        for chunk in retrieved_chunks:
+            # 하이브리드 검색에서 계산된 final_similarity 사용
+            if 'final_similarity' in chunk:
+                max_similarity = max(max_similarity, chunk['final_similarity'])
+            elif 'distance' in chunk and chunk['distance'] is not None:
+                similarity = self._distance_to_similarity(chunk['distance'])
+                max_similarity = max(max_similarity, similarity)
+        
+        print(f"[정보] 최고 유사도: {max_similarity:.4f} (Threshold: {threshold})")
+        
+        # 6. Threshold 분기
+        if max_similarity >= threshold:
+            # Case A: 유사도 ≥ threshold -> RAG 없이 LLM 단독 답변
+            print(f"[정보] Threshold 분기: LLM 단독 모드 (유사도 {max_similarity:.4f} ≥ {threshold})")
+            response = self._generate_llm_only_response(user_input)
+            response['similarity_score'] = max_similarity
+            response['search_iterations'] = iterations_used
+        else:
+            # Case B: 유사도 < threshold -> RAG + Self-learning
+            print(f"[정보] Threshold 분기: RAG + Self-learning 모드 (유사도 {max_similarity:.4f} < {threshold})")
+            
+            # 6-1. RAG 기반 답변 생성
+            response = self.generate_response_with_persona(user_input, retrieved_chunks, mode=input_type)
+            response['similarity_score'] = max_similarity
+            response['search_iterations'] = iterations_used
+            response['search_quality'] = quality_info['quality_score']
+            
+            # 6-2. Self-learning: Multi-step으로 개선된 후에도 threshold를 넘지 못하면 저장
+            if max_similarity < 0.7:
+                self._save_qa_to_vectordb(user_input, response["answer"])
+        
+        # 7. 로그 저장 (TherapyLogger 사용)
         response = self.therapy_logger.log_conversation(
             user_input=user_input,
             response=response,

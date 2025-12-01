@@ -1,0 +1,560 @@
+[
+  {
+    "timestamp": "2025-12-01 14:25:33",
+    "question": "직장에서 동료들과 소통이 잘 안 되고, 상사로부터 불만을 받고 있어요. 제가 너무 통제하려고 하는 걸까요?",
+    "answer": "직장에서 동료들과 소통이 잘 안 되고 불만을 느끼시는 마음이 충분히 이해됩니다. 이러한 어려움은 자신의 소통 방식을 돌아보고 성장할 기회로 삼을 수 있습니다. 당신의 내적 힘을 믿고, 동료들과의 대화를 시도해보거나, 상사와의 피드백을 통해 구체적인 개선 방안을 모색해보세요.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_cc6189fe4e5b",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:11:33.857248",
+          "type": "qa_pair"
+        },
+        "summary_kr": "팀에서 따돌림을 느낀다면, 자신의 강점을 발견하고 소통을 시도하거나 신뢰할 수 있는 동료에게 도움을 요청하는 것이 좋습니다.",
+        "distance": 0.6367768357596035,
+        "similarity": 0.6109568379466435
+      },
+      {
+        "chunk_id": "self_learning_5a7dac93631c",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:09:22.955404",
+          "type": "qa_pair"
+        },
+        "summary_kr": "팀에서 따돌림을 느낀다면, 자신의 강점을 발견하고 소통의 기회를 만들어보는 것이 좋습니다. 신뢰할 수 있는 동료에게 도움을 요청하는 것도 도움이 될 수 있습니다.",
+        "distance": 0.6367870049751088,
+        "similarity": 0.6109530421248716
+      },
+      {
+        "chunk_id": "self_learning_22ce48664251",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:10:10.734488",
+          "type": "qa_pair"
+        },
+        "summary_kr": "팀원들이 따돌리는 것 같아 힘든 상황에서 자신의 강점을 발견하고 소통을 시도하거나 신뢰할 수 있는 동료에게 도움을 요청하는 것이 좋습니다.",
+        "distance": 0.6432701582354086,
+        "similarity": 0.6085426641434475
+      }
+    ],
+    "scoring": {
+      "relevance": 8,
+      "accuracy": 7,
+      "empathy": 9,
+      "practicality": 8,
+      "total": 32,
+      "comment": "상담사는 사용자의 감정을 잘 인정하고 공감했으며, 실용적인 조언을 제공했습니다. 그러나 질문의 핵심을 완전히 파악하지 못한 부분이 있어 관련성이 다소 부족했습니다. 참고 자료의 정확성도 조금 아쉬웠습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6109568379466435
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:25:49",
+    "question": "회사에서 항상 모든 걸 제가 주도해야 안심이 돼요. 그런데 동료들이 저를 불편해하는 것 같아요.",
+    "answer": "모든 것을 주도해야 한다는 압박감을 느끼셨군요, 그 마음이 충분히 이해됩니다. 이러한 상황은 자신의 리더십 스타일을 돌아보고, 팀원들과의 협력을 통해 더 나은 관계를 형성할 기회로 삼을 수 있습니다. 당신의 내적 힘을 믿고, 동료들에게 의견을 묻거나 함께 작업할 기회를 만들어보세요; 그 과정에서 서로의 신뢰를 쌓을 수 있을 것입니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_22ce48664251",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:10:10.734488",
+          "type": "qa_pair"
+        },
+        "summary_kr": "팀원들이 따돌리는 것 같아 힘든 상황에서 자신의 강점을 발견하고 소통을 시도하며, 신뢰할 수 있는 동료에게 도움을 요청하는 것이 좋습니다.",
+        "distance": 0.6089316050851719,
+        "similarity": 0.6215304596164379
+      },
+      {
+        "chunk_id": "self_learning_cc6189fe4e5b",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:11:33.857248",
+          "type": "qa_pair"
+        },
+        "summary_kr": "팀에서 따돌림을 느낀다면, 자신의 강점을 발견하고 소통을 시도하거나 신뢰할 수 있는 동료에게 도움을 요청하는 것이 좋습니다.",
+        "distance": 0.6416938352032802,
+        "similarity": 0.6091269751745011
+      },
+      {
+        "chunk_id": "self_learning_5a7dac93631c",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:09:22.955404",
+          "type": "qa_pair"
+        },
+        "summary_kr": "팀에서 따돌림을 느낀다면, 자신의 강점을 발견하고 소통의 기회를 만들어보는 것이 좋습니다. 대화나 신뢰할 수 있는 동료의 도움을 요청해보세요.",
+        "distance": 0.641699339519789,
+        "similarity": 0.6091249328835745
+      }
+    ],
+    "scoring": {
+      "relevance": 8,
+      "accuracy": 7,
+      "empathy": 9,
+      "practicality": 8,
+      "total": 32,
+      "comment": "상담사는 사용자의 감정을 잘 인정하고 공감했으며, 실용적인 조언을 제공했습니다. 그러나 참고 자료와의 일치성에서 약간의 개선이 필요할 수 있습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6516193607141406
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:26:05",
+    "question": "분노를 참지 못해 화를 내고 나면 후회가 돼요. 왜 이렇게 감정 조절이 안 될까요?",
+    "answer": "분노를 참지 못하고 화를 내고 나면 후회가 드셨군요, 그 마음이 충분히 이해됩니다. 이러한 감정은 자신의 내면을 돌아보고 성장할 기회로 삼을 수 있습니다. 당신의 감정을 인정하고, 감정 조절을 위한 심호흡이나 일기를 쓰는 방법을 시도해보세요; 이를 통해 더 나은 소통과 자기 이해를 이룰 수 있을 것입니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_525e497bed46",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:52:55.456636",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사가 감정을 조절하지 못하고 욕설을 할 때, 자신의 감정을 이해하고 긍정적인 소통 방법을 찾는 것이 현명한 대처법입니다.",
+        "distance": 0.5987862852219211,
+        "similarity": 0.6254744672526347
+      },
+      {
+        "chunk_id": "self_learning_fde83a64ca5d",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:24:20.579104",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 감정에 휘둘리지 말고, 이를 자신의 성장 기회로 삼으며 주변의 지지를 통해 회복하는 것이 현명한 대처 방법입니다.",
+        "distance": 0.6007893958441854,
+        "similarity": 0.6246917943085476
+      },
+      {
+        "chunk_id": "self_learning_f1fc5782239c",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:27:17.281213",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 감정에 휘둘리지 말고, 이를 성장의 기회로 삼으며 주변의 지지를 통해 회복하는 것이 현명한 대처 방법입니다.",
+        "distance": 0.6008432502383227,
+        "similarity": 0.6246707788855197
+      }
+    ],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 7,
+      "empathy": 8,
+      "practicality": 8,
+      "total": 32,
+      "comment": "상담사는 사용자의 감정을 잘 이해하고 인정했으며, 실용적인 조언도 제공했습니다. 그러나 참고 자료와의 연결이 다소 부족하고, 아들러 심리학 이론의 적용이 명확하지 않았습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6254744672526347
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:26:22",
+    "question": "우울한 기분이 계속되고, 사람들과 어울리는 게 두려워요. 친구도 없고 혼자 있는 시간이 많아요.",
+    "answer": "우울한 기분이 계속되고 사람들과 어울리는 게 두려우셨군요, 그 마음이 충분히 이해됩니다. 이러한 감정은 자신을 돌아보고, 새로운 친구를 사귀거나 소통하는 기회를 찾는 성장의 과정으로 재구성할 수 있습니다. 당신의 내적 힘을 믿고, 작은 목표부터 시작해보세요; 예를 들어, 가까운 사람에게 연락해보거나, 관심 있는 모임에 참여해보는 것이 좋습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_a07556147e7e",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:24:37.113885",
+          "type": "qa_pair"
+        },
+        "summary_kr": "혼자 해야 하는 업무로 부담을 느끼고 있다면, 이를 작은 단위로 나누거나 동료에게 도움을 요청하여 부담을 줄이고 성과를 높일 수 있습니다.",
+        "distance": 0.678903723949091,
+        "similarity": 0.5956267686677207
+      },
+      {
+        "chunk_id": "self_learning_fa4a9d5d0799",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:09:38.561014",
+          "type": "qa_pair"
+        },
+        "summary_kr": "동료의 무시와 소외감에 대한 고민을 이해하며, 이를 극복하기 위해 소통을 시도하거나 신뢰할 수 있는 사람에게 이야기하는 방법을 제안합니다.",
+        "distance": 0.6975242605858243,
+        "similarity": 0.5890932007386421
+      },
+      {
+        "chunk_id": "adler_theory_5_p008_c002",
+        "source": "adler_theory_5.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 2,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_5_p008",
+          "parent_index": 8,
+          "source": "adler_theory_5.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 2
+        },
+        "summary_kr": "열등감은 신체적 고통, 주변 사람들의 경시, 성장 과정의 어려움 등으로 인해 생길 수 있으며, 저자는 자신의 어린 시절에서 이러한 열등감의 원인을 회상하고 있습니다.",
+        "distance": 0.7349719398964609,
+        "similarity": 0.5763781978281894
+      }
+    ],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 7,
+      "empathy": 8,
+      "practicality": 8,
+      "total": 32,
+      "comment": "상담사는 사용자의 감정을 잘 이해하고 공감했으며, 실용적인 조언을 제공했습니다. 그러나 아들러 심리학 이론의 적용이 다소 부족하고, 질문의 핵심을 완전히 파악하지 못한 부분이 있어 정확성에서 약간의 감점이 있었습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.5956267686677207
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:26:35",
+    "question": "열등감 때문에 항상 남들과 비교하게 되고, 제가 부족하다고 느껴져요. 어떻게 벗어날 수 있을까요?",
+    "answer": "열등감으로 인해 남들과 비교하며 부족함을 느끼고 계신 것, 정말 힘든 감정이죠.  \n아들러의 관점에서 보면, 열등감은 성장의 기회로 재해석될 수 있으며, 자신의 독특한 목표와 강점을 발견하는 데 도움이 됩니다.  \n당신은 충분한 잠재력을 가지고 있으며, 자신만의 길을 걸어가며 작은 성취를 쌓아가면 더욱 자신감을 느낄 수 있을 것입니다.",
+    "chunks_used": [],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 8,
+      "empathy": 8,
+      "practicality": 7,
+      "total": 32,
+      "comment": "상담사는 사용자의 감정을 잘 인정하고 아들러 이론을 활용하여 긍정적인 방향으로 안내했으나, 구체적인 실천 방법이 부족하여 실용성이 다소 떨어짐."
+    },
+    "metadata": {
+      "mode": "llm_only",
+      "enable_scoring": true,
+      "max_similarity": 0.7078527773909238
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:26:55",
+    "question": "아버지 때문에 남자들을 믿을 수 없어요. 연애를 하고 싶은데 두려움이 앞서요.",
+    "answer": "아버지 때문에 남자들을 믿기 어려우셨군요, 그 두려움이 충분히 이해됩니다. 이러한 감정은 과거의 경험에서 비롯된 것이며, 이를 통해 자신의 신뢰를 재구성하고 성장할 수 있는 기회로 삼을 수 있습니다. 당신의 내적 힘을 믿고, 작은 목표부터 시작해보세요; 예를 들어, 신뢰할 수 있는 친구와 함께 남자들과의 소통을 연습해보거나, 소규모 모임에 참여해보는 것이 좋습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_case_4_p001_c002",
+        "source": "adler_case_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "child_index": 2,
+          "chunk_type": "child",
+          "parent_id": "adler_case_4_p001",
+          "parent_index": 1,
+          "source": "adler_case_4.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "클라이언트는 남성과의 관계와 그에 대한 신뢰 부족으로 고민하고 있으며, 아버지의 이탈로 인해 죄책감을 느끼고 있습니다. 현재 그녀는 남성과의 데이트를 원하지만 아버지와의 관계가 이를 방해하고 있습니다.",
+        "distance": 0.6310672760009766,
+        "similarity": 0.6130954956387717
+      },
+      {
+        "chunk_id": "adler_case_4_p001_c001",
+        "source": "adler_case_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "child_index": 1,
+          "chunk_type": "child",
+          "parent_id": "adler_case_4_p001",
+          "parent_index": 1,
+          "source": "adler_case_4.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "19세의 젠은 아버지의 이탈로 인해 남성에 대한 불신을 가지고 있으며, 이는 그녀의 어린 시절과 관련이 있다. 개인 심리학이 그녀의 치료에 가장 적합한 방법으로 제시된다.",
+        "distance": 0.6836756467819214,
+        "similarity": 0.5939386258341036
+      },
+      {
+        "chunk_id": "adler_case_4_p001",
+        "source": "adler_case_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_type": "parent",
+          "has_children": true,
+          "num_children": 3,
+          "parent_index": 1,
+          "source": "adler_case_4.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_parents": 2
+        },
+        "summary_kr": "19세 여성 Jen은 아버지의 배신으로 남성에 대한 불신을 가지고 있으며, 개인 심리학이 그녀의 문제를 해결하는 데 가장 적합한 방법으로 제시된다. 이 논문은 Jen의 사례에 대한 개인 심리학의 개념을 자세히 설명할 것이다.",
+        "distance": 0.6855754256248474,
+        "similarity": 0.5932692093142597
+      }
+    ],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 8,
+      "empathy": 9,
+      "practicality": 8,
+      "total": 34,
+      "comment": "상담사는 사용자의 감정을 잘 이해하고 공감하며, 실질적인 조언을 제공했습니다. 다만, 아들러 심리학 이론의 적용이 조금 더 명확했으면 좋았을 것 같습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6130954956387717
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:27:12",
+    "question": "대인관계에서 항상 상처받을까 봐 겁이 나요. 사람들과 깊이 사귀는 게 어려워요",
+    "answer": "대인관계에서 상처받을까 봐 겁이 나셨군요, 그 마음이 충분히 이해됩니다. 이러한 두려움은 과거의 경험에서 비롯된 것이며, 이를 통해 자신을 돌아보고 성장할 수 있는 기회로 삼을 수 있습니다. 당신의 내적 힘을 믿고, 작은 목표부터 시작해보세요; 예를 들어, 신뢰할 수 있는 친구와의 대화를 시도하거나, 관심 있는 소규모 모임에 참여해보는 것이 좋습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_ee62065d2b5e",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:26:53.064903",
+          "type": "qa_pair"
+        },
+        "summary_kr": "아버지로 인해 남자들을 믿기 어려운 감정을 이해하며, 이를 극복하기 위해 작은 목표부터 시작해 신뢰를 재구성하는 것이 중요하다는 조언입니다.",
+        "distance": 0.5964168410089395,
+        "similarity": 0.6264028130447418
+      },
+      {
+        "chunk_id": "self_learning_7335c071a72a",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:26:19.398774",
+          "type": "qa_pair"
+        },
+        "summary_kr": "우울한 기분과 사람들과 어울리는 두려움을 느끼는 상황에서, 자신을 돌아보고 새로운 친구를 사귀는 기회를 찾는 것이 중요하다는 조언이 주어졌습니다. 작은 목표부터 시작해보라는 제안도 포함되어 있습니다.",
+        "distance": 0.7168978129588177,
+        "similarity": 0.5824458464867218
+      },
+      {
+        "chunk_id": "adler_theory_5_p008_c002",
+        "source": "adler_theory_5.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 2,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_5_p008",
+          "parent_index": 8,
+          "source": "adler_theory_5.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 2
+        },
+        "summary_kr": "열등감은 신체적 고통, 주변 사람들의 경시, 성장 과정의 어려움 등으로 인해 형성될 수 있으며, 저자는 자신의 어린 시절 경험에서 이러한 열등감의 원인을 찾고 있다.",
+        "distance": 0.7365983690591982,
+        "similarity": 0.5758383848660124
+      }
+    ],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 8,
+      "empathy": 9,
+      "practicality": 8,
+      "total": 34,
+      "comment": "상담사는 사용자의 감정을 잘 이해하고 공감하며, 실질적인 조언을 제공했습니다. 다만, 아들러 심리학 이론의 적용이 조금 더 명확했으면 좋았을 것 같습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6264028130447418
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:27:30",
+    "question": "회사에서 제 의견이 무시당하는 느낌이 들어요. 동료들이 저를 신뢰하지 않는 것 같아요",
+    "answer": "회사의 의견이 무시당하는 느낌을 받으셨군요, 그 마음이 충분히 이해됩니다. 이러한 어려움은 자신의 가치를 재발견하고, 동료들과의 신뢰를 쌓는 기회로 삼을 수 있습니다. 당신의 내적 힘을 믿고, 동료들과의 소통을 시도해보거나, 신뢰할 수 있는 동료에게 자신의 생각을 공유해보는 것이 좋습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_fa4a9d5d0799",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:09:38.561014",
+          "type": "qa_pair"
+        },
+        "summary_kr": "동료의 무시와 소외감에 대한 고민을 이해하며, 이를 극복하기 위해 내적 힘을 믿고 소통을 시도하거나 신뢰할 수 있는 사람에게 이야기하는 것이 도움이 될 수 있다고 제안합니다.",
+        "distance": 0.43626966748710505,
+        "similarity": 0.6962480811487152
+      },
+      {
+        "chunk_id": "self_learning_22ce48664251",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:10:10.734488",
+          "type": "qa_pair"
+        },
+        "summary_kr": "팀원들이 따돌리는 것 같아 힘든 마음을 느끼는 것은 이해할 수 있으며, 이를 기회로 삼아 내적 힘을 믿고 소통을 시도하거나 신뢰할 수 있는 동료에게 도움을 요청하는 것이 좋습니다.",
+        "distance": 0.5525192154713555,
+        "similarity": 0.6441144109745482
+      },
+      {
+        "chunk_id": "self_learning_f20a50063033",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:25:30.593591",
+          "type": "qa_pair"
+        },
+        "summary_kr": "직장에서 소통 문제와 상사의 불만을 겪고 있는 상황에서, 자신의 소통 방식을 돌아보고 동료와 상사와의 대화를 통해 개선할 기회를 찾으라는 조언을 받았습니다.",
+        "distance": 0.5548253197241559,
+        "similarity": 0.6431590657254099
+      }
+    ],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 8,
+      "empathy": 9,
+      "practicality": 8,
+      "total": 34,
+      "comment": "상담사는 사용자의 감정을 잘 이해하고 공감하며, 실질적인 조언을 제공했습니다. 다만, 참고 자료의 정확성을 조금 더 명확히 반영할 수 있었을 것입니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6962480811487152
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:27:44",
+    "question": "항상 완벽해야 한다는 압박감이 있어요. 실수를 하면 모든 게 망가질 것 같아 두려워요.",
+    "answer": "항상 완벽해야 한다는 압박감을 느끼고 계시군요, 그 마음이 충분히 이해됩니다. 이러한 두려움은 성장의 기회로 삼을 수 있으며, 실수는 목표를 달성하는 과정에서 중요한 부분이 될 수 있습니다. 당신의 내적 힘을 믿고, 작은 목표를 설정해보세요; 예를 들어, 일상에서 작은 실수를 시도해보며 그 경험을 통해 자신을 더 이해하고 받아들이는 연습을 해보세요.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_3e09b9d7dac3",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:25:47.751513",
+          "type": "qa_pair"
+        },
+        "summary_kr": "회사가 주도해야 안심이 되지만 동료들이 불편해하는 것 같아 고민하고 있으며, 팀원들과의 협력을 통해 관계를 개선할 필요가 있다는 조언을 받았습니다.",
+        "distance": 0.654921163981484,
+        "similarity": 0.6042583911333607
+      },
+      {
+        "chunk_id": "self_learning_eedbb68aae3f",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:27:09.440445",
+          "type": "qa_pair"
+        },
+        "summary_kr": "대인관계에서 상처받을까 두려운 마음을 이해하며, 이를 극복하기 위해 신뢰할 수 있는 친구와 대화하거나 소규모 모임에 참여해보는 것을 제안합니다.",
+        "distance": 0.6691740599971298,
+        "similarity": 0.599098694357687
+      },
+      {
+        "chunk_id": "self_learning_f20a50063033",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:25:30.593591",
+          "type": "qa_pair"
+        },
+        "summary_kr": "직장에서 소통 문제와 상사의 불만을 겪고 있는 상황에서, 자신의 소통 방식을 돌아보고 동료와 상사와의 대화를 통해 개선할 기회를 찾는 것이 중요하다는 조언입니다.",
+        "distance": 0.6838159730899211,
+        "similarity": 0.593889128017315
+      }
+    ],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 8,
+      "empathy": 9,
+      "practicality": 8,
+      "total": 34,
+      "comment": "상담사는 사용자의 감정을 잘 이해하고 공감하며, 실수에 대한 두려움을 성장의 기회로 전환하는 조언을 제공했습니다. 다만, 아들러 심리학 이론의 적용이 조금 더 명확했으면 좋았을 것 같습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6042583911333607
+    }
+  },
+  {
+    "timestamp": "2025-12-01 14:28:06",
+    "question": "사회적 상황에서 불편함을 느껴요. 사람들 앞에서 말하는 게 힘들고, 혼자 있는 게 편해요",
+    "answer": "사회적 상황에서 불편함을 느끼고 사람들 앞에서 말하는 게 힘드셨군요, 그 마음이 충분히 이해됩니다. 이러한 감정은 자신을 돌아보고, 사회적 기술을 발전시키는 성장의 기회로 삼을 수 있습니다. 당신의 내적 힘을 믿고, 작은 목표부터 시작해보세요; 예를 들어, 가까운 친구와의 대화에서 자신의 생각을 조금씩 나누거나, 소규모 모임에 참여해보는 것이 좋습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_7335c071a72a",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:26:19.398774",
+          "type": "qa_pair"
+        },
+        "summary_kr": "우울한 기분과 사람들과의 어울림에 대한 두려움을 느끼는 상황에서, 내적 힘을 믿고 작은 목표를 세워 새로운 친구를 사귀거나 소통하는 기회를 찾는 것이 중요하다는 조언입니다.",
+        "distance": 0.6097370468365548,
+        "similarity": 0.6212194730594004
+      },
+      {
+        "chunk_id": "self_learning_eedbb68aae3f",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:27:09.440445",
+          "type": "qa_pair"
+        },
+        "summary_kr": "대인관계에서 상처받을까 두려워하는 마음을 이해하며, 이를 극복하기 위해 작은 목표부터 시작해보는 것이 좋다고 조언합니다.",
+        "distance": 0.6755976421033597,
+        "similarity": 0.596801985675219
+      },
+      {
+        "chunk_id": "self_learning_a07556147e7e",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T14:24:37.113885",
+          "type": "qa_pair"
+        },
+        "summary_kr": "혼자 해야 하는 업무로 인해 부담감을 느끼고 있다면, 이를 작은 단위로 나누거나 동료에게 도움을 요청하여 극복할 수 있다는 조언이 있습니다.",
+        "distance": 0.6799947939374058,
+        "similarity": 0.5952399397954673
+      }
+    ],
+    "scoring": {
+      "relevance": 9,
+      "accuracy": 8,
+      "empathy": 9,
+      "practicality": 8,
+      "total": 34,
+      "comment": "상담사는 사용자의 감정을 잘 이해하고 공감하며, 실용적인 조언을 제공했습니다. 다만, 아들러 심리학 이론의 적용이 좀 더 명확했으면 좋았을 것 같습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6212194730594004
+    }
+  }
+]

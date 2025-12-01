@@ -100,10 +100,32 @@ class TherapyLogger:
                 {chunks_info}
 
                 다음 4가지 기준으로 각각 1-10점으로 평가하고, JSON 형식으로 답변해주세요:
+
                 1. 관련성(relevance): 질문과 답변의 관련성
+                   - 사용자의 질문에 직접적으로 답변하는가?
+                   - 질문의 핵심을 파악했는가?
+
                 2. 정확성(accuracy): 참고 자료를 바탕으로 한 답변의 정확성
-                3. 공감도(empathy): 사용자 감정에 대한 공감과 이해
+                   - 아들러 심리학 이론을 정확히 적용했는가?
+                   - 참고 자료의 내용을 올바르게 반영했는가?
+
+                3. 공감도(empathy): 사용자 감정에 대한 공감과 이해 ⭐ 중요
+                   - 사용자의 감정을 먼저 인정하고 공감했는가?
+                   - "~하셨군요", "~느끼시는군요" 등 반영적 경청 기법을 사용했는가?
+                   - 감정을 판단하거나 최소화하지 않고 있는 그대로 받아들였는가?
+                   - "하지만", "그래도" 등으로 감정을 부정하지 않았는가?
+                   - 따뜻하고 수용적인 톤을 유지했는가?
+
                 4. 실용성(practicality): 실제로 도움이 되는 조언인지
+                   - 구체적이고 실천 가능한 방향을 제시했는가?
+                   - 격려와 희망을 주는가?
+
+                **공감도 평가 기준 (특히 중요):**
+                - 10점: 감정을 완벽히 인정하고, 반영적 경청 사용, 3단계 구조 완벽
+                - 8-9점: 감정 인정 우수, 공감 표현 명확
+                - 6-7점: 감정 인정은 있으나 약간 부족
+                - 4-5점: 감정 인정이 형식적이거나 불충분
+                - 1-3점: 감정을 무시하거나 판단함
 
                 JSON 형식 (다른 텍스트 없이 JSON만 출력):
                 {{
@@ -112,14 +134,14 @@ class TherapyLogger:
                 "empathy": 점수,
                 "practicality": 점수,
                 "total": 총점,
-                "comment": "간단한 평가 코멘트"
+                "comment": "간단한 평가 코멘트 (특히 공감도 관련)"
                 }}
                 
             """
         
         try:
             response = self.openai_client.chat.completions.create(
-                model="gpt-5o-mini",
+                model="gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
@@ -219,15 +241,23 @@ class TherapyLogger:
         
         # 로그 저장
         try:
+            # metadata 구성
+            metadata_dict = {
+                "mode": response.get("mode", "unknown"),
+                "enable_scoring": enable_scoring
+            }
+            
+            # 최고 유사도 점수 추가 (있는 경우)
+            similarity_score = response.get("similarity_score")
+            if similarity_score is not None:
+                metadata_dict["max_similarity"] = similarity_score
+            
             self.logger.log_test_result(
                 question=user_input,
                 answer=response["answer"],
                 chunks_used=response.get("used_chunks_detailed", []),
                 scoring=scoring_result,
-                metadata={
-                    "mode": response.get("mode", "unknown"),
-                    "enable_scoring": enable_scoring
-                }
+                metadata=metadata_dict
             )
         except Exception as e:
             debug_print(f"[경고] 로그 저장 실패: {e}")

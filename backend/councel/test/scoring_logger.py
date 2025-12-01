@@ -185,7 +185,10 @@ class ScoringLogger:
                         f.write(f"**청크 {i}**\n")
                         f.write(f"- **출처**: {chunk.get('source', '알 수 없음')}\n")
                         f.write(f"- **청크 ID**: `{chunk.get('chunk_id', 'N/A')}`\n")
-                        f.write(f"- **거리**: {chunk.get('distance', 'N/A')}\n")
+                        f.write(f"- **거리 (L2 Distance)**: {chunk.get('distance', 'N/A')}\n")
+                        similarity = chunk.get('similarity')
+                        if similarity is not None:
+                            f.write(f"- **유사도 (Similarity)**: {similarity:.4f}\n")
                         f.write(f"- **요약**: {chunk.get('summary_kr', 'N/A')}\n")
                         
                         # 메타데이터
