@@ -36,7 +36,8 @@ class BrainstormingSessionData:
         self.q2_warmup = None
         self.q3_associations = []
         self.ideas = []
-        self.chroma_collection = f"ephemeral_session_{session_id.replace('-', '_')}"
+        # 2024-11-30: chroma_collection 제거 (Ephemeral RAG → JSON 기반)
+        self.ephemeral_rag_initialized = False
 
 
 class SessionManager(BaseSessionManager[BrainstormingSessionData]):
@@ -157,7 +158,7 @@ class SessionManager(BaseSessionManager[BrainstormingSessionData]):
             'q2_warmup': session_data.q2_warmup,
             'q3_associations': session_data.q3_associations.copy(),
             'ideas': session_data.ideas.copy(),
-            'chroma_collection': session_data.chroma_collection
+            'ephemeral_rag_initialized': session_data.ephemeral_rag_initialized
         }
     
     async def get_session_async(self, session_id: str) -> Optional[dict]:
