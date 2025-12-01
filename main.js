@@ -134,9 +134,9 @@ function createCharacterWindow() {
 
   console.log('📦 캐릭터 로딩 중...');
 
-  // 🔥 개발자 도구 자동 열기 (detach 모드)
-  characterWin.webContents.openDevTools({ mode: 'detach' });
-  console.log('🛠️ 개발자 도구 열림 (detach 모드)');
+  // 🔥 개발자 도구 자동 열기 (detach 모드) - 배포 시 비활성화
+  // characterWin.webContents.openDevTools({ mode: 'detach' });
+  // console.log('🛠️ 개발자 도구 열림 (detach 모드)');
 
   // 단축키 (F12, Ctrl+Shift+I: 개발자 도구 토글)
   characterWin.webContents.on('before-input-event', (event, input) => {

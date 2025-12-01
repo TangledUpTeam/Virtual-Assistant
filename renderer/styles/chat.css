@@ -1,12 +1,12 @@
 /* ========================================
  * 채팅 패널 (왼쪽 고정)
  * ======================================== */
- #chat-panel {
-  position: fixed;
-  left: 20px;
-  top: 5vh;
-  width: 350px;
-  height: 85vh;
+#chat-panel {
+ position: fixed;
+ left: 20px;
+ top: 5vh;
+ width: 525px;
+ height: 85vh;
   display: flex;
   flex-direction: column;
   padding: 20px;
@@ -197,5 +197,29 @@
   left: -8px;
   font-size: 16px;
   opacity: 0.6;
+}
+
+/* ========================================
+ * 리사이즈 핸들
+ * ======================================== */
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  cursor: nwse-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: rgba(156, 175, 136, 0.6);
+  user-select: none;
+  z-index: 10;
+  transition: color 0.2s;
+}
+
+.resize-handle:hover {
+  color: rgba(156, 175, 136, 1);
 }
 
