@@ -97,6 +97,25 @@ async function handleSendMessage() {
   const text = chatInput.value.trim();
   if (!text) return;
   
+  // 🧠 브레인스토밍 키워드 감지
+  if (text.includes('브레인스토밍') || text.includes('brainstorming')) {
+    console.log('🧠 브레인스토밍 키워드 감지!');
+    
+    // 사용자 메시지 추가
+    addMessage('user', text);
+    chatInput.value = '';
+    
+    // 챗봇 응답
+    addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+    
+    // 브레인스토밍 팝업 열기
+    setTimeout(() => {
+      openBrainstormingPopup();
+    }, 500);
+    
+    return;
+  }
+  
   if (sendBtn.disabled) {
     console.log('⚠️  이미 전송 중...');
     return;
@@ -189,5 +208,37 @@ function togglePanel() {
   } else {
     chatPanel.style.display = 'none';
     console.log('🙈 채팅 패널 숨김');
+  }
+}
+
+/**
+ * 브레인스토밍 팝업 열기
+ */
+function openBrainstormingPopup() {
+  console.log('🧠 브레인스토밍 팝업 열기');
+  
+  // Electron IPC로 메인 프로세스에 팝업 요청
+  if (window.require) {
+    const { ipcRenderer } = window.require('electron');
+    ipcRenderer.send('open-brainstorming-popup');
+    
+    // 챗봇 패널 숨기기
+    chatPanel.style.display = 'none';
+    isPanelVisible = false;
+    
+    // 팝업 종료 이벤트 리스너
+    ipcRenderer.once('brainstorming-closed', (event, data) => {
+      console.log('🧠 브레인스토밍 완료:', data);
+      
+      // 챗봇 패널 복구
+      chatPanel.style.display = 'flex';
+      isPanelVisible = true;
+      
+      // 완료 메시지 추가
+      addMessage('assistant', '브레인스토밍이 종료되었습니다.');
+    });
+  } else {
+    console.error('❌ Electron IPC를 사용할 수 없습니다.');
+    addMessage('assistant', '❌ 브레인스토밍 팝업을 열 수 없습니다.');
   }
 }
