@@ -1,0 +1,541 @@
+[
+  {
+    "timestamp": "2025-11-26 16:02:02",
+    "question": "오늘 상사가 저한테 욕을 해서 너무 힘들고 괴로워요.",
+    "answer": "상사의 언행이 힘들게 느껴질 수 있지만, 이를 통해 자신의 강점을 발견하고 성장할 기회로 삼아보세요. 사회적 관심을 바탕으로 긍정적인 관계를 형성하며, 더 나은 자신을 향해 나아가는 것이 중요합니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_theory_4_019",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 19,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "이 텍스트는 화자의 할아버지의 농장과 그 주변 환경, 그리고 어린 시절의 기억을 회상하는 내용이다. 할아버지는 성격이 좋지 않은 노인이었고, 화자는 삼촌과의 경험을 떠올리고 있다.",
+        "distance": 0.7372653484344482
+      },
+      {
+        "chunk_id": "adler_theory_4_021",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 21,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "로즈는 시카고의 남쪽에서 어머니와 함께 살던 기억을 회상하며, 주방의 찬장에서 머스터드를 맛보다가 뒤로 넘어졌던 경험을 이야기한다.",
+        "distance": 0.7898553013801575
+      }
+    ],
+    "scoring": {
+      "relevance": 5,
+      "accuracy": 4,
+      "empathy": 3,
+      "practicality": 6,
+      "total": 18,
+      "comment": "상담사는 사용자의 감정을 충분히 이해하지 못하고, 구체적인 상황에 대한 적절한 공감이 부족했습니다. 조언은 긍정적인 방향을 제시했지만, 사용자의 고통을 직접적으로 다루지 않아 실질적인 도움이 되기 어려웠습니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:02:21",
+    "question": "회의 시간에 팀원들 다 보는 앞에서 팀장님이 쌍욕을 했어요. 수치스럽고 얼굴을 들고 다닐 수가 없어요.",
+    "answer": "그런 상황은 정말 힘들고 수치스러울 수 있지만, 이를 통해 자신의 강점을 발견하고 성장할 기회로 삼아보세요. 사회적 관심을 바탕으로 팀원들과의 관계를 강화하며, 더 나은 자신을 향해 나아가는 것이 중요합니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_theory_4_019",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 19,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "이 텍스트는 화자의 할아버지의 농장과 그 주변의 소년들, 그리고 화자의 어린 시절 경험을 회상하는 내용입니다. 할아버지는 성격이 좋지 않은 노인이었고, 화자는 삼촌과의 기억을 떠올리고 있습니다.",
+        "distance": 0.7360389828681946
+      },
+      {
+        "chunk_id": "adler_theory_4_023",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 23,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "고객들은 자신의 삶을 간단히 편집한 후, 원하는 삶의 모습을 반영한 마지막 ER을 제공할 수 있으며, 예시로 유치원에서의 연극 경험을 언급했다.",
+        "distance": 0.7615301609039307
+      }
+    ],
+    "scoring": {
+      "relevance": 5,
+      "accuracy": 6,
+      "empathy": 4,
+      "practicality": 5,
+      "total": 20,
+      "comment": "상담사는 사용자의 감정을 충분히 이해하지 못하고, 구체적인 상황에 대한 적절한 조언을 제공하지 못했습니다. 좀 더 공감적이고 실용적인 접근이 필요합니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:02:37",
+    "question": "상사의 폭언이 생각날 때마다 심장이 너무 빨리 뛰고 손이 떨려서 일을 못 하겠어요.",
+    "answer": "상사의 폭언은 힘든 경험이지만, 이를 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 사회적 관심을 바탕으로 팀원들과의 긍정적인 관계를 형성하며, 더 나은 자신을 향해 나아가는 것이 중요합니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_theory_4_016",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 16,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "\"가장 생생한 순간\"은 클라이언트가 직면한 현재의 문제를 반영하며, 이 순간의 감정은 클라이언트의 심리 상태를 나타낸다.",
+        "distance": 0.763412594795227
+      },
+      {
+        "chunk_id": "adler_case_3_005",
+        "source": "adler_case_3.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 5,
+          "source": "adler_case_3.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 8
+        },
+        "summary_kr": "상담 세션에서 마르가리타는 초기 기억 목록을 작성하도록 요청받고, 이를 통해 그녀의 현재 문제의 근본 원인과 어린 시절의 반복되는 주제를 발견하게 된다.",
+        "distance": 0.7653380632400513
+      }
+    ],
+    "scoring": {
+      "relevance": 6,
+      "accuracy": 5,
+      "empathy": 4,
+      "practicality": 5,
+      "total": 20,
+      "comment": "상담사는 사용자의 감정을 완전히 이해하지 못하고, 구체적인 해결책보다는 일반적인 조언을 제공했습니다. 더 구체적인 공감과 실질적인 조언이 필요합니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:02:53",
+    "question": "상사한테 욕을 먹으니까 다 제 잘못인 것 같고, 제가 무능력한 사람처럼 느껴져서 자존감이 바닥이에요.",
+    "answer": "상사의 폭언은 당신의 가치를 결정짓지 않으며, 이를 통해 자신의 열등감을 인식하고 성장할 기회로 삼아보세요. 사회적 관심을 통해 긍정적인 관계를 형성하며, 더 나은 자신을 향해 나아가는 것이 중요합니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_inventions_4_004",
+        "source": "adler_inventions_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "inventions",
+          "chunk_index": 4,
+          "source": "adler_inventions_4.pdf",
+          "tags": "아들러",
+          "topic": "individual psychology",
+          "total_chunks": 7
+        },
+        "summary_kr": "과도한 보상은 원래의 열등감을 악화시킬 수 있으며, 이를 이해함으로써 사람들은 건강한 자존감을 향해 나아갈 수 있다. 열등감은 개인의 일상생활에 영향을 미칠 정도로 자신의 약점이나 부족함을 과도하게 느끼는 상태이다.",
+        "distance": 0.7219167947769165
+      },
+      {
+        "chunk_id": "adler_theory_3_009",
+        "source": "adler_theory_3.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 9,
+          "source": "adler_theory_3.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 15
+        },
+        "summary_kr": "개인 심리학에서는 열등감에 대한 두 가지 접근 방식이 있으며, 하나는 도전으로 받아들이고 대처 행동을 사용하는 것이고, 다른 하나는 회피하고 방어적 경향을 보이는 것이다. 대처 행동은 직접 문제 해결과 보상으로 나눌 수 있다.",
+        "distance": 0.741718053817749
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 질문에 대한 관련성을 어느 정도 유지했으나, 사용자의 감정에 대한 공감이 부족하고 실질적인 조언이 다소 일반적입니다. 더 구체적인 해결책이나 감정적 지지가 필요합니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:03:10",
+    "question": "맨날 소리 지르고 인격 모독하는 상사 때문에 회사를 그만두고 싶은데, 당장 갈 데가 없어서 미치겠어요.",
+    "answer": "상사의 폭언은 당신의 가치를 결정짓지 않으며, 이를 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 사회적 관심을 통해 긍정적인 관계를 형성하고, 더 나은 미래를 위한 목표를 설정하는 것이 중요합니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_case_3_003",
+        "source": "adler_case_3.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 3,
+          "source": "adler_case_3.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 8
+        },
+        "summary_kr": "마르가리타의 분노를 극복하기 위해 그녀의 문제를 분석하고, 다양한 치료 기법, 특히 격려를 통해 신념을 변화시키고 자기 효능감을 높이는 방법이 사용된다.",
+        "distance": 0.807695746421814
+      },
+      {
+        "chunk_id": "adler_case_1_003",
+        "source": "adler_case_1.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 3,
+          "source": "adler_case_1.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 5
+        },
+        "summary_kr": "Jim과의 상담에서 안전하고 평등한 관계를 발전시키고자 했으며, 그의 아버지가 알코올 중독자였고 부모의 갈등이 많았던 과거를 발견했다.",
+        "distance": 0.8452120423316956
+      }
+    ],
+    "scoring": {
+      "relevance": 6,
+      "accuracy": 7,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 사용자의 감정을 충분히 이해하지 못하고, 보다 구체적인 조언이 필요합니다. 상사의 행동에 대한 감정적 반응을 다루는 데 더 집중할 필요가 있습니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:03:58",
+    "question": "아 진짜 저 부장 새끼는 입만 열면 욕이야. 듣고 있자니 열받아서 미쳐버릴 것 같은데 어떡하죠?",
+    "answer": "상사의 언행은 당신의 가치를 결정짓지 않으며, 이를 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 사회적 관심을 통해 긍정적인 관계를 형성하고, 더 나은 자신을 향해 나아가는 것이 중요합니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_case_3_003",
+        "source": "adler_case_3.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 3,
+          "source": "adler_case_3.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 8
+        },
+        "summary_kr": "마르가리타의 분노 폭발을 극복하기 위해 그녀의 문제를 분석하고, 다양한 치료 기법을 통해 격려를 활용하여 신념을 변화시키는 방법이 사용된다.",
+        "distance": 0.7399685978889465
+      },
+      {
+        "chunk_id": "adler_case_1_005",
+        "source": "adler_case_1.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 5,
+          "source": "adler_case_1.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 5
+        },
+        "summary_kr": "Jim이 변화하고자 하는 행동을 반복할 때 스스로 인식하고 반응하기 전에 최선의 행동을 반영하도록 격려하는 방법에 대해 설명하고 있습니다.",
+        "distance": 0.8366431593894958
+      }
+    ],
+    "scoring": {
+      "relevance": 6,
+      "accuracy": 7,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 사용자의 감정에 대한 공감이 부족하며, 보다 구체적이고 실질적인 조언이 필요합니다. 관련성과 정확성은 어느 정도 충족되지만, 사용자에게 실질적인 도움이 되는 방향으로의 조언이 부족합니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:04:16",
+    "question": "매일 욕을 먹다 보니 이제는 화낼 힘도 없어요. 그냥 로봇처럼 멍하니 듣고만 있게 돼요.",
+    "answer": "상사의 욕설은 당신의 가치를 결정짓지 않으며, 이를 통해 자신을 돌아보고 성장할 기회로 삼아보세요. 당신의 경험을 통해 더 큰 사회적 관심을 갖고, 긍정적인 변화를 이끌어낼 수 있는 힘이 있다는 것을 잊지 마세요.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_theory_4_026",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 26,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "로즈는 세상을 혼란스럽고 안전하지 않으며 불쾌한 곳으로 인식하며, 사람들은 도움을 주지 않고 남성은 지배적이며 여성은 힘이 없거나 제약을 받는다고 느낀다.",
+        "distance": 0.8133525252342224
+      },
+      {
+        "chunk_id": "adler_theory_5_015",
+        "source": "adler_theory_5.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 15,
+          "source": "adler_theory_5.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 27
+        },
+        "summary_kr": "어린 시절의 열등감은 성인이 되기 위한 노력과 완벽함 추구와 관련이 있으며, 많은 아이들이 타인보다 못하다는 느낌을 갖게 된다. 이러한 열등감은 신체적 고통이나 주변 사람들의 경시 등으로 인해 더욱 심화될 수 있다.",
+        "distance": 0.8027179402715641
+      }
+    ],
+    "scoring": {
+      "relevance": 6,
+      "accuracy": 5,
+      "empathy": 4,
+      "practicality": 5,
+      "total": 20,
+      "comment": "상담사의 답변은 질문과 관련이 있지만, 사용자의 감정을 충분히 이해하지 못하고 있으며, 실질적인 해결책을 제시하지 못했습니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:04:34",
+    "question": "다른 동기들한테는 친절하면서 저한테만 욕하고 화풀이를 해요. 너무 억울해서 잠이 안 와요.",
+    "answer": "상사의 부정적인 행동은 당신의 가치를 반영하지 않으며, 이를 통해 자신의 강점을 발견하고 성장할 기회로 삼아보세요. 사회적 관심을 통해 긍정적인 변화를 이끌어내는 당신의 능력을 믿고, 더 나은 미래를 향해 나아가세요!",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_case_3_003",
+        "source": "adler_case_3.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 3,
+          "source": "adler_case_3.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 8
+        },
+        "summary_kr": "마르가리타의 분노 폭발을 극복하기 위해 그녀의 문제를 분석하고, 다양한 치료 기법, 특히 격려를 통해 신념을 변화시키고 자기 효능감을 높이는 방법이 사용된다.",
+        "distance": 0.7961248159408569
+      },
+      {
+        "chunk_id": "adler_inventions_2_015",
+        "source": "adler_inventions_2.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "inventions",
+          "chunk_index": 15,
+          "source": "adler_inventions_2.pdf",
+          "tags": "아들러",
+          "topic": "individual psychology",
+          "total_chunks": 29
+        },
+        "summary_kr": "이들은 타인의 복지에 무관심하며, 외부 세계에 대해 지배적인 태도를 보이고 공격적이고 반사회적인 방식으로 주요 삶의 과제에 접근한다. 반면, '얻는 유형'은 타인에게 의존하여 자신의 필요를 충족시키려 한다.",
+        "distance": 0.743779182434082
+      }
+    ],
+    "scoring": {
+      "relevance": 6,
+      "accuracy": 5,
+      "empathy": 4,
+      "practicality": 5,
+      "total": 20,
+      "comment": "상담사는 사용자의 감정을 충분히 이해하지 못하고 있으며, 제공된 조언이 상황에 대한 구체적인 해결책을 제시하지 않고 있습니다. 더 깊은 공감과 실질적인 조언이 필요합니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:04:51",
+    "question": "상사가 감정 조절을 못 하고 욕을 퍼붓는데, 제가 그 상황에서 어떻게 대처해야 현명한 걸까요?",
+    "answer": "상사의 감정적 반응은 당신의 가치를 결정짓지 않으며, 이를 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 긍정적인 태도로 사회적 관심을 키우고, 자신을 격려하며 더 나은 방향으로 나아가세요!",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_case_3_003",
+        "source": "adler_case_3.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 3,
+          "source": "adler_case_3.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 8
+        },
+        "summary_kr": "마르가리타의 분노 폭발을 극복하기 위해 그녀의 문제를 분석하고, 다양한 치료 기법, 특히 격려를 통해 신념을 변화시키고 자기 효능감을 높이는 방법이 사용된다.",
+        "distance": 0.6347169280052185
+      },
+      {
+        "chunk_id": "adler_case_1_005",
+        "source": "adler_case_1.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "case",
+          "chunk_index": 5,
+          "source": "adler_case_1.pdf",
+          "tags": "아들러, 사례연구, 상담",
+          "topic": "individual psychology",
+          "total_chunks": 5
+        },
+        "summary_kr": "Jim이 변화하고자 하는 행동을 반복할 때 스스로를 인식하고, 상황에 맞게 최선의 행동을 반영하도록 격려하는 방법에 대해 설명하고 있습니다.",
+        "distance": 0.7267128229141235
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 8,
+      "practicality": 7,
+      "total": 28,
+      "comment": "상담사는 사용자의 질문에 대해 긍정적인 태도와 자기 성장의 중요성을 강조했지만, 구체적인 대처 방안이 부족하여 실용성이 다소 떨어짐. 감정 조절에 대한 공감은 잘 표현되었으나, 상사의 행동에 대한 직접적인 대처 방법이 부족함."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-26 16:05:06",
+    "question": "상사 때문에 진짜 죽고 싶다.. 욕 좀 그만 듣고 싶어.",
+    "answer": "상사의 부정적인 행동은 당신의 가치를 결정짓지 않으며, 이를 통해 자신의 강점을 발견하고 성장할 기회로 삼아보세요. 사회적 관심을 통해 긍정적인 변화를 이끌어내는 당신의 능력을 믿고, 더 나은 미래를 향해 나아가세요!",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_theory_5_016",
+        "source": "adler_theory_5.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 16,
+          "source": "adler_theory_5.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 27
+        },
+        "summary_kr": "사람들은 열등감을 보완하기 위해 타인을 조종하거나 의존할 수 있지만, 결국 그로 인해 고립될 수 있다. 또한, 열등감을 숨기기 위해 우월감 복합체를 발전시킬 수도 있다.",
+        "distance": 0.8369835441956429
+      },
+      {
+        "chunk_id": "adler_theory_5_015",
+        "source": "adler_theory_5.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 15,
+          "source": "adler_theory_5.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 27
+        },
+        "summary_kr": "아이들은 성장하면서 완벽함을 추구하지만, 종종 다른 사람들과 비교해 열등감을 느끼게 된다. 이러한 열등감은 신체적 고통이나 주변의 비하 등으로 인해 복합적으로 형성될 수 있다.",
+        "distance": 0.7995637105833344
+      }
+    ],
+    "scoring": {
+      "relevance": 6,
+      "accuracy": 5,
+      "empathy": 4,
+      "practicality": 5,
+      "total": 20,
+      "comment": "상담사는 사용자의 감정을 충분히 이해하지 못하고, 구체적인 해결책을 제시하지 않아 실질적인 도움이 부족했습니다."
+    },
+    "metadata": {
+      "mode": "general",
+      "enable_scoring": true
+    }
+  },
+  {
+    "timestamp": "2025-11-27 16:35:39",
+    "question": "회사 상사가 욕해서 짜증난데 거기에 엄마가 계속 카톡으로 욕하니까 울고 싶어",
+    "answer": "상사의 욕설과 엄마의 반응이 힘들겠지만, 이 상황을 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 주변 사람들과의 소통을 통해 지지와 이해를 나누는 것도 큰 힘이 될 것입니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_theory_4_026",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 26,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "로즈는 세상을 혼란스럽고 안전하지 않으며 불쾌하게 느끼고, 사람들은 도움이 되지 않으며 남성은 지배적이고 여성은 힘이 없거나 갇혀 있다고 인식한다.",
+        "distance": 0.8086258172988892
+      },
+      {
+        "chunk_id": "adler_theory_4_016",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_index": 16,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_chunks": 35
+        },
+        "summary_kr": "고객의 기억 속에서 가장 생생한 순간은 현재 직면하고 있는 주요 문제를 반영하며, 이 순간의 감정은 고객의 심리 상태를 나타낸다.",
+        "distance": 0.8493958711624146
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사의 답변은 사용자의 감정에 대한 이해가 부족하고, 구체적인 상황에 대한 공감이 약하다. 하지만 감정 이해와 소통의 중요성을 강조한 점은 긍정적이다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true
+    }
+  }
+]
