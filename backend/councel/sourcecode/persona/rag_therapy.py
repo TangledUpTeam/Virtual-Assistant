@@ -166,6 +166,26 @@ class RAGTherapySystem:
             '시스템', '도구', '효율', '회의', '의견', '표현',
             '출퇴근', '루틴', '리듬', '변화', '부담감', '프로젝트',
 
+            # 통제/주도권 관련 (Case 1 - Jim)
+            '통제', '주도권', '주도', '독단적', '경직', '경직된',
+            'inflexible', 'overbearing', 'control',
+
+            # 알코올/학대 관련 (Case 1 - Jim)  
+            '알코올', '술', '음주', '취함', 'alcoholic', 'drunk',
+            '학대', '폭력', '구타', 'abusive', 'violence',
+
+            # 신뢰/불신 관련 (Case 4 - Jen)
+            '불신', '신뢰', '믿음', '믿을', 'trust', 'mistrust', 'trustworthy',
+
+            # 가족 관계 관련
+            '아버지', '어머니', '부모', '가족', 'father', 'mother', 'parent', 'family',
+
+            # 완벽주의 관련 (Case 3 - Margarita)
+            '완벽', '완벽주의', '완벽해', 'perfect', 'perfectionism',
+
+            # 불안정 관련
+            '불안정', '불안정한', 'insecure', 'instability',
+
         ]
         
         # 대화 히스토리 (단기 기억)
