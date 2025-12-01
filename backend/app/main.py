@@ -112,10 +112,10 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    """루트 엔드포인트 - 로그인 후 시작 페이지"""
-    start_page = FRONTEND_DIR / "Start" / "index.html"
-    if start_page.exists():
-        return FileResponse(start_page)
+    """루트 엔드포인트 - 랜딩 페이지"""
+    landing_page = FRONTEND_DIR / "Landing" / "index.html"
+    if landing_page.exists():
+        return FileResponse(landing_page)
     else:
         return {
             "message": "Welcome to Virtual Desk Assistant API",
@@ -127,12 +127,12 @@ async def root():
 
 @app.get("/landing")
 async def landing_page():
-    """랜딩 페이지 (첫 화면) - Start 페이지 반환"""
-    start_page = FRONTEND_DIR / "Start" / "index.html"
-    if start_page.exists():
-        return FileResponse(start_page)
+    """랜딩 페이지 (첫 화면)"""
+    landing_page_path = FRONTEND_DIR / "Landing" / "index.html"
+    if landing_page_path.exists():
+        return FileResponse(landing_page_path)
     else:
-        return {"error": "Start page not found"}
+        return {"error": "Landing page not found"}
 
 
 @app.get("/login")
@@ -147,12 +147,12 @@ async def login_page():
 
 @app.get("/start")
 async def start_page():
-    """시작 페이지 (로그인 완료 후)"""
-    start_page = FRONTEND_DIR / "Start" / "index.html"
-    if start_page.exists():
-        return FileResponse(start_page)
+    """시작 페이지 (로그인 완료 후) - Landing 페이지로 리다이렉트"""
+    landing_page_path = FRONTEND_DIR / "Landing" / "index.html"
+    if landing_page_path.exists():
+        return FileResponse(landing_page_path)
     else:
-        return {"error": "Start page not found"}
+        return {"error": "Landing page not found"}
 
 
 @app.get("/main")
