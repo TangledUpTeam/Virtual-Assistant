@@ -2,7 +2,9 @@
 Vector DB 저장 스크립트
 생성날짜: 2025.11.21
 리팩토링: 2025.11.25 - 1차 코드 리팩토링(쓸데 없는 print문 제거 및 코드 정리)
+수정날짜: 2025.11.28 - Parent-Child Chunking 지원
 설명: adler/embeddings 폴더의 OpenAI 임베딩 파일들을 ChromaDB에 저장
+      Parent와 Child 청크를 같은 컬렉션에 저장하며 chunk_type 메타데이터로 구분
 """
 
 import os

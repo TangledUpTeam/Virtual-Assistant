@@ -53,6 +53,10 @@ logs/
 chroma/
 **/chroma/
 
+# Cache (페르소나 캐시 등)
+**/cache/
+*.cache
+
 # Ephemeral sessions (임시 세션 데이터)
 **/ephemeral/
 

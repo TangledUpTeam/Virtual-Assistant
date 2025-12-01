@@ -4,7 +4,9 @@
 수정날짜: 2025.11.19 - Adler PDF 처리 추가
 수정날짜: 2025.11.21 - Rogers 관련 코드 제거
 리팩토링: 2025.11.25 - 1차 코드 리팩토링(쓸데 없는 print문 제거 및 코드 정리)
-설명: Adler PDF 파일을 의미 단위로 청킹하여 개별 JSON 파일로 저장
+수정날짜: 2025.11.28 - Parent-Child Chunking 방식으로 변경
+설명: Adler PDF 파일을 Parent-Child 구조로 청킹하여 개별 JSON 파일로 저장
+      Parent: 1000 tokens, Child: 500 tokens
 """
 
 import os
@@ -19,8 +21,9 @@ import fitz  # PyMuPDF
 class ChunkCreator:
 
     # 초기화
-    def __init__(self, max_tokens: int = 500, overlap_ratio: float = 0.2):
-        self.max_tokens = max_tokens # 청크당 최대 토큰 수
+    def __init__(self, max_tokens: int = 500, parent_max_tokens: int = 1000, overlap_ratio: float = 0.2):
+        self.max_tokens = max_tokens # Child 청크당 최대 토큰 수
+        self.parent_max_tokens = parent_max_tokens # Parent 청크당 최대 토큰 수
         self.overlap_ratio = overlap_ratio # Overlap 비율
         self.encoding = tiktoken.get_encoding("cl100k_base") # 토큰 인코딩 모델
 
@@ -158,50 +161,81 @@ class ChunkCreator:
     def extract_metadata_from_filename(self, filename: str) -> Dict[str, Any]:
         return self.extract_metadata_adler(filename)
     
-    # 청크 간 Overlap 추가(20%)
-    def add_overlap(self, chunks: List[str]) -> List[str]:
-
-        # 청크가 1개 이하면 그대로 리턴
-        if len(chunks) <= 1:
-            return chunks
-        
-        overlapped_chunks = [] # Overlap 청크를 저장할 리스트
-        
-        # 청크 개수만큼 반복하면서 Overlap 청크 생성
-        for i, chunk in enumerate(chunks):
-            if i == 0:
-                # 첫 번째 청크는 그대로
-                overlapped_chunks.append(chunk)
-            else:
-                # 이전 청크의 마지막 10% 가져오기
-                prev_chunk = chunks[i-1]
-                prev_tokens = self.encoding.encode(prev_chunk)
-                overlap_size = int(len(prev_tokens) * self.overlap_ratio)
-                
-                # Overlap 크기가 0보다 커야지만 청크 생성
-                if overlap_size > 0:
-                    overlap_tokens = prev_tokens[-overlap_size:]
-                    overlap_text = self.encoding.decode(overlap_tokens)
-                    
-                    # 현재 청크에 Overlap 추가
-                    overlapped_chunks.append(overlap_text + "\n\n" + chunk)
-                else:
-                    overlapped_chunks.append(chunk)
-        
-        return overlapped_chunks
-    
-    # 큰 섹션 -> 토큰 제한에 맞춰 분할(문단 단위로 분할)
-    def split_large_section(self, section_content: str) -> List[str]:
+    # Parent 청크 생성 (큰 섹션을 parent_max_tokens 기준으로 분할)
+    def split_into_parents(self, section_content: str) -> List[str]:
 
         token_count = self.count_tokens(section_content)
         
-        if token_count <= self.max_tokens:
+        if token_count <= self.parent_max_tokens:
             return [section_content]
         
         # 문단 단위로 분할 (빈 줄 기준)
         paragraphs = section_content.split('\n\n')
         
-        chunks = []
+        parent_chunks = []
+        current_chunk = []
+        current_tokens = 0
+        
+        for para in paragraphs:
+            para_tokens = self.count_tokens(para)
+            
+            # 단일 문단이 parent_max_tokens를 초과하는 경우
+            if para_tokens > self.parent_max_tokens:
+                # 현재까지 모은 청크 저장
+                if current_chunk:
+                    parent_chunks.append('\n\n'.join(current_chunk))
+                    current_chunk = []
+                    current_tokens = 0
+                
+                # 큰 문단을 줄 단위로 분할
+                lines = para.split('\n')
+                temp_chunk = []
+                temp_tokens = 0
+                
+                for line in lines:
+                    line_tokens = self.count_tokens(line)
+                    if temp_tokens + line_tokens > self.parent_max_tokens:
+                        if temp_chunk:
+                            parent_chunks.append('\n'.join(temp_chunk))
+                        temp_chunk = [line]
+                        temp_tokens = line_tokens
+                    else:
+                        temp_chunk.append(line)
+                        temp_tokens += line_tokens
+                
+                if temp_chunk:
+                    parent_chunks.append('\n'.join(temp_chunk))
+            
+            # 현재 청크에 추가 가능한 경우
+            elif current_tokens + para_tokens <= self.parent_max_tokens:
+                current_chunk.append(para)
+                current_tokens += para_tokens
+            
+            # 새로운 청크 시작
+            else:
+                if current_chunk:
+                    parent_chunks.append('\n\n'.join(current_chunk))
+                current_chunk = [para]
+                current_tokens = para_tokens
+        
+        # 마지막 청크 추가
+        if current_chunk:
+            parent_chunks.append('\n\n'.join(current_chunk))
+        
+        return parent_chunks
+    
+    # Child 청크 생성 (Parent를 max_tokens 기준으로 분할)
+    def split_parent_into_children(self, parent_content: str) -> List[str]:
+
+        token_count = self.count_tokens(parent_content)
+        
+        if token_count <= self.max_tokens:
+            return [parent_content]
+        
+        # 문단 단위로 분할 (빈 줄 기준)
+        paragraphs = parent_content.split('\n\n')
+        
+        child_chunks = []
         current_chunk = []
         current_tokens = 0
         
@@ -212,7 +246,7 @@ class ChunkCreator:
             if para_tokens > self.max_tokens:
                 # 현재까지 모은 청크 저장
                 if current_chunk:
-                    chunks.append('\n\n'.join(current_chunk))
+                    child_chunks.append('\n\n'.join(current_chunk))
                     current_chunk = []
                     current_tokens = 0
                 
@@ -225,7 +259,7 @@ class ChunkCreator:
                     line_tokens = self.count_tokens(line)
                     if temp_tokens + line_tokens > self.max_tokens:
                         if temp_chunk:
-                            chunks.append('\n'.join(temp_chunk))
+                            child_chunks.append('\n'.join(temp_chunk))
                         temp_chunk = [line]
                         temp_tokens = line_tokens
                     else:
@@ -233,7 +267,7 @@ class ChunkCreator:
                         temp_tokens += line_tokens
                 
                 if temp_chunk:
-                    chunks.append('\n'.join(temp_chunk))
+                    child_chunks.append('\n'.join(temp_chunk))
             
             # 현재 청크에 추가 가능한 경우
             elif current_tokens + para_tokens <= self.max_tokens:
@@ -243,55 +277,92 @@ class ChunkCreator:
             # 새로운 청크 시작
             else:
                 if current_chunk:
-                    chunks.append('\n\n'.join(current_chunk))
+                    child_chunks.append('\n\n'.join(current_chunk))
                 current_chunk = [para]
                 current_tokens = para_tokens
         
         # 마지막 청크 추가
         if current_chunk:
-            chunks.append('\n\n'.join(current_chunk))
+            child_chunks.append('\n\n'.join(current_chunk))
         
-        return chunks
+        return child_chunks
     
-    # PDF 파일을 청크 분할
-    def process_file(self, filepath: Path, metadata: Dict[str, Any]) -> List[str]:
+    # PDF 파일을 Parent-Child 청크로 분할
+    def process_file(self, filepath: Path, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         # PDF 텍스트 추출 및 정제
         content = self.extract_text_from_pdf(filepath)
         content = self.clean_pdf_text(content)
         
-        # 토큰 제한에 맞춰 분할
-        all_chunks = self.split_large_section(content)
+        # Parent 청크 생성
+        parent_chunks = self.split_into_parents(content)
         
-        # 청크가 없으면 전체 파일을 하나의 청크로
-        if not all_chunks:
-            all_chunks = [content]
+        # 청크가 없으면 전체 파일을 하나의 Parent로
+        if not parent_chunks:
+            parent_chunks = [content]
         
-        # Overlap 적용
-        all_chunks = self.add_overlap(all_chunks)
+        # Parent-Child 구조 생성
+        result = []
+        for parent_idx, parent_text in enumerate(parent_chunks, start=1):
+            # Child 청크 생성
+            child_chunks = self.split_parent_into_children(parent_text)
+            
+            # Parent와 Children을 딕셔너리로 저장
+            result.append({
+                'parent_idx': parent_idx,
+                'parent_text': parent_text,
+                'children': child_chunks
+            })
         
-        return all_chunks
+        return result
     
-    # 청크 파일 생성
-    def create_chunk_objects(self, chunks: List[str], metadata: Dict[str, Any], base_id: str) -> List[Dict[str, Any]]:
+    # Parent-Child 청크 객체 생성
+    def create_chunk_objects(self, parent_child_data: List[Dict[str, Any]], metadata: Dict[str, Any], base_id: str) -> List[Dict[str, Any]]:
 
-        total_chunks = len(chunks) # 청크 개수
         chunk_objects = [] # 청크 객체를 저장할 리스트
+        total_parents = len(parent_child_data)
         
-        # 청크 개수만큼 반복하면서 청크 생성
-        for idx, chunk_text in enumerate(chunks, start=1):
-
-            # 청크 객체 생성(Format)
-            chunk_obj = {
-                "id": f"{base_id}_{idx:03d}",
-                "text": chunk_text.strip(),
+        # Parent-Child 구조를 순회하면서 청크 객체 생성
+        for parent_data in parent_child_data:
+            parent_idx = parent_data['parent_idx']
+            parent_text = parent_data['parent_text']
+            children = parent_data['children']
+            
+            # Parent ID 생성
+            parent_id = f"{base_id}_p{parent_idx:03d}"
+            
+            # Parent 청크 객체 생성
+            parent_obj = {
+                "id": parent_id,
+                "text": parent_text.strip(),
                 "metadata": {
                     **metadata,
-                    "chunk_index": idx,
-                    "total_chunks": total_chunks
+                    "chunk_type": "parent",
+                    "parent_index": parent_idx,
+                    "total_parents": total_parents,
+                    "has_children": True,
+                    "num_children": len(children)
                 }
             }
-            chunk_objects.append(chunk_obj) # 청크 객체 저장
+            chunk_objects.append(parent_obj)
+            
+            # Child 청크 객체 생성
+            for child_idx, child_text in enumerate(children, start=1):
+                child_id = f"{base_id}_p{parent_idx:03d}_c{child_idx:03d}"
+                
+                child_obj = {
+                    "id": child_id,
+                    "text": child_text.strip(),
+                    "metadata": {
+                        **metadata,
+                        "chunk_type": "child",
+                        "parent_id": parent_id,
+                        "parent_index": parent_idx,
+                        "child_index": child_idx,
+                        "total_children": len(children)
+                    }
+                }
+                chunk_objects.append(child_obj)
         
         return chunk_objects
     
@@ -301,14 +372,14 @@ class ChunkCreator:
         # 메타데이터 추출
         metadata = self.extract_metadata_from_filename(filepath.name)
         
-        # 파일을 의미 단위로 청크 분할
-        chunks = self.process_file(filepath, metadata)
+        # 파일을 Parent-Child 구조로 청크 분할
+        parent_child_data = self.process_file(filepath, metadata)
         
         # 베이스 ID 생성 (파일명에서 확장자 제거)
         base_id = filepath.stem  # 예: "adler_theory_1"
         
         # 청크 객체 생성
-        chunk_objects = self.create_chunk_objects(chunks, metadata, base_id)
+        chunk_objects = self.create_chunk_objects(parent_child_data, metadata, base_id)
         
         # 개별 JSON 파일로 저장
         output_filename = f"{filepath.stem}_chunks.json"
@@ -316,10 +387,6 @@ class ChunkCreator:
         
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(chunk_objects, f, ensure_ascii=False, indent=2)
-        
-        # 각 청크의 토큰 수 출력
-        for i, chunk in enumerate(chunks, start=1):
-            token_count = self.count_tokens(chunk)
 
         return len(chunk_objects)
     
@@ -357,19 +424,15 @@ class ChunkCreator:
                 # 메타데이터 추출
                 metadata = self.extract_metadata_from_filename(file.name)
                 
-                # 파일을 의미 단위로 청크 분할
-                chunks = self.process_file(file, metadata)
+                # 파일을 Parent-Child 구조로 청크 분할
+                parent_child_data = self.process_file(file, metadata)
                 
                 # 청크 객체 생성
                 base_id = f"adler_{current_id:03d}"
-                chunk_objects = self.create_chunk_objects(chunks, metadata, base_id)
+                chunk_objects = self.create_chunk_objects(parent_child_data, metadata, base_id)
                 all_chunk_objects.extend(chunk_objects)
                 
                 current_id += len(chunk_objects)
-                
-                # 각 청크의 토큰 수 출력
-                for i, chunk in enumerate(chunks, start=1):
-                    token_count = self.count_tokens(chunk)
             
             # JSON 파일로 저장
             output_filename = "chunks_combined.json"
@@ -388,8 +451,8 @@ def main():
     adler_base_dir = base_dir / "dataset" / "adler"
     output_dir = adler_base_dir / "chunkfiles"
     
-    # 청크 생성기 초기화
-    creator = ChunkCreator(max_tokens=500, overlap_ratio=0.1)
+    # 청크 생성기 초기화 (Parent-Child Chunking)
+    creator = ChunkCreator(max_tokens=500, parent_max_tokens=1000, overlap_ratio=0.1)
     
     # 5개 카테고리 디렉토리
     categories = ["case", "theory", "interventions", "qna", "tone"]

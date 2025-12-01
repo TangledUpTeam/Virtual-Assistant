@@ -5,23 +5,7 @@ OCR 실패 감지 및 청크 필터링 모듈
 import re
 from typing import List
 
-# OCR 실패 indicator 목록 (extractor.py와 정확히 동일하게 유지)
-OCR_FAILURE_INDICATORS: List[str] = [
-    "i can't read",
-    "i cannot read",
-    "unable to transcribe",
-    "cannot extract",
-    "no readable text",
-    "too blurry",
-    "i'm sorry",
-    "i'm sorry, i can't",
-    "can't assist",
-    "can't transcribe",
-    "the image appears to be blank",
-    "the image you provided is blank",
-    "provide a different image",
-    "check if the file is correct"
-]
+from ..constants import OCR_FAILURE_INDICATORS
 
 # 최소 청크 길이 (문자 단위)
 MIN_CHUNK_LENGTH = 10
@@ -78,10 +62,6 @@ def filter_chunk(chunk_text: str) -> bool:
     
     # 최소 길이 검증
     if len(chunk_text) < MIN_CHUNK_LENGTH:
-        return False
-    
-    # OCR 실패 메시지 검증
-    if is_ocr_failure_message(chunk_text):
         return False
     
     # 공백만 포함된 경우

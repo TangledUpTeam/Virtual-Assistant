@@ -16,25 +16,38 @@ from chromadb import PersistentClient
 
 from .config import insurance_config
 from .utils import get_logger
+from .cache_utils import cache_key, get_cache, set_cache
 
 logger = get_logger(__name__)
 
-# OpenAI 클라이언트 lazy loading
+# OpenAI 클라이언트 lazy loading (thread-safe)
 _client = None
+_client_lock = None
+
+
+def _get_lock():
+    """Lock 객체 lazy initialization"""
+    global _client_lock
+    if _client_lock is None:
+        from threading import Lock
+        _client_lock = Lock()
+    return _client_lock
 
 
 def get_openai_client() -> OpenAI:
-    """OpenAI 클라이언트 lazy loading"""
+    """OpenAI 클라이언트 lazy loading (thread-safe)"""
     global _client
     if _client is None:
-        _client = OpenAI(api_key=insurance_config.OPENAI_API_KEY)
-        logger.info("OpenAI 클라이언트 초기화 완료")
+        with _get_lock():
+            if _client is None:
+                _client = OpenAI(api_key=insurance_config.OPENAI_API_KEY)
+                logger.info("OpenAI 클라이언트 초기화 완료")
     return _client
 
 
 def embed(text: str) -> List[float]:
     """
-    한국어 텍스트를 임베딩 벡터로 변환 (text-embedding-3-large 사용)
+    한국어 텍스트를 임베딩 벡터로 변환 (text-embedding-3-large 사용 + 디스크 캐싱)
     
     Args:
         text: 임베딩할 한국어 텍스트
@@ -42,12 +55,24 @@ def embed(text: str) -> List[float]:
     Returns:
         List[float]: 임베딩 벡터
     """
+    # 캐시 확인
+    key = cache_key("embed", text)
+    cached = get_cache(key)
+    if cached is not None:
+        logger.debug(f"임베딩 캐시 히트: {len(text)}자")
+        return cached
+    
     client = get_openai_client()
     emb = client.embeddings.create(
         model=insurance_config.EMBEDDING_MODEL,
         input=text
     )
-    return emb.data[0].embedding
+    result = emb.data[0].embedding
+    
+    # 캐싱
+    set_cache(key, result)
+    
+    return result
 
 
 def embed_batch(texts: List[str]) -> List[List[float]]:
@@ -59,16 +84,23 @@ def embed_batch(texts: List[str]) -> List[List[float]]:
         
     Returns:
         List[List[float]]: 임베딩 벡터 리스트
+        
+    Raises:
+        Exception: OpenAI API 호출 실패 시
     """
     if not texts:
         return []
     
-    client = get_openai_client()
-    emb = client.embeddings.create(
-        model=insurance_config.EMBEDDING_MODEL,
-        input=texts
-    )
-    return [item.embedding for item in emb.data]
+    try:
+        client = get_openai_client()
+        emb = client.embeddings.create(
+            model=insurance_config.EMBEDDING_MODEL,
+            input=texts
+        )
+        return [item.embedding for item in emb.data]
+    except Exception as e:
+        logger.error(f"배치 임베딩 생성 실패: {e}")
+        raise
 
 
 def embed_chunks(chunks_path: Path, batch_size: int = 100) -> bool:

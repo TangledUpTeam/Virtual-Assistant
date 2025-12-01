@@ -1,7 +1,9 @@
 """
 자동 저장 통합 스크립트
 생성날짜: 2025.11.24
-설명: 청크 생성, 임베딩 생성, Vector DB 저장을 순차적으로 실행하는 통합 스크립트
+수정날짜: 2025.11.28 - Parent-Child Chunking 방식 지원
+설명: Parent-Child 청크 생성, 임베딩 생성, Vector DB 저장을 순차적으로 실행하는 통합 스크립트
+      Parent(1000 tokens)와 Child(500 tokens) 구조로 청킹하여 모두 임베딩 생성 및 저장
 """
 
 import os

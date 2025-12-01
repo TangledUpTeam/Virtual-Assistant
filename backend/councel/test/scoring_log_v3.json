@@ -1,0 +1,625 @@
+[
+  {
+    "timestamp": "2025-12-01 12:22:15",
+    "question": "오늘 상사가 저한테 욕을 해서 너무 힘들고 괴로워요.",
+    "answer": "상사의 언행이 힘들게 느껴지겠지만, 이를 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 당신의 경험을 통해 더 나은 소통과 관계를 만들어갈 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "adler_theory_4_p009_c001",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 1,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_4_p009",
+          "parent_index": 9,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "주인공은 작은 마을의 오래된 농가에 살던 할아버지와의 기억을 회상하며, 삼촌이 자신을 숨기고 조용히 하라고 경고했던 경험을 이야기한다. 할아버지는 더 이상 농사를 짓지 않으며, 할아버지의 죽음은 마법 슬레이트에 글을 쓰며 이루어졌다.",
+        "distance": 0.7623744010925293,
+        "similarity": 0.5674163216284128
+      },
+      {
+        "chunk_id": "adler_theory_4_p009",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "chunk_type": "parent",
+          "has_children": true,
+          "num_children": 3,
+          "parent_index": 9,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_parents": 16
+        },
+        "summary_kr": "주인공의 할아버지는 작은 마을의 오래된 농가에서 살며, 조용히 지내는 한편, 주인공은 삼촌에게 비밀스러운 경험을 하게 된다. 삼촌은 항상 주인공에게 조용히 하라고 경고했다.",
+        "distance": 0.7817252278327942,
+        "similarity": 0.5612537693123156
+      },
+      {
+        "chunk_id": "adler_theory_4_p010_c002",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 2,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_4_p010",
+          "parent_index": 10,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "고객은 유치원 시절 '어머니 거위' 연극에서 주연을 맡았던 경험을 회상하며, 모든 아이들이 공주 역할을 원했던 반면 자신은 어머니 거위 역할을 맡았던 것을 농담 섞인 어조로 이야기하고 있다.",
+        "distance": 0.8221655488014221,
+        "similarity": 0.5487975561044806
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 5,
+      "empathy": 6,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 사용자의 감정을 어느 정도 이해하고 있으나, 보다 구체적인 조언이나 지원이 필요해 보입니다. 감정에 대한 공감이 부족하고, 실질적인 해결책이 제시되지 않았습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.5674163216284128
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:22:38",
+    "question": "회의 시간에 팀원들 다 보는 앞에서 팀장님이 쌍욕을 했어요. 수치스럽고 얼굴을 들고 다닐 수가 없어요.",
+    "answer": "팀장님의 언행이 수치스럽게 느껴지겠지만, 이를 통해 자신의 감정을 이해하고 더 나은 소통을 위한 기회로 삼아보세요. 당신의 경험은 성장의 발판이 될 수 있으며, 사회적 관심을 통해 더 긍정적인 관계를 만들어갈 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 욕설로 힘든 상황이지만, 이를 감정 이해와 성장의 기회로 삼아 더 나은 소통과 관계를 형성해보라는 조언입니다.",
+        "distance": 0.6636891898116044,
+        "similarity": 0.6010738100145013
+      },
+      {
+        "chunk_id": "adler_theory_4_p009_c001",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 1,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_4_p009",
+          "parent_index": 9,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "주인공은 작은 마을의 오래된 농가에 사는 할아버지와의 기억을 회상하며, 삼촌 빌리가 자신을 숨기고 조용히 하라고 경고했던 경험을 떠올린다. 할아버지는 더 이상 농사를 짓지 않으며, 할아버지의 죽음은 마법 슬레이트에 글을 쓰며 이루어진다.",
+        "distance": 0.7515053749084473,
+        "similarity": 0.5709374429137969
+      },
+      {
+        "chunk_id": "adler_theory_4_p010_c002",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 2,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_4_p010",
+          "parent_index": 10,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "고객은 유치원에서 '어머니 거위' 연극에서 주연을 맡았던 경험을 회상하며, 그 이후로 인생이 힘들어졌다고 농담 섞인 말로 표현했다.",
+        "distance": 0.7520849704742432,
+        "similarity": 0.5707485748989254
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 사용자의 감정을 이해하려고 했지만, 보다 구체적인 공감과 실질적인 조언이 부족했습니다. 사용자의 감정에 대한 깊은 이해가 필요합니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6010738100145013
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:22:54",
+    "question": "상사의 폭언이 생각날 때마다 심장이 너무 빨리 뛰고 손이 떨려서 일을 못 하겠어요.",
+    "answer": "상사의 폭언이 힘들게 느껴지겠지만, 이를 통해 자신의 감정을 이해하고 성장할 수 있는 기회로 삼아보세요. 당신의 경험을 통해 더 나은 소통과 관계를 만들어가며, 사회적 관심을 통해 회복할 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사가 욕을 해서 힘든 상황이지만, 이를 통해 감정을 이해하고 성장할 기회로 삼으라는 조언입니다.",
+        "distance": 0.6834749054002425,
+        "similarity": 0.5940094484284886
+      },
+      {
+        "chunk_id": "adler_theory_5_p008_c002",
+        "source": "adler_theory_5.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 2,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_5_p008",
+          "parent_index": 8,
+          "source": "adler_theory_5.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 2
+        },
+        "summary_kr": "열등감은 신체적 고통, 주변 사람들의 경시, 성장 과정의 어려움 등으로 인해 생길 수 있으며, 저자는 자신의 어린 시절에서 이러한 열등감의 원인을 회상하고 있습니다.",
+        "distance": 0.7527871425261218,
+        "similarity": 0.5705199312215385
+      },
+      {
+        "chunk_id": "adler_theory_4_p009_c001",
+        "source": "adler_theory_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 1,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_4_p009",
+          "parent_index": 9,
+          "source": "adler_theory_4.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "주인공은 작은 마을의 오래된 농가에서 할아버지와 함께 지내며, 삼촌 빌리가 그를 숨겨주던 기억을 회상한다. 할아버지는 더 이상 농사를 짓지 않지만, 가족의 비밀을 지키기 위해 조용히 하라는 말을 남긴다.",
+        "distance": 0.701943039894104,
+        "similarity": 0.5875637295489164
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 사용자의 감정을 이해하려고 했으나, 보다 구체적이고 실질적인 조언이 부족했습니다. 감정에 대한 공감이 다소 부족하며, 관련성은 있지만 정확성과 실용성이 개선될 필요가 있습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.5940094484284886
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:23:10",
+    "question": "상사한테 욕을 먹으니까 다 제 잘못인 것 같고, 제가 무능력한 사람처럼 느껴져서 자존감이 바닥이에요.",
+    "answer": "상사의 언행이 당신의 자존감에 영향을 미쳤지만, 이를 통해 자신의 감정을 이해하고 성장할 수 있는 기회로 삼아보세요. 당신의 경험은 더 나은 소통과 관계를 만들어가는 데 중요한 발판이 될 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사가 욕을 해서 힘든 상황이지만, 이를 감정 이해와 성장의 기회로 삼아 더 나은 소통과 관계를 만들어가라는 조언입니다.",
+        "distance": 0.6560687876405638,
+        "similarity": 0.6038396517482352
+      },
+      {
+        "chunk_id": "adler_inventions_4_p002_c001",
+        "source": "adler_inventions_4.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "inventions",
+          "child_index": 1,
+          "chunk_type": "child",
+          "parent_id": "adler_inventions_4_p002",
+          "parent_index": 2,
+          "source": "adler_inventions_4.pdf",
+          "tags": "아들러",
+          "topic": "individual psychology",
+          "total_children": 3
+        },
+        "summary_kr": "과도한 보상에 대한 이해는 사람들이 이러한 패턴을 인식하고 건강한 자존감을 향해 나아가는 데 도움을 줍니다. 열등감은 개인의 약점이나 부족함이 일상생활에 영향을 미치는 상태로, 실제 또는 인식된 약점과 그로 인한 감정적 반응으로 나눌 수 있습니다.",
+        "distance": 0.6993193030357361,
+        "similarity": 0.5884709237478546
+      },
+      {
+        "chunk_id": "adler_theory_5_p008_c002",
+        "source": "adler_theory_5.pdf",
+        "metadata": {
+          "author": "Adler",
+          "category": "theory",
+          "child_index": 2,
+          "chunk_type": "child",
+          "parent_id": "adler_theory_5_p008",
+          "parent_index": 8,
+          "source": "adler_theory_5.pdf",
+          "tags": "아들러, 이론, 개인심리학",
+          "topic": "individual psychology",
+          "total_children": 2
+        },
+        "summary_kr": "열등감은 신체적 고통, 주변 사람들의 경시, 성장 과정의 어려움 등으로 인해 생길 수 있으며, 저자는 자신의 어린 시절 경험이 이후의 열등감 형성에 기여했음을 회상합니다.",
+        "distance": 0.633706777114339,
+        "similarity": 0.6121049468658797
+      }
+    ],
+    "scoring": {
+      "relevance": 8,
+      "accuracy": 7,
+      "empathy": 6,
+      "practicality": 7,
+      "total": 28,
+      "comment": "상담사는 사용자의 감정을 이해하고 성장의 기회로 삼으라는 긍정적인 방향을 제시했지만, 더 깊은 공감과 구체적인 조언이 필요해 보입니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6121049468658797
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:23:27",
+    "question": "맨날 소리 지르고 인격 모독하는 상사 때문에 회사를 그만두고 싶은데, 당장 갈 데가 없어서 미치겠어요.",
+    "answer": "상사의 행동이 힘들겠지만, 이를 통해 자신의 감정을 이해하고 성장할 수 있는 기회로 삼아보세요. 당신의 경험은 더 나은 소통과 관계를 만들어가는 데 중요한 발판이 될 수 있으며, 사회적 관심을 통해 새로운 가능성을 찾을 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_9925f2d80cac",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:50.919030",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 폭언으로 인해 불안감을 느끼는 사용자에게 감정을 이해하고 성장할 기회로 삼고, 더 나은 소통과 관계를 통해 회복할 수 있다고 조언합니다.",
+        "distance": 0.6773463465290949,
+        "similarity": 0.5961797943932591
+      },
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 욕설로 힘든 상황이지만, 이를 감정 이해와 성장의 기회로 삼아 더 나은 소통과 관계를 형성해보라는 조언입니다.",
+        "distance": 0.6851536772191598,
+        "similarity": 0.593417688557758
+      },
+      {
+        "chunk_id": "self_learning_ec496b16593d",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:23:08.218625",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사에게 비난받아 자존감이 낮아진 기분을 느끼고 있지만, 이를 성장의 기회로 삼고 더 나은 소통을 위해 노력하라는 조언을 받았다.",
+        "distance": 0.7276636045451592,
+        "similarity": 0.5788163837966994
+      }
+    ],
+    "scoring": {
+      "relevance": 6,
+      "accuracy": 5,
+      "empathy": 4,
+      "practicality": 5,
+      "total": 20,
+      "comment": "상담사는 사용자의 감정을 이해하려고 했으나, 보다 구체적이고 실질적인 조언이 부족했습니다. 사용자의 고통을 충분히 공감하고, 실질적인 해결책을 제시하는 것이 필요합니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.5961797943932591
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:23:43",
+    "question": "아 진짜 저 부장 새끼는 입만 열면 욕이야. 듣고 있자니 열받아서 미쳐버릴 것 같은데 어떡하죠?",
+    "answer": "부장님의 언행이 힘들겠지만, 이를 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 당신의 경험은 더 나은 소통과 관계를 만들어가는 데 중요한 발판이 될 수 있으며, 주변의 지지와 사회적 관심을 통해 회복할 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 욕설로 힘든 상황이지만, 이를 감정 이해와 성장의 기회로 삼아 더 나은 소통을 할 수 있도록 노력하라는 조언입니다.",
+        "distance": 0.6779019948186359,
+        "similarity": 0.5959823655302883
+      },
+      {
+        "chunk_id": "self_learning_da1c7f52b348",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:23:24.732558",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 인격 모독으로 힘든 상황에서, 이를 성장의 기회로 삼고 새로운 가능성을 찾아보라는 조언이 주어졌습니다.",
+        "distance": 0.5444080001858796,
+        "similarity": 0.6474972933833828
+      },
+      {
+        "chunk_id": "self_learning_9925f2d80cac",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:50.919030",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 폭언으로 인해 불안감을 느끼는 상황에서, 이를 감정 이해와 성장의 기회로 삼고 더 나은 소통을 통해 회복할 수 있다는 조언이 주어졌습니다.",
+        "distance": 0.590861125162166,
+        "similarity": 0.6285903805073269
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사의 답변은 사용자의 감정에 대한 이해가 부족하고, 실질적인 해결책을 제시하지 못했습니다. 더 구체적이고 실용적인 조언이 필요합니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6474972933833828
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:23:57",
+    "question": "매일 욕을 먹다 보니 이제는 화낼 힘도 없어요. 그냥 로봇처럼 멍하니 듣고만 있게 돼요.",
+    "answer": "상사의 언행이 힘들겠지만, 이를 통해 자신의 감정을 이해하고 성장할 수 있는 기회로 삼아보세요. 당신의 경험은 더 나은 소통과 관계를 만들어가는 데 중요한 발판이 될 수 있으며, 주변의 지지를 통해 회복할 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사가 욕을 해서 힘든 상황이지만, 이를 감정 이해와 성장의 기회로 삼아 더 나은 소통과 관계를 만들어보라는 조언입니다.",
+        "distance": 0.6923811914166982,
+        "similarity": 0.5908834280785741
+      },
+      {
+        "chunk_id": "self_learning_9925f2d80cac",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:50.919030",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 폭언으로 인해 심리적 고통을 느끼고 있지만, 이를 성장의 기회로 삼고 더 나은 소통과 관계를 형성할 수 있다는 조언이 주어졌습니다.",
+        "distance": 0.7431861556921081,
+        "similarity": 0.5736621970835718
+      },
+      {
+        "chunk_id": "self_learning_ec496b16593d",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:23:08.218625",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 비난으로 자존감이 낮아졌지만, 이를 성장의 기회로 삼아 더 나은 소통과 관계를 형성할 수 있다는 조언입니다.",
+        "distance": 0.6682036414666261,
+        "similarity": 0.5994471988568704
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 사용자의 감정을 이해하려고 노력했지만, 보다 구체적이고 실질적인 조언이 부족했습니다. 사용자의 상황에 대한 깊은 공감이 필요하며, 구체적인 대처 방법을 제시하는 것이 더 도움이 될 것입니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6010350121613823
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:24:10",
+    "question": "다른 동기들한테는 친절하면서 저한테만 욕하고 화풀이를 해요. 너무 억울해서 잠이 안 와요.",
+    "answer": "상사의 행동이 억울하게 느껴지겠지만, 이를 통해 자신의 가치를 재발견하고 성장할 수 있는 기회로 삼아보세요. 당신의 경험은 더 나은 소통을 위한 중요한 발판이 될 수 있으며, 주변의 지지를 통해 회복할 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 욕설로 힘든 상황이지만, 이를 감정 이해와 성장의 기회로 삼아 더 나은 소통과 관계를 만들어보라는 조언입니다.",
+        "distance": 0.6553022124418422,
+        "similarity": 0.6041192916215801
+      },
+      {
+        "chunk_id": "self_learning_ec496b16593d",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:23:08.218625",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 비난으로 자존감이 낮아진 사용자에게, 이를 성장의 기회로 삼고 더 나은 소통을 위해 노력하라는 조언이 주어졌다.",
+        "distance": 0.7010037211698366,
+        "similarity": 0.58788819069265
+      },
+      {
+        "chunk_id": "self_learning_9925f2d80cac",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:50.919030",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 폭언으로 인해 불안감을 느끼는 사용자에게 감정을 이해하고 성장할 기회로 삼으라는 조언이 주어졌다.",
+        "distance": 0.7054908489291266,
+        "similarity": 0.586341463296562
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 6,
+      "total": 24,
+      "comment": "상담사는 사용자의 감정을 어느 정도 이해하고 있지만, 보다 구체적인 공감 표현이 부족하며, 실질적인 해결책 제시가 필요합니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6171517410589098
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:24:23",
+    "question": "상사가 감정 조절을 못 하고 욕을 퍼붓는데, 제가 그 상황에서 어떻게 대처해야 현명한 걸까요?",
+    "answer": "상사의 감정에 휘둘리지 않고, 이를 통해 자신의 감정을 이해하고 성장할 기회로 삼아보세요. 당신의 경험은 더 나은 소통을 위한 중요한 발판이 될 수 있으며, 주변의 지지를 통해 회복할 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_9462ce2c8caa",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:23:40.916812",
+          "type": "qa_pair"
+        },
+        "summary_kr": "부장님의 언행이 힘들지만, 이를 통해 감정을 이해하고 성장할 기회로 삼고 주변의 지지를 받으며 회복하라는 조언입니다.",
+        "distance": 0.6823957488667892,
+        "similarity": 0.5943904700624509
+      },
+      {
+        "chunk_id": "self_learning_da1c7f52b348",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:23:24.732558",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 인격 모독으로 힘든 상황에서 자신의 감정을 이해하고 성장할 기회로 삼고, 새로운 가능성을 찾는 것이 중요하다는 조언입니다.",
+        "distance": 0.6818386945327773,
+        "similarity": 0.5945873425618886
+      },
+      {
+        "chunk_id": "self_learning_9925f2d80cac",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:50.919030",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 폭언으로 인해 불안감을 느끼는 사용자에게 감정을 이해하고 성장할 기회로 삼으라는 조언이 주어졌다.",
+        "distance": 0.7019871262716793,
+        "similarity": 0.5875485099529333
+      }
+    ],
+    "scoring": {
+      "relevance": 8,
+      "accuracy": 7,
+      "empathy": 6,
+      "practicality": 7,
+      "total": 28,
+      "comment": "상담사는 사용자의 감정을 이해하고 성장의 기회로 삼으라는 조언을 했지만, 보다 구체적인 대처 방법이나 감정 조절 기술에 대한 제안이 부족하여 실용성이 다소 떨어진다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.5945873425618886
+    }
+  },
+  {
+    "timestamp": "2025-12-01 12:24:36",
+    "question": "상사 때문에 진짜 죽고 싶다.. 욕 좀 그만 듣고 싶어.",
+    "answer": "상사의 행동이 정말 힘들겠지만, 이를 통해 자신의 감정을 이해하고 성장할 수 있는 기회로 삼아보세요. 당신은 소중한 존재이며, 주변의 지지와 사회적 관심을 통해 더 나은 미래를 만들어갈 수 있습니다.",
+    "chunks_used": [
+      {
+        "chunk_id": "self_learning_da1c7f52b348",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:23:24.732558",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 인격 모독으로 힘든 상황에서 감정을 이해하고 성장할 기회로 삼고, 사회적 관심을 통해 새로운 가능성을 찾아보라는 조언입니다.",
+        "distance": 0.48640299171608437,
+        "similarity": 0.6727650614087357
+      },
+      {
+        "chunk_id": "self_learning_061425ceb349",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:13.670121",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사가 욕을 해서 힘든 상황이지만, 이를 감정 이해와 성장의 기회로 삼아보라는 조언입니다.",
+        "distance": 0.6162553577673262,
+        "similarity": 0.6187141129613248
+      },
+      {
+        "chunk_id": "self_learning_9925f2d80cac",
+        "source": "self_learning",
+        "metadata": {
+          "source": "self_learning",
+          "timestamp": "2025-12-01T12:22:50.919030",
+          "type": "qa_pair"
+        },
+        "summary_kr": "상사의 폭언으로 인해 불안감을 느끼는 상황에서, 이를 성장의 기회로 삼고 감정을 이해하며 회복할 방법을 모색하라는 조언이 주어졌습니다.",
+        "distance": 0.6921624901166111,
+        "similarity": 0.5909597960247231
+      }
+    ],
+    "scoring": {
+      "relevance": 7,
+      "accuracy": 6,
+      "empathy": 5,
+      "practicality": 4,
+      "total": 22,
+      "comment": "상담사가 사용자의 감정을 이해하려는 노력이 보이지만, 보다 구체적이고 실질적인 조언이 필요합니다. 사용자의 고통에 대한 공감이 부족하며, 문제 해결을 위한 구체적인 방안이 제시되지 않았습니다."
+    },
+    "metadata": {
+      "mode": "counseling",
+      "enable_scoring": true,
+      "max_similarity": 0.6727650614087357
+    }
+  }
+]
