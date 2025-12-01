@@ -8,7 +8,6 @@
   <link rel="stylesheet" href="renderer/styles/live2d.css" />
   <link rel="stylesheet" href="renderer/styles/chat.css" />
   <link rel="stylesheet" href="renderer/styles/tasks.css" />
-  <link rel="stylesheet" href="renderer/styles/brainstorming.css" />
 
    <!-- 기본 스타일 (배경 완전 투명) -->
    <style>
@@ -28,7 +27,6 @@
   <!-- 모듈 스크립트: 먼저 로드 (전역으로 export) -->
   <script type="module" src="./renderer/chat/chatUI.js"></script>
   <script type="module" src="./renderer/tasks/reportChatUI.js"></script>
-  <script type="module" src="./renderer/brainstorming/brainstormingService.js"></script>
 
   <!-- Live2D 스테이지 (배경, 전체 화면) -->
   <div id="stage"></div>
@@ -45,21 +43,6 @@
         autocomplete="off"
       />
       <button id="send-btn">전송</button>
-    </div>
-  </div>
-
-  <!-- 브레인스토밍 패널 (오른쪽 고정) -->
-  <div id="brainstorming-panel">
-    <h2>💡 브레인스토밍</h2>
-    <div id="bs-content"></div>
-    <div id="bs-input-area">
-      <input 
-        type="text" 
-        id="bs-input" 
-        placeholder="입력하세요..." 
-        autocomplete="off"
-      />
-      <button id="bs-submit-btn">전송</button>
     </div>
   </div>
 
@@ -501,13 +484,12 @@
         // 모델 준비된 후 인터랙션 제어 로직 세팅
         setupInteractionControls();
         
-        // 채팅/브레인스토밍 패널 초기화 (모듈 로드 대기)
+        // 채팅/보고서 패널 초기화 (모듈 로드 대기)
         const initPanels = async () => {
           // 모듈이 로드될 때까지 최대 5초 대기
           let retries = 50;
           while (retries > 0) {
             if (typeof window.initChatPanel === 'function' && 
-                typeof window.initBrainstormingPanel === 'function' &&
                 typeof window.initReportPanel === 'function') {
               break;
             }
@@ -546,17 +528,6 @@
             }
           } catch (error) {
             console.error('❌ 보고서 패널 초기화 실패:', error);
-          }
-          
-          try {
-            if (typeof window.initBrainstormingPanel === 'function') {
-              window.initBrainstormingPanel();
-              console.log('✅ 브레인스토밍 패널 초기화 완료');
-            } else {
-              console.warn('⚠️  initBrainstormingPanel 함수를 찾을 수 없습니다.');
-            }
-          } catch (error) {
-            console.error('❌ 브레인스토밍 패널 초기화 실패:', error);
           }
         };
         
