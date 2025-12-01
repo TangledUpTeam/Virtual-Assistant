@@ -123,3 +123,8 @@ Desktop.ini
 backend/councel/adler/chunkfiles/
 backend/councel/adler/embeddings/
 backend/councel/vector_db/
+
+# Brainstorming evaluation results
+backend/app/domain/brainstorming/evaluation/results/summary_*.json
+backend/app/domain/brainstorming/evaluation/results/*_result.json
+!backend/app/domain/brainstorming/evaluation/results/.gitkeep

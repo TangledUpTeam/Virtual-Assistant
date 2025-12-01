@@ -73,12 +73,29 @@ class IdeaGenerator:
         )
         
         try:
-            self.permanent_collection = self.chroma_client.get_collection(
-                name="brainstorming_techniques"
-            )
-            print("✅ 영구 RAG 컬렉션 로드 완료")
+            # 컬렉션 목록 확인 후 로드
+            print(f"🔍 ChromaDB 경로: {persist_directory}")
+            print("🔍 list_collections() 호출 중...")
+            collections = self.chroma_client.list_collections()
+            print(f"🔍 컬렉션 목록: {collections}")
+            collection_names = [c.name for c in collections]
+            print(f"🔍 컬렉션 이름들: {collection_names}")
+            
+            if "brainstorming_techniques" in collection_names:
+                print("🔍 get_collection() 호출 중...")
+                self.permanent_collection = self.chroma_client.get_collection(
+                    name="brainstorming_techniques"
+                )
+                print(f"✅ 영구 RAG 컬렉션 로드 완료 ({self.permanent_collection.count()}개 문서)")
+            else:
+                print("⚠️  영구 RAG 컬렉션이 없습니다.")
+                print("   chroma_loader.py를 먼저 실행해주세요.")
+                self.permanent_collection = None
         except Exception as e:
+            import traceback
             print(f"⚠️  영구 RAG 컬렉션 로드 실패: {e}")
+            print("   상세 에러:")
+            traceback.print_exc()
             print("   chroma_loader.py를 먼저 실행해주세요.")
             self.permanent_collection = None
         
@@ -98,12 +115,8 @@ class IdeaGenerator:
         self.current_session_id = self.session_manager.create_session()
         session = self.session_manager.get_session(self.current_session_id)
         
-        # Ephemeral RAG 초기화 (ChromaDB 클라이언트 재사용)
-        self.ephemeral_rag = EphemeralRAG(
-            session_id=self.current_session_id,
-            collection_name=session['chroma_collection'],
-            chroma_client=self.chroma_client  # 기존 클라이언트 재사용
-        )
+        # Ephemeral RAG 초기화 (JSON 기반)
+        self.ephemeral_rag = EphemeralRAG(session_id=self.current_session_id)
         
         print(f"\n{'='*60}")
         print(f"🎨 새로운 아이디어 생성 세션 시작")
@@ -802,11 +815,11 @@ class IdeaGenerator:
         
         print("\n🗑️  데이터 삭제 중...")
         
-        # 1. Ephemeral ChromaDB 컬렉션 삭제
+        # 1. Ephemeral RAG 데이터 삭제 (JSON 폴더)
         if self.ephemeral_rag:
-            self.ephemeral_rag.delete_collection()
+            self.ephemeral_rag.delete_session_data()
         
-        # 2. 세션 삭제 (디렉토리 + 메모리)
+        # 2. 세션 삭제 (메모리)
         self.session_manager.delete_session(self.current_session_id)
         
         print("✅ 모든 데이터가 삭제되었습니다.")

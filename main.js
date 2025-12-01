@@ -7,10 +7,10 @@ let backendProcess = null;
 let loginWindowBounds = null; // 로그인 창의 위치 저장
 
 /**
- * 로그인/시작 창 생성
+ * 랜딩/시작 창 생성 (첫 화면)
  */
-function createLoginWindow() {
-  console.log('🔐 로그인 창 생성');
+function createLandingWindow() {
+  console.log('🏠 랜딩 페이지 생성');
 
   loginWin = new BrowserWindow({
     width: 800,
@@ -26,11 +26,31 @@ function createLoginWindow() {
     }
   });
 
-  // 로그인 페이지 로드 (이미 로그인되어 있으면 자동으로 /start로 이동)
-  loginWin.loadURL('http://localhost:8000/login');
+  // 랜딩 페이지 로드 (시작하기, 사용설명서, 로그인 버튼)
+  loginWin.loadURL('http://localhost:8000/landing');
+  
+  // OAuth 페이지에서 다시 랜딩 페이지로 돌아올 때 크기 복원
+  loginWin.webContents.on('did-navigate', (event, url) => {
+    if (url.includes('/landing')) {
+      // 랜딩 페이지로 돌아오면 원래 크기로 복원
+      loginWin.setSize(800, 600);
+      loginWin.center();
+      console.log('🔄 랜딩 페이지 크기 복원: 800x600');
+    }
+  });
 
-  // 개발자 도구는 F12로 수동으로 열 수 있음
-  // loginWin.webContents.openDevTools();
+  // F12 단축키로 개발자 도구 열기
+  loginWin.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
+      if (loginWin.webContents.isDevToolsOpened()) {
+        loginWin.webContents.closeDevTools();
+        console.log('🛠️ 개발자 도구 닫힘 (랜딩 창)');
+      } else {
+        loginWin.webContents.openDevTools({ mode: 'detach' });
+        console.log('🛠️ 개발자 도구 열림 (랜딩 창)');
+      }
+    }
+  });
 
   loginWin.on('closed', () => {
     console.log('🔐 로그인 창 닫힘');
@@ -206,7 +226,7 @@ ipcMain.on('va:start-character', () => {
   }
 });
 
-// 로그아웃 시 로그인 창으로 돌아가기
+// 로그아웃 시 랜딩 페이지로 돌아가기
 ipcMain.on('va:logout', () => {
   console.log('👋 로그아웃');
   
@@ -215,9 +235,18 @@ ipcMain.on('va:logout', () => {
     characterWin.close();
   }
   
-  // 로그인 창 생성
+  // 랜딩 창 생성
   if (!loginWin) {
-    createLoginWindow();
+    createLandingWindow();
+  }
+});
+
+// 페이지 이동 (랜딩 페이지 내에서)
+ipcMain.on('va:navigate', (_e, path) => {
+  console.log(`🔄 페이지 이동: ${path}`);
+  
+  if (loginWin && !loginWin.isDestroyed()) {
+    loginWin.loadURL(`http://localhost:8000${path}`);
   }
 });
 
@@ -225,6 +254,132 @@ ipcMain.on('va:logout', () => {
 ipcMain.on('va:request-quit', () => {
   console.log('✅ 사용자가 종료를 확인함');
   app.quit();
+});
+
+// 브레인스토밍 팝업 열기
+let brainstormingWin = null;
+
+function openBrainstormingPopup() {
+  console.log('🧠 브레인스토밍 팝업 생성');
+  
+  // 이미 팝업이 열려있으면 포커스만
+  if (brainstormingWin && !brainstormingWin.isDestroyed()) {
+    brainstormingWin.focus();
+    return;
+  }
+  
+  // 브레인스토밍 팝업 창 생성
+  brainstormingWin = new BrowserWindow({
+    width: 700,
+    height: 732, // 700 + 32 (타이틀바)
+    center: true,
+    resizable: true,
+    frame: false, // 툴바 제거
+    backgroundColor: '#f5f5f5',
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: true
+    },
+    parent: characterWin, // 부모 창 설정
+    modal: false,
+    alwaysOnTop: true, // 항상 위에 표시
+    titleBarStyle: 'customButtonsOnHover', // macOS 버튼 완전 숨김
+    trafficLightPosition: { x: -100, y: -100 } // 버튼을 화면 밖으로
+  });
+  
+  // 브레인스토밍 전용 페이지 로드
+  brainstormingWin.loadFile('brainstorming-popup.html');
+  
+  // 개발자 도구 (F12)
+  brainstormingWin.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      if (brainstormingWin.webContents.isDevToolsOpened()) {
+        brainstormingWin.webContents.closeDevTools();
+      } else {
+        brainstormingWin.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+  });
+  
+  // 팝업 로드 완료
+  brainstormingWin.webContents.on('did-finish-load', () => {
+    console.log('🧠 브레인스토밍 팝업 로드 완료');
+  });
+  
+  // 팝업 종료 시 세션 자동 삭제 및 챗봇에 알림
+  brainstormingWin.on('close', async (e) => {
+    console.log('🧠 브레인스토밍 팝업 닫기 시작');
+    
+    // 렌더러에서 세션 ID 가져오기
+    try {
+      const sessionId = await brainstormingWin.webContents.executeJavaScript('getCurrentSessionId()');
+      
+      if (sessionId) {
+        console.log('🗑️ 세션 자동 삭제 시작:', sessionId);
+        
+        // 세션 삭제 API 호출
+        const http = require('http');
+        const options = {
+          hostname: 'localhost',
+          port: 8000,
+          path: `/api/v1/brainstorming/session/${sessionId}`,
+          method: 'DELETE'
+        };
+        
+        const req = http.request(options, (res) => {
+          console.log('✅ 세션 삭제 완료:', sessionId);
+        });
+        
+        req.on('error', (error) => {
+          console.error('❌ 세션 삭제 실패:', error);
+        });
+        
+        req.end();
+      }
+    } catch (error) {
+      console.error('❌ 세션 ID 가져오기 실패:', error);
+    }
+  });
+  
+  brainstormingWin.on('closed', () => {
+    console.log('🧠 브레인스토밍 팝업 닫힘');
+    
+    // 챗봇에 종료 이벤트 전송
+    if (characterWin && !characterWin.isDestroyed()) {
+      characterWin.webContents.send('brainstorming-closed', {
+        // ideasCount 제거 - 단순히 종료만 알림
+      });
+    }
+    
+    brainstormingWin = null;
+  });
+  
+  console.log('✅ 브레인스토밍 팝업 생성 완료');
+}
+
+// IPC: 챗봇에서 브레인스토밍 팝업 열기
+ipcMain.on('open-brainstorming-popup', (event) => {
+  console.log('🧠 브레인스토밍 팝업 생성 요청 (챗봇)');
+  openBrainstormingPopup();
+});
+
+// 브레인스토밍 창 최대화 토글
+ipcMain.on('toggle-brainstorming-maximize', () => {
+  if (brainstormingWin && !brainstormingWin.isDestroyed()) {
+    if (brainstormingWin.isMaximized()) {
+      brainstormingWin.unmaximize();
+    } else {
+      brainstormingWin.maximize();
+    }
+  }
+});
+
+// 브레인스토밍 창 닫기 (렌더러에서 요청)
+ipcMain.on('close-brainstorming-window', () => {
+  console.log('🧠 브레인스토밍 창 닫기 요청 (세션 삭제 완료)');
+  if (brainstormingWin && !brainstormingWin.isDestroyed()) {
+    brainstormingWin.close();
+  }
 });
 
 // 백엔드 서버가 준비될 때까지 대기하는 함수
@@ -262,6 +417,15 @@ app.whenReady().then(async () => {
   console.log('📝 세션 기반 - 앱 종료 시 로그인 정보 삭제됨');
   console.log('⌨️  단축키: ESC = 종료, F12 = 개발자 도구');
   
+  // 🔥 앱 시작 시 이전 세션 완전 삭제 (로그인 정보 초기화)
+  console.log('🗑️  이전 세션 삭제 중...');
+  const { session } = require('electron');
+  await session.defaultSession.clearStorageData({
+    storages: ['cookies', 'localstorage', 'sessionstorage', 'cachestorage']
+  });
+  await session.defaultSession.clearCache();
+  console.log('✅ 이전 세션 삭제 완료 - 로그인 정보 초기화됨');
+  
   // 백엔드 서버 시작
   console.log('🔧 백엔드 서버 시작 중...');
   backendProcess = spawn('python', ['assistant.py'], {
@@ -286,8 +450,8 @@ app.whenReady().then(async () => {
   const ready = await waitForBackend();
   
   if (ready) {
-    // 백엔드 준비 완료 후 로그인 창 띄움
-    createLoginWindow();
+    // 백엔드 준비 완료 후 랜딩 페이지 띄움
+    createLandingWindow();
   } else {
     console.error('❌ 백엔드를 시작할 수 없습니다.');
     app.quit();
@@ -315,14 +479,29 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => { 
   if (BrowserWindow.getAllWindows().length === 0) {
-    createLoginWindow();
+    createLandingWindow();
   }
 });
 
 // 앱 종료 전 정리
-app.on('before-quit', () => {
+app.on('before-quit', async (event) => {
   console.log('🧹 앱 종료 전 정리 중...');
+  
+  // 백엔드 프로세스 종료
   if (backendProcess && !backendProcess.killed) {
     backendProcess.kill('SIGTERM');
+  }
+  
+  // 세션 삭제 (로그인 정보 초기화)
+  console.log('🗑️  세션 삭제 중...');
+  const { session } = require('electron');
+  try {
+    await session.defaultSession.clearStorageData({
+      storages: ['cookies', 'localstorage', 'sessionstorage', 'cachestorage']
+    });
+    await session.defaultSession.clearCache();
+    console.log('✅ 세션 삭제 완료');
+  } catch (err) {
+    console.error('⚠️ 세션 삭제 실패:', err);
   }
 });
