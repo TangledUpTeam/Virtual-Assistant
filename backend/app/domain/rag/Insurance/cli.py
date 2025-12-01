@@ -19,13 +19,14 @@ from pathlib import Path
 import argparse
 
 from .config import insurance_config
-from .extractor import extract_pdf
+from .extractor.extract_pdf import extract_pdf
 from .chunker import chunk_json
 from .embedder import embed_chunks
 from .vector_store import VectorStore
 from .retriever import InsuranceRetriever
 from .schemas import QueryRequest
 from .utils import get_logger
+from .performance import get_performance_monitor
 
 logger = get_logger(__name__)
 
@@ -189,6 +190,10 @@ def process_command(input_path: str):
     if success_count > 0:
         print(f"✅ 전체 파이프라인 완료!")
         logger.info(f"파이프라인 완료: 성공 {success_count}개 / 실패 {fail_count}개")
+        
+        # 성능 리포트 출력
+        monitor = get_performance_monitor()
+        monitor.report()
     
     if fail_count > 0:
         sys.exit(1)

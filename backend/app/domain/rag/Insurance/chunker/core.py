@@ -19,8 +19,8 @@ import uuid
 from pathlib import Path
 from typing import List, Dict, Any
 
-from app.domain.rag.Insurance.config import insurance_config
-from app.domain.rag.Insurance.utils import get_logger
+from ..config import insurance_config
+from ..utils import get_logger
 from .splitter import pre_split_paragraphs
 from .tokenizer import token_chunk, get_encoder
 from .filters import is_ocr_failure_message, filter_chunk, MIN_CHUNK_LENGTH
