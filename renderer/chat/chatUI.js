@@ -57,9 +57,132 @@ export function initChatPanel() {
   chatInput.addEventListener('keydown', handleChatInputKeydown);
   window.addEventListener('keydown', handleGlobalKeydown);
   
+  // 드래그 앤 드롭 기능 초기화
+  initDragAndDrop();
+  
+  // 리사이즈 기능 초기화
+  initResize();
+  
   isChatPanelInitialized = true;
   
   console.log('✅ 채팅 패널 초기화 완료');
+}
+
+/**
+ * 드래그 앤 드롭 기능 초기화
+ */
+function initDragAndDrop() {
+  const header = chatPanel.querySelector('h2');
+  if (!header) return;
+  
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let initialLeft = 0;
+  let initialTop = 0;
+  
+  // 헤더에 드래그 커서 추가
+  header.style.cursor = 'move';
+  header.style.userSelect = 'none';
+  
+  header.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    
+    // 현재 위치 가져오기
+    const rect = chatPanel.getBoundingClientRect();
+    initialLeft = rect.left;
+    initialTop = rect.top;
+    
+    chatPanel.style.transition = 'none';
+    e.preventDefault();
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+    
+    const newLeft = initialLeft + deltaX;
+    const newTop = initialTop + deltaY;
+    
+    // 화면 밖으로 나가지 않도록 제한
+    const maxLeft = window.innerWidth - chatPanel.offsetWidth;
+    const maxTop = window.innerHeight - chatPanel.offsetHeight;
+    
+    chatPanel.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+    chatPanel.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+  });
+  
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      chatPanel.style.transition = '';
+    }
+  });
+  
+  console.log('✅ 드래그 앤 드롭 기능 초기화 완료');
+}
+
+/**
+ * 리사이즈 기능 초기화
+ */
+function initResize() {
+  // 리사이즈 핸들 생성
+  const resizeHandle = document.createElement('div');
+  resizeHandle.className = 'resize-handle';
+  resizeHandle.innerHTML = '⋰';
+  chatPanel.appendChild(resizeHandle);
+  
+  let isResizing = false;
+  let startX = 0;
+  let startY = 0;
+  let startWidth = 0;
+  let startHeight = 0;
+  
+  resizeHandle.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    
+    const rect = chatPanel.getBoundingClientRect();
+    startWidth = rect.width;
+    startHeight = rect.height;
+    
+    chatPanel.style.transition = 'none';
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+    
+    const newWidth = startWidth + deltaX;
+    const newHeight = startHeight + deltaY;
+    
+    // 최소/최대 크기 제한
+    const minWidth = 300;
+    const maxWidth = 800;
+    const minHeight = 400;
+    const maxHeight = window.innerHeight - 100;
+    
+    chatPanel.style.width = Math.max(minWidth, Math.min(newWidth, maxWidth)) + 'px';
+    chatPanel.style.height = Math.max(minHeight, Math.min(newHeight, maxHeight)) + 'px';
+  });
+  
+  document.addEventListener('mouseup', () => {
+    if (isResizing) {
+      isResizing = false;
+      chatPanel.style.transition = '';
+    }
+  });
+  
+  console.log('✅ 리사이즈 기능 초기화 완료');
 }
 
 // 전역으로 export
@@ -81,9 +204,17 @@ function handleChatInputKeydown(e) {
 }
 
 /**
- * 전역 키 이벤트 (패널 토글)
+ * 전역 키 이벤트 (패널 토글 및 캐릭터 토글)
  */
 function handleGlobalKeydown(e) {
+  // Shift + Ctrl(Cmd) + Enter: 캐릭터 토글
+  if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    toggleCharacter();
+    return;
+  }
+  
+  // Ctrl(Cmd) + Enter: 챗창 토글
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault();
     togglePanel();
@@ -208,6 +339,31 @@ function togglePanel() {
   } else {
     chatPanel.style.display = 'none';
     console.log('🙈 채팅 패널 숨김');
+  }
+}
+
+/**
+ * 캐릭터 토글 (Shift + Ctrl/Cmd + Enter)
+ */
+let isCharacterVisible = true;
+function toggleCharacter() {
+  const stage = document.getElementById('stage');
+  if (!stage) {
+    console.warn('⚠️  Live2D stage 요소를 찾을 수 없습니다.');
+    return;
+  }
+  
+  isCharacterVisible = !isCharacterVisible;
+  
+  if (isCharacterVisible) {
+    // display 속성을 제거하여 원래대로 복원
+    stage.style.display = '';
+    console.log('👁️ 캐릭터 표시');
+    addMessage('assistant', '안녕하세요! 다시 왔어요! 👋');
+  } else {
+    stage.style.display = 'none';
+    console.log('🙈 캐릭터 숨김');
+    addMessage('assistant', '잠시 숨을게요~ Shift + Ctrl/Cmd + Enter로 다시 불러주세요! 👻');
   }
 }
 
