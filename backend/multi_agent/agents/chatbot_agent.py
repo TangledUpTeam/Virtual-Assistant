@@ -8,14 +8,10 @@ Chatbot Agent
 from typing import Dict, Any, Optional
 from .base_agent import BaseAgent
 
-
+# 일반 챗봇 대화 처리 에이전트 클래스
 class ChatbotAgent(BaseAgent):
-    """
-    일반 대화 처리 에이전트
-    
-    기존 ChatService를 래핑하여 일반적인 대화를 처리합니다.
-    """
-    
+
+    # 초기화 함수
     def __init__(self):
         super().__init__(
             name="chatbot",
@@ -25,6 +21,7 @@ class ChatbotAgent(BaseAgent):
         # Lazy loading: 실제 사용 시에만 ChatService 로드
         self._chat_service = None
     
+    # @property: 메소드를 변수처럼 사용할 수 있게 해주는 기능
     @property
     def chat_service(self):
         """ChatService lazy loading"""
@@ -33,17 +30,9 @@ class ChatbotAgent(BaseAgent):
             self._chat_service = ChatService()
         return self._chat_service
     
+    # 일반 대화 처리 기능을 하는 비동기 함수
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
-        """
-        일반 대화 처리
-        
-        Args:
-            query: 사용자 질문
-            context: 추가 컨텍스트 (session_id, user_id 등)
-            
-        Returns:
-            str: 챗봇 응답
-        """
+
         try:
             # 컨텍스트에서 세션 ID 추출
             session_id = None
@@ -70,8 +59,9 @@ class ChatbotAgent(BaseAgent):
         except Exception as e:
             return f"챗봇 처리 중 오류가 발생했습니다: {str(e)}"
     
+    # 기능 목록 리턴해주는 함수
     def get_capabilities(self) -> list:
-        """에이전트 기능 목록"""
+
         return [
             "일반 대화",
             "인사 및 잡담",
