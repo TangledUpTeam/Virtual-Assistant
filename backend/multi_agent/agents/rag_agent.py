@@ -57,8 +57,9 @@ class RAGAgent(BaseAgent):
         except Exception as e:
             return f"문서 검색 중 오류가 발생했습니다: {str(e)}"
     
+    # 에이전트 기능 목록 리턴 함수
     def get_capabilities(self) -> list:
-        """에이전트 기능 목록"""
+
         return [
             "회사 문서 검색",
             "HR 규정 조회",
@@ -66,4 +67,3 @@ class RAGAgent(BaseAgent):
             "연차/휴가 규정 설명",
             "사내 정책 문의",
         ]
-

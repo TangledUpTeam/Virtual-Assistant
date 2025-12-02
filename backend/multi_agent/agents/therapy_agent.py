@@ -8,14 +8,10 @@ Therapy Agent
 from typing import Dict, Any, Optional
 from .base_agent import BaseAgent
 
-
+# 심리 상담 에이전트 클래스
 class TherapyAgent(BaseAgent):
-    """
-    심리 상담 에이전트
-    
-    기존 TherapyService를 래핑하여 아들러 개인심리학 기반 RAG 상담을 제공합니다.
-    """
-    
+
+    # 초기화 함수
     def __init__(self):
         super().__init__(
             name="therapy",
@@ -26,6 +22,7 @@ class TherapyAgent(BaseAgent):
         # Lazy loading: 실제 사용 시에만 TherapyService 로드
         self._therapy_service = None
     
+    # property: 메소드를 변수처럼 사용할 수 있게 해주는 기능
     @property
     def therapy_service(self):
         """TherapyService lazy loading"""
@@ -34,17 +31,9 @@ class TherapyAgent(BaseAgent):
             self._therapy_service = TherapyService()
         return self._therapy_service
     
+    # 심리 상담 처리 비동기 함수
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
-        """
-        심리 상담 처리
-        
-        Args:
-            query: 사용자 질문 (상담 내용)
-            context: 추가 컨텍스트 (enable_scoring 등)
-            
-        Returns:
-            str: 상담 응답
-        """
+
         try:
             # 상담 시스템 사용 가능 여부 확인
             if not self.therapy_service.is_available():
@@ -75,8 +64,9 @@ class TherapyAgent(BaseAgent):
         except Exception as e:
             return f"심리 상담 처리 중 오류가 발생했습니다: {str(e)}"
     
+    # 에이전트 기능 목록
     def get_capabilities(self) -> list:
-        """에이전트 기능 목록"""
+
         return [
             "심리 상담",
             "감정적 지원",

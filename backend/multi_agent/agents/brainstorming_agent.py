@@ -8,15 +8,10 @@ Brainstorming Agent
 from typing import Dict, Any, Optional
 from .base_agent import BaseAgent
 
-
+# 브레인스토밍 에이전트 클래스
 class BrainstormingAgent(BaseAgent):
-    """
-    브레인스토밍 및 창의적 아이디어 제안 에이전트
-    
-    기존 BrainstormingService를 래핑하여 창의적인 아이디어와 
-    브레인스토밍 기법을 제안합니다.
-    """
-    
+
+    # 초기화 함수    
     def __init__(self):
         super().__init__(
             name="brainstorming",
@@ -26,6 +21,7 @@ class BrainstormingAgent(BaseAgent):
         # Lazy loading: 실제 사용 시에만 BrainstormingService 로드
         self._brainstorming_service = None
     
+    # @property: 메소드를 변수처럼 사용할 수 있게 해주는 기능
     @property
     def brainstorming_service(self):
         """BrainstormingService lazy loading"""
@@ -34,17 +30,9 @@ class BrainstormingAgent(BaseAgent):
             self._brainstorming_service = BrainstormingService()
         return self._brainstorming_service
     
+    # 브레인스토밍 진행하는 비동기 함수
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
-        """
-        브레인스토밍 제안 생성
-        
-        Args:
-            query: 사용자 질문 (예: "팀 협업 방법", "창의적 아이디어 도출")
-            context: 추가 컨텍스트 (context_count 등)
-            
-        Returns:
-            str: 브레인스토밍 제안
-        """
+
         try:
             # 컨텍스트에서 context_count 추출 (기본값: 3)
             context_count = 3
@@ -71,8 +59,9 @@ class BrainstormingAgent(BaseAgent):
         except Exception as e:
             return f"브레인스토밍 제안 생성 중 오류가 발생했습니다: {str(e)}"
     
+    # 브레인스토밍 에이전트 기능 목록 리턴
     def get_capabilities(self) -> list:
-        """에이전트 기능 목록"""
+        
         return [
             "창의적 아이디어 제안",
             "브레인스토밍 기법 안내",
