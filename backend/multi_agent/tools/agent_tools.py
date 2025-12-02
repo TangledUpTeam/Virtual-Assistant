@@ -73,36 +73,42 @@ def get_therapy_agent():
 # 일반적인 대화와 질문에 답변
 @tool
 async def chatbot_tool(query: str) -> str:
+    """일반적인 대화와 질문에 답변합니다. 인사말, 잡담, 일상적인 질문을 처리합니다."""
     agent = get_chatbot_agent()
     return await agent.process(query)
 
 # 회사 문서, 규정 및 정책을 검색하여 답변(HR)
 @tool
 async def rag_tool(query: str) -> str:
+    """회사 문서, 규정, 정책을 검색하여 답변합니다. HR 규정, 복지 정책, 연차/휴가 규정 등을 처리합니다."""
     agent = get_rag_agent()
     return await agent.process(query)
 
 # 브레인스토밍 기법 제안 -> 아이디어 도출
 @tool
 async def brainstorming_tool(query: str) -> str:
+    """창의적인 아이디어와 브레인스토밍 기법을 제안합니다. 새로운 아이디어, 문제 해결 방법을 제공합니다."""
     agent = get_brainstorming_agent()
     return await agent.process(query)
 
 # 일정 관리와 계획 수립을 도와줌
 @tool
 async def planner_tool(query: str) -> str:
+    """일정 관리와 계획 수립을 도와줍니다. 오늘의 할 일, 업무 일정 관리, 시간 관리 조언을 제공합니다."""
     agent = get_planner_agent()
     return await agent.process(query)
 
 # 업무 리포트와 실적 분석을 생성
 @tool
 async def report_tool(query: str) -> str:
+    """업무 리포트와 실적 분석을 생성합니다. 일간/주간/월간 리포트, 성과 평가 자료를 제공합니다."""
     agent = get_report_agent()
     return await agent.process(query)
 
 # 심리 상담 제공
 @tool
 async def therapy_tool(query: str) -> str:
+    """심리 상담과 정신 건강 지원을 제공합니다. 감정적 지원, 스트레스 관리, 대인관계 조언을 제공합니다."""
     agent = get_therapy_agent()
     return await agent.process(query)
 
