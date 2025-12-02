@@ -128,3 +128,15 @@ backend/councel/vector_db/
 backend/app/domain/brainstorming/evaluation/results/summary_*.json
 backend/app/domain/brainstorming/evaluation/results/*_result.json
 !backend/app/domain/brainstorming/evaluation/results/.gitkeep
+
+# Internal HR documents (sensitive data)
+backend/internal_docs/processed/*.json
+backend/internal_docs/uploads/*
+!backend/internal_docs/.gitkeep
+
+# Test logs and scoring files
+backend/councel/test/scoring_log_*.json
+backend/councel/test/scoring_log_*.md
+backend/councel/test/.scoring_log_*_hash
+backend/councel/test/*_backup_*.json
+backend/councel/test/*_backup_*.md
