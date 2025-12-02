@@ -1,12 +1,14 @@
 /**
  * Chatbot API 전용 서비스
  * backend/app/domain/chatbot 모듈과 통신
+ * Multi-Agent 시스템 지원 추가
  */
 
 import { isHRQuestion, queryHRDocument } from './hrService.js';
 
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const SESSION_KEY = 'chatbot_session_id';
+const MULTI_AGENT_SESSION_KEY = 'multi_agent_session_id';
 
 // JWT 토큰 저장
 let accessToken = null;
@@ -203,6 +205,157 @@ export async function deleteChatSession() {
     console.log('✅ 챗봇 세션 삭제 완료');
   } catch (error) {
     console.error('❌ 세션 삭제 오류:', error);
+  }
+}
+
+// ============================================
+// Multi-Agent 시스템 API
+// ============================================
+
+/**
+ * Multi-Agent 세션 ID 가져오기 (없으면 새로 생성)
+ * @returns {Promise<string>} session_id
+ */
+export async function getOrCreateMultiAgentSession() {
+  let sessionId = localStorage.getItem(MULTI_AGENT_SESSION_KEY);
+  
+  if (!sessionId) {
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/multi-agent/session`, {
+        method: 'POST',
+        headers: headers,
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Multi-Agent 세션 생성 실패');
+      }
+      
+      const data = await response.json();
+      sessionId = data.session_id;
+      localStorage.setItem(MULTI_AGENT_SESSION_KEY, sessionId);
+      
+      console.log('✅ Multi-Agent 세션 생성:', sessionId);
+    } catch (error) {
+      console.error('❌ Multi-Agent 세션 생성 오류:', error);
+      throw error;
+    }
+  }
+  
+  return sessionId;
+}
+
+/**
+ * Multi-Agent 시스템에 메시지 전송
+ * @param {string} userMessage - 사용자 입력 메시지
+ * @returns {Promise<Object>} Multi-Agent 응답 객체
+ */
+export async function sendMultiAgentMessage(userMessage) {
+  try {
+    console.log('🤖 Multi-Agent 메시지 전송:', userMessage);
+    
+    // 세션 ID 가져오기
+    const sessionId = await getOrCreateMultiAgentSession();
+    
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/multi-agent/query`, {
+      method: 'POST',
+      headers: headers,
+      credentials: 'include',
+      body: JSON.stringify({
+        query: userMessage,
+        session_id: sessionId
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Multi-Agent API 호출 실패: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('🤖 Multi-Agent 응답:', result);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('❌ Multi-Agent API 오류:', error);
+    throw error;
+  }
+}
+
+/**
+ * 사용 가능한 에이전트 목록 조회
+ * @returns {Promise<Array>} 에이전트 목록
+ */
+export async function getAvailableAgents() {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/multi-agent/agents`, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error('에이전트 목록 조회 실패');
+    }
+    
+    const agents = await response.json();
+    console.log('📋 사용 가능한 에이전트:', agents);
+    
+    return agents;
+    
+  } catch (error) {
+    console.error('❌ 에이전트 목록 조회 오류:', error);
+    return [];
+  }
+}
+
+/**
+ * Multi-Agent 시스템 헬스 체크
+ * @returns {Promise<Object>} 헬스 체크 결과
+ */
+export async function checkMultiAgentHealth() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/multi-agent/health`, {
+      method: 'GET',
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error('헬스 체크 실패');
+    }
+    
+    const health = await response.json();
+    console.log('💚 Multi-Agent 헬스 체크:', health);
+    
+    return health;
+    
+  } catch (error) {
+    console.error('❌ 헬스 체크 오류:', error);
+    return { status: 'unhealthy', error: error.message };
   }
 }
 
