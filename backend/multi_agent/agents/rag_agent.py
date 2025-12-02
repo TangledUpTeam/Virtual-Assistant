@@ -8,14 +8,10 @@ RAG Agent
 from typing import Dict, Any, Optional
 from .base_agent import BaseAgent
 
-
+# HR/Insurance 문서 검색 에이전트
 class RAGAgent(BaseAgent):
-    """
-    문서 검색 및 질의응답 에이전트
-    
-    기존 RAGRetriever를 래핑하여 HR/Insurance 문서를 검색하고 답변합니다.
-    """
-    
+
+    # 초기화 함수
     def __init__(self):
         super().__init__(
             name="rag",
@@ -25,26 +21,19 @@ class RAGAgent(BaseAgent):
         # Lazy loading: 실제 사용 시에만 RAGRetriever 로드
         self._rag_retriever = None
     
+    # @property: 메소드를 변수처럼 사용할 수 있게 해주는 기능
     @property
     def rag_retriever(self):
-        """RAGRetriever lazy loading"""
+
         if self._rag_retriever is None:
             from app.domain.rag.HR.retriever import RAGRetriever
             # HR 컬렉션 사용
             self._rag_retriever = RAGRetriever(collection_name="hr_documents")
         return self._rag_retriever
     
+    # 문서 검색 및 답변을 생성해주는 비동기 함수
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
-        """
-        문서 검색 및 답변 생성
-        
-        Args:
-            query: 사용자 질문
-            context: 추가 컨텍스트 (top_k 등)
-            
-        Returns:
-            str: RAG 기반 답변
-        """
+
         try:
             from app.domain.rag.HR.schemas import QueryRequest
             
