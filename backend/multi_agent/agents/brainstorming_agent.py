@@ -34,47 +34,29 @@ class BrainstormingAgent(BaseAgent):
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
 
         try:
-            # 사용자가 명시적으로 시작을 원하거나, Supervisor가 강력하게 추천한 경우
-            # RAG 검색 대신 "제안" 모드로 응답
+            # Supervisor가 이 에이전트를 선택했다는 것은
+            # 사용자가 아이디어/브레인스토밍이 필요한 상황이라는 의미
+            # RAG 검색 없이 바로 브레인스토밍 도구 사용을 제안
             
-            # 간단한 키워드 체크로 시작 의도 파악
-            start_keywords = ["시작", "할래", "해줘", "켜줘", "열어줘", "고고", "좋아", "응"]
-            # 아이디어가 없거나 필요하다는 표현도 제안 트리거로 포함
-            need_keywords = ["떠오르지", "안 나", "막막해", "필요해", "없을까", "만들고", "하고싶", "안 떠올라", "굳었어", "떠올", "생각이", "아이디어"]
+            print(f"[BrainstormingAgent] 쿼리: {query}")
+            print(f"[BrainstormingAgent] 브레인스토밍 도구 제안 모드")
             
-            is_start_intent = any(k in query for k in start_keywords)
-            is_need_intent = any(k in query for k in need_keywords)
+            # 사용자의 쿼리에서 주제 추출 (간단하게)
+            # 예: "빵집 매출 증대 아이디어" -> "빵집 매출 증대"
+            topic_hint = ""
+            if "빵집" in query or "카페" in query or "가게" in query:
+                topic_hint = "관련 "
+            elif "마케팅" in query:
+                topic_hint = "마케팅 "
+            elif "프로젝트" in query or "기획" in query:
+                topic_hint = "프로젝트 "
             
-            if is_start_intent or is_need_intent:
-                return "SUGGESTION: 브레인스토밍 도구를 실행해서 아이디어를 발전시켜 볼까요?"
-            
-            # 컨텍스트에서 context_count 추출 (기본값: 3)
-            context_count = 3
-            if context and "context_count" in context:
-                context_count = context["context_count"]
-            
-            # 브레인스토밍 제안 생성 (RAG)
-            result = self.brainstorming_service.generate_suggestions(
-                query=query,
-                context_count=context_count
-            )
-            
-            # 제안과 출처 포함한 응답 생성
-            answer = result["suggestions"]
-            
-            # 출처 정보 추가
-            if result.get("sources"):
-                answer += "\n\n📚 **참고한 브레인스토밍 기법:**\n"
-                for source in result["sources"]:
-                    answer += f"- {source['title']} (유사도: {source['similarity']:.2f})\n"
-            
-            # 마지막에 제안 메시지 추가
-            answer += "\n\n💡 **브레인스토밍 도구를 실행할까요?**"
-            
-            return answer
+            # 간결한 제안 메시지 반환
+            return f"SUGGESTION: 브레인스토밍 도구로 {topic_hint}아이디어를 함께 만들어볼까요? 🚀"
             
         except Exception as e:
-            return f"브레인스토밍 제안 생성 중 오류가 발생했습니다: {str(e)}"
+            print(f"[BrainstormingAgent] 오류: {e}")
+            return f"브레인스토밍 제안 중 오류가 발생했습니다: {str(e)}"
     
     # 브레인스토밍 에이전트 기능 목록 리턴
     def get_capabilities(self) -> list:
