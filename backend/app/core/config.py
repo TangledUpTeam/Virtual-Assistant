@@ -8,8 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=True,
-        extra="ignore"  # 정의되지 않은 환경 변수 무시
+        case_sensitive=True
     )
     
     # Database
@@ -19,7 +18,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 15
     
     # OAuth - Google
     GOOGLE_CLIENT_ID: str
@@ -35,6 +34,11 @@ class Settings(BaseSettings):
     NAVER_CLIENT_ID: str
     NAVER_CLIENT_SECRET: str
     NAVER_REDIRECT_URI: str
+    
+    # OAuth - Slack (사용자 개인 연동)
+    SLACK_CLIENT_ID: str = ""
+    SLACK_CLIENT_SECRET: str = ""
+    SLACK_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/slack/callback"
     
     # OpenAI
     OPENAI_API_KEY: str

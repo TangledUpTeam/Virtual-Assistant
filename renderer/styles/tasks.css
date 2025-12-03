@@ -16,8 +16,8 @@
 
 .task-guide {
   padding: 10px 14px;
-  background: rgba(100, 150, 255, 0.1);
-  border-left: 3px solid rgba(100, 150, 255, 0.6);
+  background: rgba(156, 175, 136, 0.1);
+  border-left: 3px solid rgba(156, 175, 136, 0.6);
   border-radius: 8px;
   font-size: 13px;
   color: #555;
@@ -44,15 +44,15 @@
 }
 
 .task-card:hover {
-  border-color: rgba(100, 150, 255, 0.5);
-  box-shadow: 0 4px 12px rgba(100, 150, 255, 0.2);
+  border-color: rgba(156, 175, 136, 0.5);
+  box-shadow: 0 4px 12px rgba(156, 175, 136, 0.2);
   transform: translateY(-2px);
 }
 
 .task-card.selected {
-  border-color: rgba(100, 150, 255, 0.8);
-  background: rgba(100, 150, 255, 0.1);
-  box-shadow: 0 4px 16px rgba(100, 150, 255, 0.3);
+  border-color: rgba(156, 175, 136, 0.8);
+  background: rgba(156, 175, 136, 0.1);
+  box-shadow: 0 4px 16px rgba(156, 175, 136, 0.3);
 }
 
 .priority-badge {
@@ -141,10 +141,10 @@
 .task-custom-button {
   align-self: center;
   padding: 12px 24px;
-  border: 2px solid rgba(100, 150, 255, 0.6);
+  border: 2px solid rgba(156, 175, 136, 0.6);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.95);
-  color: rgba(100, 150, 255, 0.9);
+  color: rgba(156, 175, 136, 0.9);
   font-size: 14px;
   font-weight: 600;
   transition: all 0.2s;
@@ -154,8 +154,8 @@
 }
 
 .task-custom-button:hover {
-  background: rgba(100, 150, 255, 0.1);
-  border-color: rgba(100, 150, 255, 0.8);
+  background: rgba(156, 175, 136, 0.1);
+  border-color: rgba(156, 175, 136, 0.8);
   transform: translateY(-1px);
 }
 
@@ -209,8 +209,8 @@
 }
 
 .custom-task-input:focus {
-  border-color: rgba(100, 150, 255, 0.8);
-  box-shadow: 0 0 0 3px rgba(100, 150, 255, 0.1);
+  border-color: rgba(156, 175, 136, 0.8);
+  box-shadow: 0 0 0 3px rgba(156, 175, 136, 0.1);
 }
 
 .custom-task-save-btn:hover {
@@ -227,9 +227,7 @@
   right: 20px;
   top: 50%;
   transform: translateY(-50%);
-  width: 600px; /* 너비 확대: 400px -> 600px */
-  min-width: 500px; /* 최소 너비 설정 */
-  max-width: 90vw; /* 반응형: 화면 너비의 90%까지 */
+  width: 400px;
   max-height: 80vh;
   background: rgba(255, 255, 255, 0.98);
   border-radius: 16px;
@@ -241,14 +239,6 @@
   overflow: hidden;
   pointer-events: auto !important;
   isolation: isolate;
-  cursor: default; /* 기본 커서 */
-  user-select: none; /* 드래그 시 텍스트 선택 방지 */
-}
-
-/* 드래그 가능한 헤더 영역 */
-#report-panel h2 {
-  cursor: move; /* 드래그 커서 */
-  user-select: none;
 }
 
 /* ⭐⭐⭐ 핵심: 모든 하위 요소 강제 클릭 가능 */
@@ -282,7 +272,7 @@
 #report-panel h2 {
   margin: 0;
   padding: 20px;
-  background: linear-gradient(135deg, rgba(100, 150, 255, 0.1), rgba(80, 130, 235, 0.1));
+  background: linear-gradient(135deg, rgba(156, 175, 136, 0.1), rgba(136, 155, 116, 0.1));
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   font-size: 18px;
   font-weight: 600;
@@ -308,12 +298,12 @@
 }
 
 #report-messages::-webkit-scrollbar-thumb {
-  background: rgba(100, 150, 255, 0.4);
+  background: rgba(156, 175, 136, 0.4);
   border-radius: 4px;
 }
 
 #report-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 150, 255, 0.6);
+  background: rgba(156, 175, 136, 0.6);
 }
 
 #report-input-area {
@@ -339,15 +329,15 @@
 }
 
 #report-input:focus {
-  border-color: rgba(100, 150, 255, 0.6);
-  box-shadow: 0 0 0 3px rgba(100, 150, 255, 0.1);
+  border-color: rgba(156, 175, 136, 0.6);
+  box-shadow: 0 0 0 3px rgba(156, 175, 136, 0.1);
 }
 
 #report-send-btn {
   padding: 10px 20px;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(100, 150, 255, 0.9), rgba(80, 130, 235, 0.9));
+  background: linear-gradient(135deg, rgba(156, 175, 136, 0.9), rgba(136, 155, 116, 0.9));
   color: white;
   font-size: 14px;
   font-weight: 600;
@@ -357,7 +347,7 @@
 
 #report-send-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(100, 150, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(156, 175, 136, 0.3);
 }
 
 #report-send-btn:disabled {
@@ -385,18 +375,17 @@
 }
 
 #report-messages .bubble {
-  max-width: 85%; /* 너비 확대로 인한 조정 */
+  max-width: 80%;
   padding: 12px 16px;
   border-radius: 12px;
   font-size: 14px;
   line-height: 1.5;
   word-wrap: break-word;
   white-space: pre-wrap;
-  overflow-wrap: break-word; /* 긴 단어 줄바꿈 */
 }
 
 #report-messages .message.user .bubble {
-  background: linear-gradient(135deg, rgba(100, 150, 255, 0.9), rgba(80, 130, 235, 0.9));
+  background: linear-gradient(135deg, rgba(156, 175, 136, 0.9), rgba(136, 155, 116, 0.9));
   color: white;
   border-bottom-right-radius: 4px;
 }

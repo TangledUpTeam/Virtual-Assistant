@@ -2,7 +2,7 @@
 보고서 관련 스키마 정의
 """
 from enum import Enum
-from typing import List, Optional, Dict, Any, Literal, Union
+from typing import List, Optional, Dict, Any, Literal
 from datetime import date
 from pydantic import BaseModel, Field
 
@@ -12,7 +12,6 @@ class ReportType(str, Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
-    PERFORMANCE = "performance"
 
 
 # ========================================
@@ -35,10 +34,10 @@ class DailyReportSchema(BaseModel):
     """일일 업무 보고서 전체 구조"""
     문서제목: str = Field(default="일일 업무 보고서")
     상단정보: DailyReportHeader
-    금일_진행_업무: Union[str, List[str]] = Field(default="", description="금일 진행 업무 요약")
+    금일_진행_업무: str = Field(default="", description="금일 진행 업무 요약")
     세부업무: List[DailyWorkDetail] = Field(default_factory=list)
-    미종결_업무사항: Union[str, List[str]] = Field(default="", description="미종결 업무사항")
-    익일_업무계획: Union[str, List[str]] = Field(default="", description="익일 업무계획")
+    미종결_업무사항: str = Field(default="", description="미종결 업무사항")
+    익일_업무계획: str = Field(default="", description="익일 업무계획")
     특이사항: str = Field(default="", description="특이사항")
 
 
@@ -159,11 +158,40 @@ class PerformanceReportSchema(BaseModel):
 
 
 # ========================================
-# Canonical 스키마는 canonical_models.py로 이동
+# Canonical 스키마 (통합 보고서 스키마)
 # ========================================
-# 기존 CanonicalReport는 canonical_models.py의 새 구조로 대체됨
-# 하위 호환성을 위해 임시로 import 제공
-from app.domain.report.canonical_models import CanonicalReport
+class TaskItem(BaseModel):
+    """작업 항목"""
+    task_id: Optional[str] = Field(default=None, description="작업 ID")
+    title: str = Field(..., description="작업 제목")
+    description: str = Field(default="", description="작업 설명")
+    time_start: Optional[str] = Field(default=None, description="시작 시간 (HH:MM)")
+    time_end: Optional[str] = Field(default=None, description="종료 시간 (HH:MM)")
+    status: Optional[str] = Field(default=None, description="상태 (완료/진행중/미완료)")
+    note: str = Field(default="", description="비고")
+
+
+class KPIItem(BaseModel):
+    """KPI 항목"""
+    kpi_name: str = Field(..., description="KPI 이름")
+    value: str = Field(default="", description="값")
+    unit: Optional[str] = Field(default=None, description="단위")
+    category: Optional[str] = Field(default=None, description="카테고리")
+    note: str = Field(default="", description="비고")
+
+
+class CanonicalReport(BaseModel):
+    """통합 보고서 스키마"""
+    report_id: str = Field(..., description="보고서 ID")
+    report_type: Literal["daily", "weekly", "monthly"] = Field(..., description="보고서 타입")
+    owner: str = Field(default="", description="작성자")
+    period_start: Optional[date] = Field(default=None, description="시작 일자")
+    period_end: Optional[date] = Field(default=None, description="종료 일자")
+    tasks: List[TaskItem] = Field(default_factory=list, description="작업 목록")
+    kpis: List[KPIItem] = Field(default_factory=list, description="KPI 목록 (월간보고서용)")
+    issues: List[str] = Field(default_factory=list, description="이슈/미종결 사항")
+    plans: List[str] = Field(default_factory=list, description="계획 사항")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="추가 메타데이터")
 
 
 # ========================================

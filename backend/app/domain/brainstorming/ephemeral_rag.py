@@ -1,72 +1,81 @@
 """
-임시 RAG (Ephemeral RAG) 모듈
+임시 RAG (Ephemeral RAG) 모듈 - JSON 기반
 
-세션별 임시 데이터를 처리합니다:
+세션별 임시 데이터를 JSON 파일로 처리합니다:
 1. Q3 자유연상 입력을 임베딩
-2. 임시 ChromaDB 컬렉션에 저장
+2. JSON 파일에 저장 (눈으로 확인 가능!)
 3. Q1 목적과 Q3 연상 간의 코사인 유사도 기반 키워드 추출
 4. 영구 RAG (SCAMPER, Mind Mapping, Starbursting)와 결합하여 아이디어 생성
+
+변경사항 (2024-11-30):
+- ChromaDB → JSON 파일 기반으로 변경
+- 데이터가 눈에 보이고 디버깅이 쉬워짐
+- 세션별로 data/ephemeral/{session_id}/associations.json에 저장
 """
 
 import json
+import numpy as np
 from pathlib import Path
 from typing import List, Dict, Optional
-import chromadb
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+import shutil
 
 
 class EphemeralRAG:
     """
-    세션별 임시 RAG 처리 클래스
+    세션별 임시 RAG 처리 클래스 (JSON 기반)
     
-    각 세션마다 독립적인 ChromaDB 컬렉션을 생성하고,
+    각 세션마다 독립적인 JSON 파일을 생성하고,
     Q3 자유연상 데이터를 임베딩하여 저장합니다.
     """
     
-    def __init__(self, session_id: str, collection_name: str, chroma_client=None):
+    def __init__(self, session_id: str):
         """
         초기화
         
         Args:
             session_id: 세션 ID
-            collection_name: ChromaDB 컬렉션 이름 (예: ephemeral_session_xxx)
-            chroma_client: 기존 ChromaDB 클라이언트 (선택적, 없으면 새로 생성)
         """
         # .env 파일 로드
         load_dotenv()
         
         self.session_id = session_id
-        self.collection_name = collection_name
         
         # OpenAI 클라이언트 초기화
         self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
         
-        # ChromaDB 클라이언트 (전달받거나 새로 생성)
-        if chroma_client:
-            self.chroma_client = chroma_client
-            print(f"✅ 기존 ChromaDB 클라이언트 재사용")
-        else:
-            # ChromaDB 클라이언트 초기화 (영구 RAG와 동일한 persist directory 사용)
-            current_file = Path(__file__).resolve()
-            module_dir = current_file.parent
-            self.persist_directory = str(module_dir / "data" / "chroma")
-            
-            self.chroma_client = chromadb.PersistentClient(path=self.persist_directory)
-            print(f"✅ 새 ChromaDB 클라이언트 생성")
+        # 세션별 디렉토리 경로 설정
+        current_file = Path(__file__).resolve()
+        module_dir = current_file.parent
+        self.ephemeral_dir = module_dir / "data" / "ephemeral" / session_id
+        self.json_path = self.ephemeral_dir / "associations.json"
         
-        # 임시 컬렉션 생성 (이미 존재하면 가져오기)
-        try:
-            self.collection = self.chroma_client.get_collection(name=self.collection_name)
-            print(f"✅ 기존 임시 컬렉션 로드: {self.collection_name}")
-        except:
-            self.collection = self.chroma_client.create_collection(
-                name=self.collection_name,
-                metadata={"session_id": session_id, "type": "ephemeral"}
-            )
-            print(f"✅ 새 임시 컬렉션 생성: {self.collection_name}")
+        # 디렉토리 생성
+        self.ephemeral_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 데이터 로드 또는 초기화
+        self.data = self._load_data()
+        
+        print(f"✅ Ephemeral RAG 초기화 (JSON 기반)")
+        print(f"   📁 저장 경로: {self.json_path}")
+    
+    def _load_data(self) -> Dict:
+        """JSON 파일에서 데이터 로드"""
+        if self.json_path.exists():
+            with open(self.json_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {
+            "session_id": self.session_id,
+            "associations": []  # [{text, embedding}, ...]
+        }
+    
+    def _save_data(self):
+        """JSON 파일에 데이터 저장"""
+        with open(self.json_path, 'w', encoding='utf-8') as f:
+            json.dump(self.data, f, ensure_ascii=False, indent=2)
     
     def embed_text(self, text: str) -> List[float]:
         """
@@ -88,9 +97,15 @@ class EphemeralRAG:
             print(f"❌ 임베딩 실패: {e}")
             raise
     
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """코사인 유사도 계산"""
+        a = np.array(vec1)
+        b = np.array(vec2)
+        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+    
     def add_associations(self, associations: List[str]) -> bool:
         """
-        Q3 자유연상 데이터를 임베딩하여 임시 컬렉션에 추가
+        Q3 자유연상 데이터를 임베딩하여 JSON에 추가
         
         Args:
             associations: 자유연상 단어/문구 리스트
@@ -99,33 +114,20 @@ class EphemeralRAG:
             bool: 성공 여부
         """
         try:
-            documents = []
-            embeddings = []
-            ids = []
-            metadatas = []
-            
-            for idx, association in enumerate(associations):
+            for association in associations:
                 # 임베딩 생성
                 embedding = self.embed_text(association)
                 
-                documents.append(association)
-                embeddings.append(embedding)
-                ids.append(f"assoc_{idx}")
-                metadatas.append({
-                    "type": "q3_association",
-                    "index": idx,
-                    "session_id": self.session_id
+                self.data["associations"].append({
+                    "text": association,
+                    "embedding": embedding
                 })
             
-            # ChromaDB에 추가
-            self.collection.add(
-                documents=documents,
-                embeddings=embeddings,
-                ids=ids,
-                metadatas=metadatas
-            )
+            # JSON 파일에 저장
+            self._save_data()
             
-            print(f"✅ {len(associations)}개의 연상 단어를 임시 컬렉션에 추가했습니다.")
+            print(f"✅ {len(associations)}개의 연상 단어를 JSON에 저장했습니다.")
+            print(f"   📄 파일: {self.json_path}")
             return True
             
         except Exception as e:
@@ -141,27 +143,28 @@ class EphemeralRAG:
             top_k: 추출할 상위 키워드 개수
             
         Returns:
-            List[Dict]: 상위 키워드 리스트 (각각 document, distance 포함)
+            List[Dict]: 상위 키워드 리스트 (각각 keyword, similarity 포함)
         """
         try:
+            if not self.data["associations"]:
+                print("⚠️ 저장된 연상 단어가 없습니다.")
+                return []
+            
             # Q1 목적 임베딩
             purpose_embedding = self.embed_text(purpose)
             
-            # ChromaDB에서 유사도 기반 검색
-            results = self.collection.query(
-                query_embeddings=[purpose_embedding],
-                n_results=top_k
-            )
+            # 모든 연상 단어와 유사도 계산
+            similarities = []
+            for item in self.data["associations"]:
+                similarity = self._cosine_similarity(purpose_embedding, item["embedding"])
+                similarities.append({
+                    "keyword": item["text"],
+                    "similarity": similarity
+                })
             
-            keywords = []
-            if results['documents'] and len(results['documents'][0]) > 0:
-                for i in range(len(results['documents'][0])):
-                    keywords.append({
-                        'keyword': results['documents'][0][i],
-                        'distance': results['distances'][0][i] if results['distances'] else None,
-                        'similarity': 1 - results['distances'][0][i] if results['distances'] else None,
-                        'metadata': results['metadatas'][0][i] if results['metadatas'] else None
-                    })
+            # 유사도 기준 정렬 후 상위 k개 추출
+            similarities.sort(key=lambda x: x["similarity"], reverse=True)
+            keywords = similarities[:top_k]
             
             print(f"\n✅ Q1과 가장 유사한 상위 {len(keywords)}개 키워드:")
             for i, kw in enumerate(keywords, 1):
@@ -175,7 +178,7 @@ class EphemeralRAG:
     
     def search_associations(self, query: str, n_results: int = 5) -> List[Dict]:
         """
-        임시 컬렉션에서 연상 단어 검색
+        저장된 연상 단어에서 검색
         
         Args:
             query: 검색 쿼리
@@ -185,123 +188,177 @@ class EphemeralRAG:
             List[Dict]: 검색 결과 리스트
         """
         try:
+            if not self.data["associations"]:
+                return []
+            
             query_embedding = self.embed_text(query)
             
-            results = self.collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results
-            )
+            # 모든 연상 단어와 유사도 계산
+            results = []
+            for item in self.data["associations"]:
+                similarity = self._cosine_similarity(query_embedding, item["embedding"])
+                results.append({
+                    "document": item["text"],
+                    "similarity": similarity
+                })
             
-            search_results = []
-            if results['documents'] and len(results['documents'][0]) > 0:
-                for i in range(len(results['documents'][0])):
-                    search_results.append({
-                        'document': results['documents'][0][i],
-                        'distance': results['distances'][0][i] if results['distances'] else None,
-                        'metadata': results['metadatas'][0][i] if results['metadatas'] else None
-                    })
-            
-            return search_results
+            # 유사도 기준 정렬 후 상위 n개 반환
+            results.sort(key=lambda x: x["similarity"], reverse=True)
+            return results[:n_results]
             
         except Exception as e:
             print(f"❌ 검색 실패: {e}")
             return []
     
-    def delete_collection(self) -> bool:
+    def delete_session_data(self) -> bool:
         """
-        임시 컬렉션 삭제
-        
-        세션 종료 시 호출하여 임시 데이터를 완전히 제거합니다.
+        세션 데이터 삭제 (폴더 전체 삭제)
         
         Returns:
             bool: 성공 여부
         """
         try:
-            self.chroma_client.delete_collection(name=self.collection_name)
-            print(f"✅ 임시 컬렉션 삭제 완료: {self.collection_name}")
+            if self.ephemeral_dir.exists():
+                shutil.rmtree(self.ephemeral_dir)
+                print(f"✅ 세션 데이터 삭제 완료: {self.ephemeral_dir}")
             return True
         except Exception as e:
-            print(f"❌ 컬렉션 삭제 실패: {e}")
+            print(f"❌ 세션 데이터 삭제 실패: {e}")
             return False
     
-    def get_collection_count(self) -> int:
+    def get_association_count(self) -> int:
         """
-        컬렉션에 저장된 항목 개수 조회
+        저장된 연상 단어 개수 조회
         
         Returns:
             int: 항목 개수
         """
-        try:
-            return self.collection.count()
-        except:
-            return 0
+        return len(self.data.get("associations", []))
+    
+    def get_all_associations(self) -> List[str]:
+        """
+        저장된 모든 연상 단어 텍스트 반환 (임베딩 제외)
+        
+        Returns:
+            List[str]: 연상 단어 리스트
+        """
+        return [item["text"] for item in self.data.get("associations", [])]
 
 
+# ============================================================
+# 유틸리티 함수들
+# ============================================================
+
+def cleanup_old_sessions(max_age_seconds: int = 3600) -> int:
+    """
+    오래된 세션 데이터 정리
+    
+    Args:
+        max_age_seconds: 이 시간(초)보다 오래된 세션 삭제
+        
+    Returns:
+        int: 삭제된 세션 수
+    """
+    import time
+    
+    current_file = Path(__file__).resolve()
+    module_dir = current_file.parent
+    ephemeral_base = module_dir / "data" / "ephemeral"
+    
+    if not ephemeral_base.exists():
+        return 0
+    
+    deleted_count = 0
+    current_time = time.time()
+    
+    for session_dir in ephemeral_base.iterdir():
+        if session_dir.is_dir():
+            # 디렉토리 수정 시간 확인
+            dir_mtime = session_dir.stat().st_mtime
+            age = current_time - dir_mtime
+            
+            if age > max_age_seconds:
+                try:
+                    shutil.rmtree(session_dir)
+                    print(f"🧹 오래된 세션 삭제: {session_dir.name}")
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"❌ 세션 삭제 실패 ({session_dir.name}): {e}")
+    
+    print(f"✅ 총 {deleted_count}개의 오래된 세션을 청소했습니다.")
+    return deleted_count
+
+
+def get_session_data_path(session_id: str) -> Path:
+    """
+    세션 데이터 경로 반환
+    
+    Args:
+        session_id: 세션 ID
+        
+    Returns:
+        Path: 세션 데이터 경로
+    """
+    current_file = Path(__file__).resolve()
+    module_dir = current_file.parent
+    return module_dir / "data" / "ephemeral" / session_id / "associations.json"
+
+
+# ============================================================
 # 테스트 코드
+# ============================================================
+
 if __name__ == "__main__":
     import sys
     sys.path.append(str(Path(__file__).resolve().parent))
-    from session_manager import SessionManager
     
     print("=" * 60)
-    print("임시 RAG 테스트")
+    print("임시 RAG 테스트 (JSON 기반)")
     print("=" * 60)
     
-    # 1. 세션 생성
-    print("\n[1] 세션 생성")
-    manager = SessionManager()
-    session_id = manager.create_session()
-    session = manager.get_session(session_id)
-    print(f"    세션 ID: {session_id}")
-    print(f"    컬렉션 이름: {session['chroma_collection']}")
+    # 테스트용 세션 ID
+    test_session_id = "test_session_001"
     
-    # 2. Ephemeral RAG 초기화
-    print("\n[2] Ephemeral RAG 초기화")
-    ephemeral_rag = EphemeralRAG(
-        session_id=session_id,
-        collection_name=session['chroma_collection']
-    )
+    # 1. Ephemeral RAG 초기화
+    print("\n[1] Ephemeral RAG 초기화")
+    ephemeral_rag = EphemeralRAG(session_id=test_session_id)
     
-    # 3. Q1 목적 설정
-    print("\n[3] Q1 목적 설정")
+    # 2. Q1 목적 설정
+    print("\n[2] Q1 목적 설정")
     q1_purpose = "건강 관리 모바일 앱 아이디어"
-    manager.update_session(session_id, {'q1_purpose': q1_purpose})
     print(f"    Q1: {q1_purpose}")
     
-    # 4. Q3 자유연상 추가
-    print("\n[4] Q3 자유연상 추가")
+    # 3. Q3 자유연상 추가
+    print("\n[3] Q3 자유연상 추가")
     q3_associations = [
         "운동", "식단", "수면", "스트레칭", "요가",
-        "칼로리", "걸음 수", "심박수", "명상", "물 마시기",
-        "체중 기록", "목표 설정", "친구와 경쟁", "보상", "알림"
+        "칼로리", "걸음 수", "심박수", "명상", "물 마시기"
     ]
-    manager.update_session(session_id, {'q3_associations': q3_associations})
     ephemeral_rag.add_associations(q3_associations)
     print(f"    추가된 연상 단어: {len(q3_associations)}개")
-    print(f"    컬렉션 항목 수: {ephemeral_rag.get_collection_count()}개")
+    print(f"    저장된 항목 수: {ephemeral_rag.get_association_count()}개")
     
-    # 5. Q1과 Q3 간 유사도 기반 키워드 추출
-    print("\n[5] Q1-Q3 유사도 기반 키워드 추출")
-    top_keywords = ephemeral_rag.extract_keywords_by_similarity(q1_purpose, top_k=7)
+    # 4. Q1과 Q3 간 유사도 기반 키워드 추출
+    print("\n[4] Q1-Q3 유사도 기반 키워드 추출")
+    top_keywords = ephemeral_rag.extract_keywords_by_similarity(q1_purpose, top_k=5)
     
-    # 6. 특정 쿼리로 검색
-    print("\n[6] 특정 쿼리로 검색")
+    # 5. 특정 쿼리로 검색
+    print("\n[5] 특정 쿼리로 검색")
     search_query = "운동과 관련된 기능"
     search_results = ephemeral_rag.search_associations(search_query, n_results=3)
     print(f"    검색 쿼리: {search_query}")
     for i, result in enumerate(search_results, 1):
-        print(f"    {i}. {result['document']} (거리: {result['distance']:.4f})")
+        print(f"    {i}. {result['document']} (유사도: {result['similarity']:.4f})")
     
-    # 7. 임시 컬렉션 삭제
-    print("\n[7] 임시 컬렉션 삭제")
-    ephemeral_rag.delete_collection()
+    # 6. JSON 파일 확인
+    print("\n[6] JSON 파일 확인")
+    print(f"    📄 {ephemeral_rag.json_path}")
+    print(f"    👀 파일을 직접 열어서 내용을 확인할 수 있습니다!")
     
-    # 8. 세션 삭제
-    print("\n[8] 세션 삭제")
-    manager.delete_session(session_id)
-    print(f"    남은 세션 수: {manager.get_session_count()}개")
+    # 7. 세션 데이터 삭제
+    print("\n[7] 세션 데이터 삭제")
+    ephemeral_rag.delete_session_data()
     
     print("\n" + "=" * 60)
     print("✅ 테스트 완료")
     print("=" * 60)
-

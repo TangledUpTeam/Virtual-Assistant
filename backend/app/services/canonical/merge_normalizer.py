@@ -16,7 +16,6 @@ from typing import Dict, Any
 from datetime import date
 
 from app.domain.report.schemas import CanonicalReport, TaskItem, KPIItem
-from app.domain.kpi.schemas import CanonicalKPI
 from app.domain.common.canonical_schema import (
     UnifiedCanonical,
     DocumentSections,
@@ -76,8 +75,7 @@ def report_to_unified(canonical_report: CanonicalReport) -> UnifiedCanonical:
     title_map = {
         "daily": "일일 업무 보고서",
         "weekly": "주간 업무 보고서",
-        "monthly": "월간 업무 보고서",
-        "performance": "분기별 실적 보고서"
+        "monthly": "월간 업무 보고서"
     }
     title = title_map.get(doc_type, "업무 보고서")
     
@@ -376,17 +374,4 @@ def batch_convert_reports(
     return [report_to_unified(report) for report in canonical_reports]
 
 
-def batch_convert_kpis(
-    canonical_kpis: list[CanonicalKPI]
-) -> list[UnifiedCanonical]:
-    """
-    여러 KPI를 한 번에 변환
-    
-    Args:
-        canonical_kpis: CanonicalKPI 리스트
-        
-    Returns:
-        UnifiedCanonical 리스트
-    """
-    return [kpi_to_unified(kpi) for kpi in canonical_kpis]
 

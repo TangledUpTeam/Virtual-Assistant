@@ -12,26 +12,25 @@ from typing import Dict, Any, Optional
 COUNCEL_DIR = Path(__file__).parent.parent.parent.parent / "councel"
 sys.path.insert(0, str(COUNCEL_DIR))
 
+# RAG 심리 상담 시스템 메인코드 임포트
 from sourcecode.persona.rag_therapy import RAGTherapySystem
 
-
+# 심리 상담 서비스 클래스(싱글톤 인스턴스)
 class TherapyService:
-    """
-    심리 상담 서비스 (싱글톤)
     
-    RAGTherapySystem을 래핑하여 FastAPI 엔드포인트에서 사용할 수 있도록 합니다.
-    """
+    _instance: Optional['TherapyService'] = None # 심리 상담 서비스 인스턴스
+    _rag_system: Optional[RAGTherapySystem] = None # RAG 심리 상담 시스템 인스턴스
     
-    _instance: Optional['TherapyService'] = None
-    _rag_system: Optional[RAGTherapySystem] = None
-    
+    # 심리 상담 시스템 인스턴스 생성
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
+    # 시스템 초기화 함수
     def __init__(self):
-        """서비스 초기화"""
+
+        # RAG 심리 상담 시스템이 없으면 초기화
         if self._rag_system is None:
             # Vector DB 경로 설정
             base_dir = Path(__file__).parent.parent.parent.parent
@@ -40,41 +39,28 @@ class TherapyService:
             try:
                 # RAG 상담 시스템 초기화
                 self._rag_system = RAGTherapySystem(str(vector_db_dir))
-                print("✅ RAG 심리 상담 시스템 초기화 완료")
             except Exception as e:
-                print(f"⚠️  RAG 심리 상담 시스템 초기화 실패: {e}")
+                print(f"RAG 심리 상담 시스템 초기화 실패: {e}")
                 self._rag_system = None
     
+    # 상담 시스템 사용 가능 여부 확인
     def is_available(self) -> bool:
-        """
-        상담 시스템 사용 가능 여부 확인
-        
-        Returns:
-            bool: 사용 가능 여부
-        """
+
+        # RAG 심리 상담 시스템이 있으면 True, 없으면 False
         return self._rag_system is not None
     
-    def chat(self, user_input: str) -> Dict[str, Any]:
-        """
-        사용자 입력을 받아 상담 응답 생성
-        
-        Args:
-            user_input: 사용자 입력 메시지
-            
-        Returns:
-            Dict[str, Any]: {
-                "answer": str,
-                "used_chunks": List[str],
-                "mode": str,
-                "continue_conversation": bool
-            }
-        """
+    # 상담 응답 생성
+    # 사용자의 입력을 받아 응답 생성 -> RAG 심리 상담 시스템의 chat 함수 호출
+    def chat(self, user_input: str, enable_scoring: bool = True) -> Dict[str, Any]:
+
+        # 상담 시스템 사용 가능 여부가 불가능하면 return 반환
         if not self.is_available():
             return {
                 "answer": "죄송합니다. 심리 상담 시스템이 현재 사용 불가능합니다.",
                 "used_chunks": [],
                 "mode": "error",
-                "continue_conversation": False
+                "continue_conversation": False,
+                "scoring": None,
             }
         
         try:
@@ -82,11 +68,14 @@ class TherapyService:
             response = self._rag_system.chat(user_input)
             return response
         except Exception as e:
-            print(f"❌ 상담 처리 중 오류: {e}")
+            print(f"상담 처리 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "answer": f"죄송합니다. 상담 처리 중 오류가 발생했습니다: {str(e)}",
                 "used_chunks": [],
                 "mode": "error",
-                "continue_conversation": True
+                "continue_conversation": True,
+                "scoring": None,
             }
 

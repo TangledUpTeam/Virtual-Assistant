@@ -14,20 +14,24 @@ from sqlalchemy.orm import Session
 from pathlib import Path
 import os
 
-from app.domain.daily.fsm_state import DailyFSMContext
-from app.domain.daily.time_slots import generate_time_slots
-from app.domain.daily.task_parser import TaskParser
-from app.domain.daily.daily_fsm import DailyReportFSM
-from app.domain.daily.daily_builder import build_daily_report
-from app.domain.daily.session_manager import get_session_manager
-from app.domain.daily.main_tasks_store import get_main_tasks_store
-from app.domain.daily.repository import DailyReportRepository
-from app.domain.daily.schemas import DailyReportCreate
+from app.domain.report.daily.fsm_state import DailyFSMContext
+from app.domain.report.daily.time_slots import generate_time_slots
+from app.domain.report.daily.task_parser import TaskParser
+from app.domain.report.daily.daily_fsm import DailyReportFSM
+from app.domain.report.daily.daily_builder import build_daily_report
+from app.domain.report.daily.session_manager import get_session_manager
+from app.domain.report.daily.main_tasks_store import get_main_tasks_store
+from app.domain.report.daily.repository import DailyReportRepository
+from app.domain.report.daily.schemas import DailyReportCreate
 from app.llm.client import get_llm
-from app.domain.report.schemas import CanonicalReport
+from app.domain.common.canonical_schema import CanonicalReport
 from app.infrastructure.database.session import get_db
 from app.reporting.pdf_generator.daily_report_pdf import DailyReportPDFGenerator
-from ingestion.auto_ingest import ingest_single_report
+from app.reporting.html_renderer import render_report_html
+from app.domain.report.core.chunker import chunk_canonical_report
+from app.domain.report.core.embedding_pipeline import EmbeddingPipeline
+from app.infrastructure.vector_store_report import get_report_vector_store
+from urllib.parse import quote
 
 
 router = APIRouter(prefix="/daily", tags=["daily"])
@@ -66,6 +70,11 @@ class DailyAnswerResponse(BaseModel):
     message: Optional[str] = Field(None, description="완료 메시지 (finished 시)")
     meta: Optional[Dict[str, Any]] = Field(None, description="메타 정보")
     report: Optional[CanonicalReport] = Field(None, description="완료 시 보고서")
+    # 구조화된 응답 (finished 시)
+    role: Optional[str] = Field(None, description="assistant")
+    type: Optional[str] = Field(None, description="daily_report")
+    period: Optional[Dict[str, Any]] = Field(None, description="기간 정보")
+    report_data: Optional[Dict[str, Any]] = Field(None, description="보고서 데이터 (html_url 포함)")
 
 
 @router.post("/start", response_model=DailyStartResponse)
@@ -198,22 +207,23 @@ async def answer_daily_question(
                     existing_json = existing_report.report_json.copy()
                     report_dict = report.model_dump(mode='json')
                     
-                    # 🔥 병합 전략:
-                    # - plans: existing에서 가져옴 (예정 업무는 select_main_tasks에서 이미 저장됨)
-                    # - tasks: new에서 가져옴 (실제 완료 업무는 FSM에서 입력됨)
-                    # - issues: new에서 가져옴 (미종결 업무)
-                    # - metadata: 병합
+                    # 기존 금일 진행 업무 + FSM 시간대별 업무 병합
+                    existing_tasks = existing_json.get("tasks", [])
+                    new_tasks = report_dict.get("tasks", [])
                     
-                    existing_plans = existing_json.get("plans", [])
-                    new_tasks = report_dict.get("tasks", [])  # 실제 완료 업무만
+                    # 중복 제거: task_id 기준
+                    merged_tasks = existing_tasks.copy()
+                    existing_ids = {t.get("task_id") for t in existing_tasks if t.get("task_id")}
+                    
+                    for task in new_tasks:
+                        if task.get("task_id") not in existing_ids:
+                            merged_tasks.append(task)
                     
                     # 병합된 데이터 생성
                     merged_json = {
                         **report_dict,
-                        "plans": existing_plans if existing_plans else report_dict.get("plans", []),  # 🔥 예정 업무 유지
-                        "tasks": new_tasks,  # 🔥 실제 완료 업무만
+                        "tasks": merged_tasks,
                         "metadata": {
-                            **existing_json.get("metadata", {}),
                             **report_dict.get("metadata", {}),
                             "status": "completed",
                             "merged": True
@@ -227,9 +237,7 @@ async def answer_daily_question(
                         DailyReportUpdate(report_json=merged_json)
                     )
                     
-                    print(f"💾 운영 DB 병합 완료: {report.owner} - {report.period_start}")
-                    print(f"   - 예정 업무(plans): {len(existing_plans)}개")
-                    print(f"   - 실제 완료(tasks): {len(new_tasks)}개")
+                    print(f"💾 운영 DB 병합 완료: {report.owner} - {report.period_start} (tasks: {len(merged_tasks)}개)")
                     is_created = False
                 else:
                     # 기존 보고서가 없으면 새로 생성
@@ -251,34 +259,67 @@ async def answer_daily_question(
                 
                 # 🔥 PDF 자동 생성 및 저장
                 try:
-                    # PDF 생성 (파일명만 지정, 경로는 Generator가 처리)
+                    # PDF 저장 디렉토리 생성
+                    pdf_dir = Path("output/report_result/daily")
+                    pdf_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # PDF 파일명 생성
                     pdf_filename = f"{report.owner}_{report.period_start}_일일보고서.pdf"
+                    pdf_path = pdf_dir / pdf_filename
                     
+                    # PDF 생성
                     pdf_generator = DailyReportPDFGenerator()
-                    pdf_bytes = pdf_generator.generate(report, pdf_filename)
+                    pdf_generator.generate(report, str(pdf_path))
                     
-                    print(f"📄 일일 보고서 PDF 생성 완료: backend/output/report_result/daily/{pdf_filename}")
+                    print(f"📄 일일 보고서 PDF 생성 완료: {pdf_path}")
                 except Exception as pdf_error:
                     print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
                 
-                # 🔥 벡터 DB 자동 저장 (비동기 작업, 실패해도 계속 진행)
+                # 🔥 HTML 생성 및 저장
+                html_path = None
+                html_url = None
+                html_filename = None
+                try:
+                    html_path = render_report_html(
+                        report_type="daily",
+                        data=report.model_dump(mode='json'),
+                        output_filename=f"일일보고서_{report.owner}_{report.period_start}.html"
+                    )
+                    
+                    html_filename = html_path.name
+                    html_url = f"/static/reports/{quote(html_filename)}"
+                    print(f"📄 일일 보고서 HTML 생성 완료: {html_path}")
+                except Exception as html_error:
+                    print(f"⚠️  HTML 생성 실패 (보고서는 저장됨): {str(html_error)}")
+                
+                # 🔥 벡터 DB 자동 저장 (신규 청킹 방식)
                 try:
                     print(f"⏳ 벡터 DB 저장 시작...")
                     
-                    # 최종 보고서 가져오기 (병합된 버전)
-                    final_report_json = db_report.report_json
-                    final_report = CanonicalReport(**final_report_json)
+                    # 1. 신규 청킹 (의미 단위)
+                    chunks = chunk_canonical_report(report)
                     
-                    # 자동 인제스트 함수 호출
-                    result = ingest_single_report(
-                        report=final_report,
-                        api_key=os.getenv("OPENAI_API_KEY")
-                    )
-                    
-                    if result["success"]:
-                        print(f"✅ 벡터 DB 저장 완료: {result.get('uploaded_chunks', 0)}개 청크")
+                    if chunks:
+                        # 메타데이터 정리 (None 값 제거)
+                        for chunk in chunks:
+                            metadata = chunk["metadata"]
+                            metadata_cleaned = {k: v for k, v in metadata.items() if v is not None}
+                            chunk["metadata"] = metadata_cleaned
+                        
+                        # 2. 임베딩 생성 및 저장
+                        vector_store = get_report_vector_store()
+                        embedding_pipeline = EmbeddingPipeline(vector_store=vector_store)
+                        
+                        texts = [chunk["text"] for chunk in chunks]
+                        embeddings = embedding_pipeline.embed_texts(texts, batch_size=50)
+                        
+                        # 3. ChromaDB 저장
+                        vector_store.insert_chunks(chunks, embeddings)
+                        
+                        collection = vector_store.get_collection()
+                        print(f"✅ 벡터 DB 저장 완료: {len(chunks)}개 청크 (collection: reports)")
                     else:
-                        print(f"⚠️  벡터 DB 저장 실패: {result.get('message', 'Unknown error')}")
+                        print(f"⚠️  청크가 생성되지 않음 (벡터 DB 저장 건너뜀)")
                 
                 except Exception as vector_error:
                     print(f"⚠️  벡터 DB 저장 실패 (보고서는 저장됨): {str(vector_error)}")
@@ -290,11 +331,25 @@ async def answer_daily_question(
             # 세션 삭제
             session_manager.delete_session(request.session_id)
             
+            # 완료된 업무 수 계산
+            done_tasks = len(report.tasks) if report.tasks else 0
+            
             return DailyAnswerResponse(
                 status="finished",
                 session_id=request.session_id,
                 message="모든 시간대 입력이 완료되었습니다. 오늘 일일보고서를 정리했어요.",
-                report=report
+                report=report,
+                role="assistant",
+                type="daily_report",
+                period={
+                    "start": str(report.period_start),
+                    "end": str(report.period_end),
+                    "done_tasks": done_tasks
+                },
+                report_data={
+                    "url": html_url,
+                    "file_name": html_filename
+                } if html_url else None
             )
         else:
             # 다음 질문 반환
@@ -378,19 +433,16 @@ async def select_main_tasks(
             )
             
             if existing_report:
-                # 기존 보고서가 있으면 plans만 업데이트 (append 모드 고려)
+                # 기존 보고서가 있으면 tasks만 업데이트 (append 모드 고려)
                 report_json = existing_report.report_json.copy()
                 
-                # 🔥 예정 업무는 plans에 저장 (tasks는 실제 완료 업무용)
-                new_plan_titles = [task.get("title", "") for task in request.main_tasks if task.get("title")]
-                
-                if request.append and "plans" in report_json:
-                    # 기존 plans에 추가
-                    existing_plans = report_json.get("plans", [])
-                    report_json["plans"] = existing_plans + new_plan_titles
+                if request.append and "tasks" in report_json:
+                    # 기존 tasks에 추가
+                    existing_tasks = report_json.get("tasks", [])
+                    report_json["tasks"] = existing_tasks + request.main_tasks
                 else:
                     # 덮어쓰기
-                    report_json["plans"] = new_plan_titles
+                    report_json["tasks"] = request.main_tasks
                 
                 report_json["metadata"] = report_json.get("metadata", {})
                 report_json["metadata"]["status"] = "in_progress"
@@ -404,16 +456,15 @@ async def select_main_tasks(
                 print(f"💾 금일 진행 업무 업데이트 완료: {request.owner} - {request.target_date}")
             else:
                 # 새로운 부분 보고서 생성
-                # 🔥 예정 업무는 plans에 저장 (tasks는 실제 완료 업무용)
                 partial_report = {
                     "report_type": "daily",
                     "owner": request.owner,
                     "period_start": request.target_date.isoformat(),
                     "period_end": request.target_date.isoformat(),
-                    "tasks": [],  # 🔥 비어있음 (FSM 완료 시 실제 완료 업무로 채워짐)
+                    "tasks": request.main_tasks,
                     "kpis": [],
                     "issues": [],
-                    "plans": [task.get("title", "") for task in request.main_tasks if task.get("title")],  # 🔥 예정 업무
+                    "plans": [],
                     "metadata": {"status": "in_progress", "main_tasks_only": True}
                 }
                 

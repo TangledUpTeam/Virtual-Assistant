@@ -100,7 +100,7 @@ export function initReportPanel() {
   }
   
   // 초기 메시지 추가
-  addMessage('assistant', '📝 보고서 & 업무 관리를 도와드립니다!\n\n• "오늘 추천 업무" - 업무 추천\n• "일일 보고서" - 일일 보고서 작성\n• "주간 보고서" - 주간 보고서 생성\n• "월간 보고서" - 월간 보고서 생성\n• "실적 보고서" - 연간 실적 보고서 생성\n• "날짜 설정" - 과거 기간 보고서 작성\n\n💬 **일일보고서 데이터 검색 챗봇**\n자연어로 질문하면 1년치 일일보고서 데이터를 검색해 답변합니다!\n예: "나 최근에 연금 상담 언제 했었지?"');
+  addMessage('assistant', '📝 보고서 & 업무 관리를 도와드립니다!\n\n• "오늘 추천 업무" - 업무 추천\n• "일일 보고서" - 일일 보고서 작성\n• "주간 보고서" - 주간 보고서 생성\n• "월간 보고서" - 월간 보고서 생성\n• "실적 보고서" - 연간 실적 보고서 생성\n• "날짜 설정" - 과거 기간 보고서 작성');
   
   // 이벤트 리스너 등록
   sendBtn.addEventListener('click', () => {
@@ -115,9 +115,6 @@ export function initReportPanel() {
     console.log('✨ 입력창 포커스됨!');
   });
   window.addEventListener('keydown', handleReportGlobalKeydown);
-  
-  // 🔥 드래그 기능 추가
-  initPanelDrag();
   
   isReportPanelInitialized = true;
   
@@ -239,9 +236,8 @@ async function handleReportIntent(text) {
     return;
   }
   
-  // 🔥 RAG 챗봇: 일일보고서 데이터 검색
-  // 특정 intent가 아닌 경우 RAG 챗봇으로 처리
-  await handleRAGChat(text);
+  // 일반 응답
+  addMessage('assistant', '무엇을 도와드릴까요?\n\n• "오늘 추천 업무"\n• "일일 보고서"\n• "주간 보고서"\n• "월간 보고서"\n• "실적 보고서"\n• "날짜 설정"');
 }
 
 /**
@@ -554,12 +550,6 @@ function togglePanel() {
     sendBtn.style.setProperty('pointer-events', 'auto', 'important');
     reportPanel.classList.add('visible');
     document.body.classList.add('report-panel-active');
-    
-    // 드래그 기능 재초기화 (패널이 처음 열릴 때)
-    if (isReportPanelInitialized) {
-      initPanelDrag();
-    }
-    
     console.log('👁️ 보고서 패널 표시');
     
     console.log('🔍 패널 열린 후 스타일:', {
@@ -1301,202 +1291,6 @@ function handleApplyDate() {
   dateSettingsPanel.style.display = 'none';
   
   addMessage('assistant', `✅ 날짜 설정이 완료되었습니다!\n\n• 일일: ${customDates.daily || '오늘'}\n• 주간: ${customDates.weekly || '이번 주'}\n• 월간: ${customDates.monthly.year}년 ${customDates.monthly.month}월\n• 실적: ${customDates.yearly || '올해'}년\n\n이제 보고서를 작성하시면 설정된 날짜로 생성됩니다!`);
-}
-
-/**
- * RAG 챗봇: 일일보고서 데이터 검색
- */
-async function handleRAGChat(query) {
-  try {
-    // 로딩 메시지
-    const loadingId = addMessageWithId('assistant', '🔍 일일보고서 데이터를 검색 중입니다...');
-    
-    const response = await fetch(`${API_BASE}/report-chat/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        owner: dailyOwner,
-        query: query
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`API 오류: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    // 로딩 메시지 제거
-    if (loadingId) {
-      const loadingMsg = messagesContainer.querySelector(`[data-msg-id="${loadingId}"]`);
-      if (loadingMsg) loadingMsg.remove();
-    }
-    
-    // 응답 메시지 추가
-    addMessage('assistant', data.answer);
-    
-    // 근거 문서 정보 표시 (있으면)
-    if (data.has_results && data.sources && data.sources.length > 0) {
-      showRAGSources(data.sources);
-    }
-    
-  } catch (error) {
-    console.error('❌ RAG 챗봇 오류:', error);
-    addMessage('assistant', '죄송합니다. 일일보고서 검색 중 오류가 발생했습니다. 😢');
-  }
-}
-
-/**
- * RAG 검색 결과 근거 문서 표시
- */
-function showRAGSources(sources) {
-  const container = document.createElement('div');
-  container.className = 'rag-sources-container';
-  container.style.cssText = `
-    margin-top: 12px;
-    padding: 12px;
-    background: rgba(240, 248, 255, 0.8);
-    border-radius: 8px;
-    border-left: 3px solid rgba(100, 150, 255, 0.6);
-  `;
-  
-  const title = document.createElement('div');
-  title.textContent = '📚 참고된 일일보고서 데이터:';
-  title.style.cssText = 'font-weight: 600; color: #555; margin-bottom: 8px; font-size: 13px;';
-  container.appendChild(title);
-  
-  const sourcesList = document.createElement('div');
-  sourcesList.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
-  
-  sources.forEach((source, index) => {
-    const sourceItem = document.createElement('div');
-    sourceItem.style.cssText = `
-      padding: 8px;
-      background: rgba(255, 255, 255, 0.7);
-      border-radius: 6px;
-      font-size: 12px;
-      color: #666;
-    `;
-    
-    let sourceText = `${index + 1}. `;
-    if (source.date) sourceText += `날짜: ${source.date} `;
-    if (source.time_slot) sourceText += `시간: ${source.time_slot} `;
-    if (source.category) sourceText += `카테고리: ${source.category} `;
-    sourceText += `\n   ${source.text_preview}`;
-    
-    sourceItem.textContent = sourceText;
-    sourcesList.appendChild(sourceItem);
-  });
-  
-  container.appendChild(sourcesList);
-  
-  // 마지막 메시지에 추가
-  const lastMessage = messagesContainer.querySelector('.message.assistant:last-child');
-  if (lastMessage) {
-    lastMessage.appendChild(container);
-  }
-}
-
-/**
- * 메시지 추가 (ID 반환 버전)
- */
-function addMessageWithId(role, text) {
-  const msgId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  messages.push({ role, text, id: msgId });
-  
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `message ${role}`;
-  messageDiv.setAttribute('data-msg-id', msgId);
-  
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  bubble.textContent = text;
-  
-  messageDiv.appendChild(bubble);
-  messagesContainer.appendChild(messageDiv);
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  
-  return msgId;
-}
-
-/**
- * 패널 드래그 기능 초기화
- */
-function initPanelDrag() {
-  if (!reportPanel) return;
-  
-  const panelHeader = reportPanel.querySelector('h2');
-  if (!panelHeader) return;
-  
-  let isDragging = false;
-  let currentX = 0;
-  let currentY = 0;
-  let initialX = 0;
-  let initialY = 0;
-  let xOffset = 0;
-  let yOffset = 0;
-  
-  // 초기 위치 저장 (transform에서 추출)
-  const rect = reportPanel.getBoundingClientRect();
-  xOffset = rect.left;
-  yOffset = rect.top;
-  
-  // transform 제거하고 left/top으로 변경
-  reportPanel.style.transform = 'none';
-  reportPanel.style.left = xOffset + 'px';
-  reportPanel.style.top = yOffset + 'px';
-  reportPanel.style.right = 'auto';
-  
-  panelHeader.addEventListener('mousedown', dragStart);
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', dragEnd);
-  
-  function dragStart(e) {
-    if (e.button !== 0) return; // 왼쪽 버튼만
-    
-    initialX = e.clientX - xOffset;
-    initialY = e.clientY - yOffset;
-    
-    if (e.target === panelHeader || panelHeader.contains(e.target)) {
-      isDragging = true;
-      panelHeader.style.cursor = 'grabbing';
-      e.preventDefault();
-    }
-  }
-  
-  function drag(e) {
-    if (!isDragging) return;
-    
-    e.preventDefault();
-    
-    currentX = e.clientX - initialX;
-    currentY = e.clientY - initialY;
-    
-    xOffset = currentX;
-    yOffset = currentY;
-    
-    // 화면 경계 체크
-    const maxX = window.innerWidth - reportPanel.offsetWidth;
-    const maxY = window.innerHeight - reportPanel.offsetHeight;
-    
-    xOffset = Math.max(0, Math.min(xOffset, maxX));
-    yOffset = Math.max(0, Math.min(yOffset, maxY));
-    
-    reportPanel.style.left = xOffset + 'px';
-    reportPanel.style.top = yOffset + 'px';
-  }
-  
-  function dragEnd(e) {
-    if (!isDragging) return;
-    
-    initialX = currentX;
-    initialY = currentY;
-    
-    isDragging = false;
-    panelHeader.style.cursor = 'move';
-  }
-  
-  console.log('✅ 패널 드래그 기능 초기화 완료');
 }
 
 /**

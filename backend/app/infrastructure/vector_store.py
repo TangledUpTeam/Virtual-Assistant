@@ -13,9 +13,8 @@ from chromadb.config import Settings
 from typing import Optional
 from pathlib import Path
 
-# 로컬 ChromaDB 경로 (백엔드 루트 기준으로 고정)
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-CHROMA_PERSIST_DIR = BASE_DIR / "Data" / "chroma"
+# 로컬 ChromaDB 경로
+CHROMA_PERSIST_DIR = Path("backend/Data/chroma")
 
 # 통합 컬렉션 이름
 UNIFIED_COLLECTION_NAME = "unified_documents"
@@ -45,28 +44,13 @@ class UnifiedVectorStore:
         """
         if self._collection is None:
             try:
-                # 먼저 기존 컬렉션이 있는지 확인
-                try:
-                    self._collection = self.client.get_collection(
-                        name=UNIFIED_COLLECTION_NAME
-                    )
-                except Exception:
-                    # 컬렉션이 없으면 새로 생성
-                    self._collection = self.client.create_collection(
-                        name=UNIFIED_COLLECTION_NAME,
-                        metadata={"description": "Unified documents collection"}
-                    )
-            except (KeyError, Exception) as e:
-                # _type 오류나 다른 에러 발생 시 컬렉션 삭제 후 재생성
-                print(f"[WARNING] 컬렉션 접근 오류: {e}")
-                print(f"[INFO] 컬렉션 삭제 후 재생성 시도...")
-                try:
-                    self.client.delete_collection(name=UNIFIED_COLLECTION_NAME)
-                except:
-                    pass
-                self._collection = self.client.create_collection(
-                    name=UNIFIED_COLLECTION_NAME,
-                    metadata={"description": "Unified documents collection"}
+                self._collection = self.client.get_or_create_collection(
+                    name=UNIFIED_COLLECTION_NAME
+                )
+            except KeyError:
+                # _type 오류 발생 시 재시도
+                self._collection = self.client.get_or_create_collection(
+                    name=UNIFIED_COLLECTION_NAME
                 )
         
         return self._collection

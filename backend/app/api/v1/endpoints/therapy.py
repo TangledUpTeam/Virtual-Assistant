@@ -17,33 +17,23 @@ router = APIRouter()
 
 # TherapyService 싱글톤 인스턴스
 therapy_service = TherapyService()
-print("✅ Therapy Service 초기화 완료")
 
-
+# 심리 상담 요청 클래스
 class TherapyRequest(BaseModel):
-    """심리 상담 요청"""
     message: str
+    enable_scoring: Optional[bool] = True  # 답변 품질 스코어링 활성화 (기본값: True)
 
-
+# 심리 상담 응답 클래스
 class TherapyResponse(BaseModel):
-    """심리 상담 응답"""
     answer: str
     mode: str
     used_chunks: List[str]
-    continue_conversation: bool
+    continue_conversation: bool 
 
-
+# 심리 상담 채팅 엔드포인트
 @router.post("/chat", response_model=TherapyResponse)
 async def chat_therapy(request: TherapyRequest):
-    """
-    심리 상담 채팅
-    
-    Args:
-        request: 사용자 메시지
-        
-    Returns:
-        TherapyResponse: 상담사 응답
-    """
+
     try:
         # 서비스 사용 가능 여부 확인
         if not therapy_service.is_available():
@@ -52,8 +42,11 @@ async def chat_therapy(request: TherapyRequest):
                 detail="심리 상담 시스템이 현재 사용 불가능합니다. Vector DB를 확인해주세요."
             )
         
-        # 상담 진행
-        response = therapy_service.chat(request.message)
+        # 상담 진행 (스코어링 옵션 전달)
+        response = therapy_service.chat(
+            request.message, 
+            enable_scoring=request.enable_scoring
+        )
         
         return TherapyResponse(
             answer=response["answer"],
@@ -70,18 +63,12 @@ async def chat_therapy(request: TherapyRequest):
             detail=f"상담 처리 중 오류가 발생했습니다: {str(e)}"
         )
 
-
+# 심리 상담 시스템 확인 엔드포인트
 @router.get("/status")
 async def get_therapy_status():
-    """
-    심리 상담 시스템 상태 확인
-    
-    Returns:
-        dict: 시스템 상태 정보
-    """
+
     return {
         "available": therapy_service.is_available(),
         "system": "RAG 기반 아들러 심리 상담",
         "persona": "Alfred Adler (개인심리학)"
     }
-

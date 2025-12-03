@@ -8,12 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import date
 
-from app.domain.report.rag_service import ReportRAGService
-
 router = APIRouter(prefix="/report-chat", tags=["report-chat"])
-
-# RAG 서비스 인스턴스
-rag_service = ReportRAGService()
 
 
 class ChatRequest(BaseModel):
@@ -22,6 +17,7 @@ class ChatRequest(BaseModel):
     query: str
     date_start: Optional[str] = None  # YYYY-MM-DD 형식
     date_end: Optional[str] = None  # YYYY-MM-DD 형식
+    reference_date: Optional[str] = None  # YYYY-MM-DD 형식, "이번 주" 같은 상대적 날짜 계산 기준
 
 
 class SourceInfo(BaseModel):
@@ -44,7 +40,7 @@ class ChatResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_reports(request: ChatRequest):
     """
-    일일보고서 데이터 기반 RAG 챗봇 대화
+    일일보고서 데이터 기반 RAG 챗봇 대화 (Agent 기반)
     
     Args:
         request: ChatRequest (owner, query, date_start, date_end)
@@ -60,6 +56,8 @@ async def chat_with_reports(request: ChatRequest):
         - "지난주에 처리 못한 미종결 업무 뭐 있었지?"
     """
     try:
+        from multi_agent.agents.report_tools import get_report_rag_agent
+        
         # 날짜 범위 파싱
         date_range = None
         if request.date_start or request.date_end:
@@ -69,11 +67,18 @@ async def chat_with_reports(request: ChatRequest):
             if request.date_end:
                 date_range["end"] = date.fromisoformat(request.date_end)
         
-        # RAG 서비스 호출
-        result = await rag_service.chat(
+        # 기준 날짜 파싱 (상대적 날짜 계산용)
+        reference_date = None
+        if request.reference_date:
+            reference_date = date.fromisoformat(request.reference_date)
+        
+        # ReportRAGAgent 사용
+        rag_agent = get_report_rag_agent()
+        result = await rag_agent.search_reports(
             owner=request.owner,
             query=request.query,
-            date_range=date_range
+            date_range=date_range,
+            reference_date=reference_date
         )
         
         # SourceInfo 변환

@@ -2,10 +2,16 @@
 Insurance RAG CLI 인터페이스
 
 단일 명령어로 전체 파이프라인 실행:
+  # 방법 1: __main__.py 사용 (권장)
+  python -m app.domain.rag.Insurance process internal_insurance/uploads
+  python -m app.domain.rag.Insurance query "상해요인 정의"
+  
+  # 방법 2: cli.py 직접 실행
   python -m app.domain.rag.Insurance.cli process internal_insurance/uploads
   python -m app.domain.rag.Insurance.cli query "상해요인 정의"
-  python -m app.domain.rag.Insurance.cli stats
-  python -m app.domain.rag.Insurance.cli reset
+  
+  # 방법 3: 절대 경로 사용
+  python -m app.domain.rag.Insurance process app/domain/rag/Insurance/internal_insurance/uploads
 """
 
 import sys
@@ -13,13 +19,14 @@ from pathlib import Path
 import argparse
 
 from .config import insurance_config
-from .extractor import extract_pdf
+from .extractor.extract_pdf import extract_pdf
 from .chunker import chunk_json
 from .embedder import embed_chunks
 from .vector_store import VectorStore
 from .retriever import InsuranceRetriever
 from .schemas import QueryRequest
 from .utils import get_logger
+from .performance import get_performance_monitor
 
 logger = get_logger(__name__)
 
@@ -32,8 +39,8 @@ def main():
         epilog="""
 사용 예시:
   # PDF 처리 (Extract → Chunk → Embed)
-  python -m app.domain.rag.Insurance.cli process internal_insurance/uploads
-  python -m app.domain.rag.Insurance.cli process internal_insurance/uploads/file.pdf
+  python -m app.domain.rag.Insurance.cli process app/domain/rag/Insurance/internal_insurance/uploads
+  python -m app.domain.rag.Insurance.cli process app/domain/rag/Insurance/internal_insurance/uploads/file.pdf
   
   # 질의응답
   python -m app.domain.rag.Insurance.cli query "상해요인 정의"
@@ -102,9 +109,16 @@ def process_command(input_path: str):
         logger.info(f"경로 자동 보정: {input_path} → {corrected_path}")
         input_path = Path(corrected_path)
     
+    # 상대 경로인 경우 Insurance 모듈 기준으로 변환
+    if not input_path.is_absolute():
+        # internal_insurance로 시작하는 경우 Insurance 폴더 기준으로 변환
+        if str(input_path).startswith("internal_insurance"):
+            insurance_dir = Path(__file__).parent
+            input_path = insurance_dir / input_path
+    
     if not input_path.exists():
         print(f"❌ 오류: 경로를 찾을 수 없습니다: {input_path}")
-        print(f"💡 팁: Insurance RAG는 'internal_insurance/uploads' 디렉토리를 사용합니다.")
+        print(f"💡 팁: Insurance RAG는 'app/domain/rag/Insurance/internal_insurance/uploads' 디렉토리를 사용합니다.")
         logger.error(f"경로를 찾을 수 없습니다: {input_path}")
         sys.exit(1)
     
@@ -176,6 +190,10 @@ def process_command(input_path: str):
     if success_count > 0:
         print(f"✅ 전체 파이프라인 완료!")
         logger.info(f"파이프라인 완료: 성공 {success_count}개 / 실패 {fail_count}개")
+        
+        # 성능 리포트 출력
+        monitor = get_performance_monitor()
+        monitor.report()
     
     if fail_count > 0:
         sys.exit(1)

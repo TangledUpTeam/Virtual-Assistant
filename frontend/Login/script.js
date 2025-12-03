@@ -190,11 +190,16 @@ window.addEventListener('DOMContentLoaded', () => {
     console.log('✅ logged_in 쿠키:', loggedIn);
     console.log('ℹ️  참고: access_token은 HttpOnly 쿠키라서 JavaScript에서 읽을 수 없습니다.');
     
-    if (isLoggedIn() && !urlParams.has('logout')) {
-        console.log('✅ 이미 로그인됨 - /start로 이동');
-        window.location.href = '/start';
+    // relogin 파라미터가 있으면 자동 리다이렉트 건너뛰기 (다른 계정으로 로그인)
+    if (isLoggedIn() && !urlParams.has('logout') && !urlParams.has('relogin')) {
+        console.log('✅ 이미 로그인됨 - /landing으로 이동');
+        window.location.href = '/landing';
         return;
     }
     
-    console.log('🔐 로그인 필요');
+    if (urlParams.has('relogin')) {
+        console.log('🔄 다른 계정으로 로그인 시도');
+    } else {
+        console.log('🔐 로그인 필요');
+    }
 });

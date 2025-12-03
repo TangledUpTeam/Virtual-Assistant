@@ -15,17 +15,9 @@ from openai import OpenAI
 
 from app.domain.report.schemas import (
     ReportType,
-    DailyReportSchema,
-    WeeklyReportSchema,
-    MonthlyReportSchema,
-    PerformanceReportSchema
-)
-from app.domain.report.canonical_models import CanonicalReport
-from app.domain.report.canonical_converter import (
-    convert_daily_to_canonical,
-    convert_weekly_to_canonical,
-    convert_monthly_to_canonical,
-    convert_performance_to_canonical
+    CanonicalReport,
+    TaskItem,
+    KPIItem
 )
 
 
@@ -205,7 +197,7 @@ class ReportProcessingService:
 이 문서가 어떤 보고서인지 판단하라.
 반드시 아래 중 하나로만 답하라:
 
-daily / weekly / monthly / performance
+daily / weekly / monthly
 
 단 한 단어만 출력하라.
 """
@@ -338,7 +330,7 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
 
     def normalize_daily(self, raw_json: Dict[str, Any]) -> CanonicalReport:
         """
-        일일 보고서 Raw JSON → Canonical 변환 (새 구조 사용)
+        일일 보고서 Raw JSON → Canonical 변환
         
         Args:
             raw_json: Vision API로부터 받은 원본 JSON
@@ -346,15 +338,76 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         Returns:
             CanonicalReport 객체
         """
-        # Raw 스키마로 변환
-        daily_schema = DailyReportSchema(**raw_json)
+        # 기본 정보 추출
+        상단정보 = raw_json.get("상단정보", {})
+        owner = 상단정보.get("성명", "")
+        작성일자_str = 상단정보.get("작성일자", "")
         
-        # 새 Canonical 변환기 사용
-        return convert_daily_to_canonical(daily_schema)
+        # 날짜 파싱
+        report_date = self._parse_date(작성일자_str)
+        
+        # Tasks 변환 (세부업무)
+        tasks = []
+        세부업무_list = raw_json.get("세부업무", [])
+        for idx, 세부업무 in enumerate(세부업무_list):
+            시간 = 세부업무.get("시간", "")
+            업무내용 = 세부업무.get("업무내용", "")
+            비고 = 세부업무.get("비고", "")
+            
+            # 시간대에서 시작/종료 시간 추출
+            time_start, time_end = None, None
+            if " - " in 시간:
+                parts = 시간.split(" - ")
+                if len(parts) == 2:
+                    time_start = parts[0].strip()
+                    time_end = parts[1].strip()
+            
+            if 업무내용:  # 업무내용이 있는 경우만 추가
+                tasks.append(TaskItem(
+                    task_id=f"daily_{idx+1}",
+                    title=업무내용,
+                    description=업무내용,
+                    time_start=time_start,
+                    time_end=time_end,
+                    status=None,
+                    note=비고
+                ))
+        
+        # Issues (미종결 업무사항)
+        issues = []
+        미종결_업무 = raw_json.get("미종결_업무사항", "")
+        if 미종결_업무:
+            issues.append(미종결_업무)
+        
+        # Plans (익일 업무계획)
+        plans = []
+        익일_계획 = raw_json.get("익일_업무계획", "")
+        if 익일_계획:
+            plans.append(익일_계획)
+        
+        # Metadata
+        metadata = {
+            "금일_진행_업무": raw_json.get("금일_진행_업무", ""),
+            "특이사항": raw_json.get("특이사항", ""),
+            "문서제목": raw_json.get("문서제목", "")
+        }
+        
+        return CanonicalReport(
+            report_id=str(uuid.uuid4()),
+            report_type="daily",
+            owner=owner,
+            period_start=report_date,
+            period_end=report_date,
+            tasks=tasks,
+            kpis=[],  # 일일 보고서에는 KPI 없음
+            issues=issues,
+            plans=plans,
+            metadata=metadata
+        )
 
     def normalize_weekly(self, raw_json: Dict[str, Any]) -> CanonicalReport:
         """
-        주간 보고서 Raw JSON → Canonical 변환 (새 구조 사용)
+        주간 보고서 Raw JSON → Canonical 변환
         
         Args:
             raw_json: Vision API로부터 받은 원본 JSON
@@ -362,15 +415,78 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         Returns:
             CanonicalReport 객체
         """
-        # Raw 스키마로 변환
-        weekly_schema = WeeklyReportSchema(**raw_json)
+        # 기본 정보 추출
+        상단정보 = raw_json.get("상단정보", {})
+        owner = 상단정보.get("성명", "")
+        작성일자_str = 상단정보.get("작성일자", "")
         
-        # 새 Canonical 변환기 사용
-        return convert_weekly_to_canonical(weekly_schema)
+        report_date = self._parse_date(작성일자_str)
+        
+        # Tasks 변환 (주간업무목표 + 요일별 세부 업무)
+        tasks = []
+        
+        # 1) 주간업무목표
+        주간업무목표 = raw_json.get("주간업무목표", [])
+        for idx, 목표 in enumerate(주간업무목표):
+            목표_내용 = 목표.get("목표", "")
+            비고 = 목표.get("비고", "")
+            
+            if 목표_내용:
+                tasks.append(TaskItem(
+                    task_id=f"weekly_goal_{idx+1}",
+                    title=목표_내용,
+                    description=목표_내용,
+                    time_start=None,
+                    time_end=None,
+                    status=None,
+                    note=비고
+                ))
+        
+        # 2) 요일별 세부 업무
+        요일별_업무 = raw_json.get("요일별_세부_업무", {})
+        for 요일, 업무_data in 요일별_업무.items():
+            업무내용 = 업무_data.get("업무내용", "")
+            비고 = 업무_data.get("비고", "")
+            
+            if 업무내용:
+                tasks.append(TaskItem(
+                    task_id=f"weekly_{요일}",
+                    title=f"[{요일}] {업무내용}",
+                    description=업무내용,
+                    time_start=None,
+                    time_end=None,
+                    status=None,
+                    note=비고
+                ))
+        
+        # Issues (주간 중요 업무)
+        issues = []
+        주간_중요_업무 = raw_json.get("주간_중요_업무", "")
+        if 주간_중요_업무:
+            issues.append(주간_중요_업무)
+        
+        # Metadata
+        metadata = {
+            "특이사항": raw_json.get("특이사항", ""),
+            "문서제목": raw_json.get("문서제목", "")
+        }
+        
+        return CanonicalReport(
+            report_id=str(uuid.uuid4()),
+            report_type="weekly",
+            owner=owner,
+            period_start=report_date,
+            period_end=report_date,
+            tasks=tasks,
+            kpis=[],
+            issues=issues,
+            plans=[],
+            metadata=metadata
+        )
 
     def normalize_monthly(self, raw_json: Dict[str, Any]) -> CanonicalReport:
         """
-        월간 보고서 Raw JSON → Canonical 변환 (새 구조 사용)
+        월간 보고서 Raw JSON → Canonical 변환
         
         Args:
             raw_json: Vision API로부터 받은 원본 JSON
@@ -378,27 +494,98 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         Returns:
             CanonicalReport 객체
         """
-        # Raw 스키마로 변환
-        monthly_schema = MonthlyReportSchema(**raw_json)
+        # 기본 정보 추출
+        상단정보 = raw_json.get("상단정보", {})
+        owner = 상단정보.get("성명", "")
+        작성일자_str = 상단정보.get("작성일자", "")
+        월 = 상단정보.get("월", "")
         
-        # 새 Canonical 변환기 사용
-        return convert_monthly_to_canonical(monthly_schema)
+        report_date = self._parse_date(작성일자_str)
+        
+        # KPIs 변환 (월간 핵심 지표)
+        kpis = []
+        월간_핵심_지표 = raw_json.get("월간_핵심_지표", {})
+        
+        # 신규 계약 건수
+        신규_계약 = 월간_핵심_지표.get("신규_계약_건수", {})
+        if 신규_계약.get("건수"):
+            kpis.append(KPIItem(
+                kpi_name="신규_계약_건수",
+                value=신규_계약.get("건수", ""),
+                unit="건",
+                category="계약",
+                note=신규_계약.get("비고", "")
+            ))
+        
+        # 유지 계약 건수
+        유지_계약 = 월간_핵심_지표.get("유지_계약_건수", {})
+        if 유지_계약:
+            for key in ["유지", "갱신", "미납_방지"]:
+                if 유지_계약.get(key):
+                    kpis.append(KPIItem(
+                        kpi_name=f"유지_계약_{key}",
+                        value=유지_계약.get(key, ""),
+                        unit="건",
+                        category="유지계약",
+                        note=유지_계약.get("비고", "")
+                    ))
+        
+        # 상담 진행 건수
+        상담_진행 = 월간_핵심_지표.get("상담_진행_건수", {})
+        if 상담_진행:
+            for key in ["전화", "방문", "온라인"]:
+                if 상담_진행.get(key):
+                    kpis.append(KPIItem(
+                        kpi_name=f"상담_{key}",
+                        value=상담_진행.get(key, ""),
+                        unit="건",
+                        category="상담",
+                        note=상담_진행.get("비고", "")
+                    ))
+        
+        # Tasks 변환 (주차별 세부 업무)
+        tasks = []
+        주차별_업무 = raw_json.get("주차별_세부_업무", {})
+        for 주차, 업무_data in 주차별_업무.items():
+            업무내용 = 업무_data.get("업무내용", "")
+            비고 = 업무_data.get("비고", "")
+            
+            if 업무내용:
+                tasks.append(TaskItem(
+                    task_id=f"monthly_{주차}",
+                    title=f"[{주차}] {업무내용}",
+                    description=업무내용,
+                    time_start=None,
+                    time_end=None,
+                    status=None,
+                    note=비고
+                ))
+        
+        # Plans (익월 계획)
+        plans = []
+        익월_계획 = raw_json.get("익월_계획", "")
+        if 익월_계획:
+            plans.append(익월_계획)
+        
+        # Metadata
+        metadata = {
+            "월": 월,
+            "문서제목": raw_json.get("문서제목", "")
+        }
+        
+        return CanonicalReport(
+            report_id=str(uuid.uuid4()),
+            report_type="monthly",
+            owner=owner,
+            period_start=report_date,
+            period_end=report_date,
+            tasks=tasks,
+            kpis=kpis,
+            issues=[],
+            plans=plans,
+            metadata=metadata
+        )
 
-    def normalize_performance(self, raw_json: Dict[str, Any]) -> CanonicalReport:
-        """
-        실적 보고서 Raw JSON → Canonical 변환 (새 구조 사용)
-        
-        Args:
-            raw_json: Vision API로부터 받은 원본 JSON
-            
-        Returns:
-            CanonicalReport 객체
-        """
-        # Raw 스키마로 변환
-        performance_schema = PerformanceReportSchema(**raw_json)
-        
-        # 새 Canonical 변환기 사용
-        return convert_performance_to_canonical(performance_schema)
 
     def normalize_report(
         self, 
@@ -428,8 +615,7 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         normalize_map = {
             "daily": self.normalize_daily,
             "weekly": self.normalize_weekly,
-            "monthly": self.normalize_monthly,
-            "performance": self.normalize_performance
+            "monthly": self.normalize_monthly
         }
         
         normalize_func = normalize_map.get(report_type_str)

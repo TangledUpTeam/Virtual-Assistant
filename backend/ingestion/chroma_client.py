@@ -13,7 +13,6 @@ CHROMA_PERSIST_DIR = Path(__file__).resolve().parent.parent / "Data" / "chroma"
 
 # 컬렉션 이름
 COLLECTION_REPORTS = "reports"
-COLLECTION_KPI = "kpi"
 
 
 class ChromaLocalService:
@@ -46,34 +45,29 @@ class ChromaLocalService:
         print(f"📦 컬렉션 '{name}' 가져오기/생성 중...")
         
         try:
-            # 먼저 기존 컬렉션이 있는지 확인
+            # get_or_create_collection 사용 (가장 안전한 방법)
+            collection = self.client.get_or_create_collection(name=name)
+            print(f"✅ 컬렉션 '{name}' 준비 완료")
+            return collection
+        
+        except KeyError as e:
+            # _type 오류 발생 시, 컬렉션이 이미 존재한다고 가정
+            print(f"⚠️  응답 파싱 오류 발생 (컬렉션은 생성되었을 가능성 높음)")
+            print(f"⚠️  재시도 중...")
+            
             try:
-                collection = self.client.get_collection(name=name)
-                print(f"✅ 컬렉션 '{name}' 준비 완료 (기존 컬렉션 사용)")
+                # 다시 시도
+                collection = self.client.get_or_create_collection(name=name)
+                print(f"✅ 컬렉션 '{name}' 준비 완료 (재시도 성공)")
                 return collection
             except Exception:
-                # 컬렉션이 없으면 새로 생성
-                collection = self.client.create_collection(
-                    name=name,
-                    metadata={"description": f"Collection: {name}"}
-                )
-                print(f"✅ 컬렉션 '{name}' 준비 완료 (새로 생성)")
-                return collection
-            
-        except (KeyError, Exception) as e:
-            # _type 오류나 다른 에러 발생 시 컬렉션 삭제 후 재생성
-            print(f"[WARNING] 컬렉션 접근 오류: {e}")
-            print(f"[INFO] 컬렉션 삭제 후 재생성 시도...")
-            try:
-                self.client.delete_collection(name=name)
-            except:
-                pass
-            collection = self.client.create_collection(
-                name=name,
-                metadata={"description": f"Collection: {name}"}
-            )
-            print(f"✅ 컬렉션 '{name}' 준비 완료 (재생성)")
-            return collection
+                # 최종 실패 시 에러 발생
+                print(f"❌ 컬렉션 생성 실패")
+                raise
+        
+        except Exception as e:
+            print(f"❌ 컬렉션 처리 오류: {e}")
+            raise
     
     def get_reports_collection(self) -> Collection:
         """
@@ -83,15 +77,6 @@ class ChromaLocalService:
             Reports Collection
         """
         return self.get_or_create_collection(name=COLLECTION_REPORTS)
-    
-    def get_kpi_collection(self) -> Collection:
-        """
-        KPI 컬렉션 가져오기
-        
-        Returns:
-            KPI Collection
-        """
-        return self.get_or_create_collection(name=COLLECTION_KPI)
     
     def get_collection_info(self, collection: Collection) -> dict:
         """
@@ -146,10 +131,4 @@ def get_reports_collection() -> Collection:
     """Reports 컬렉션 가져오기 (헬퍼 함수)"""
     service = get_chroma_service()
     return service.get_reports_collection()
-
-
-def get_kpi_collection() -> Collection:
-    """KPI 컬렉션 가져오기 (헬퍼 함수)"""
-    service = get_chroma_service()
-    return service.get_kpi_collection()
 

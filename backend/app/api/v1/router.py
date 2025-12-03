@@ -7,15 +7,19 @@ from app.api.v1.endpoints.daily import router as daily_router
 from app.api.v1.endpoints.daily_report import router as daily_report_router
 from app.api.v1.endpoints.weekly_report import router as weekly_report_router
 from app.api.v1.endpoints.monthly_report import router as monthly_report_router
-from app.api.v1.endpoints.performance_report import router as performance_report_router
 from app.api.v1.endpoints.pdf_export import router as pdf_export_router
 from app.api.v1.endpoints.rag import router as rag_router
 from app.api.v1.endpoints.brainstorming import router as brainstorming_router
 from app.api.v1.endpoints.chatbot import router as chatbot_router
 from app.api.v1.endpoints.therapy import router as therapy_router
-from app.api.v1.endpoints.report_chat import router as report_chat_router
+from app.api.v1.endpoints.multi_agent import router as multi_agent_router
+from app.api.v1.endpoints.agent_router import router as agent_router  # 보고서 Agent 시스템
+from app.api.v1.endpoints.report_chat import router as report_chat_router  # 보고서 RAG 챗봇
 
 api_router = APIRouter()
+
+# 보고서 Agent API (최우선)
+api_router.include_router(agent_router)
 
 # Auth 엔드포인트
 api_router.include_router(
@@ -67,12 +71,6 @@ api_router.include_router(
     tags=["Monthly Report"]
 )
 
-# Performance Report (실적 보고서) 엔드포인트
-api_router.include_router(
-    performance_report_router,
-    tags=["Performance Report"]
-)
-
 # PDF Export (PDF 다운로드) 엔드포인트
 api_router.include_router(
     pdf_export_router,
@@ -107,7 +105,14 @@ api_router.include_router(
     tags=["Therapy"]
 )
 
-# Report Chat (일일보고서 RAG 챗봇) 엔드포인트
+# Multi-Agent 엔드포인트 (통합 AI 시스템)
+api_router.include_router(
+    multi_agent_router,
+    prefix="/multi-agent",
+    tags=["Multi-Agent"]
+)
+
+# 보고서 RAG 챗봇 엔드포인트
 api_router.include_router(
     report_chat_router,
     tags=["Report Chat"]

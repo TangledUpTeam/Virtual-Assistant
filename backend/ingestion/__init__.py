@@ -1,36 +1,21 @@
 """
 Ingestion 모듈
 
-로컬 ChromaDB에 문서를 임베딩하고 업로드하는 파이프라인
+보고서 데이터를 청킹, 임베딩하여 ChromaDB에 저장하는 파이프라인
+
+주요 스크립트:
+- ingest_mock_reports.py: 목업 데이터 일괄 처리 (신규 청킹 방식)
+- auto_ingest.py: 보고서 생성 시 자동 저장
+- chroma_client.py: ChromaDB 클라이언트
 """
-from ingestion.embed import embed_text, embed_texts, get_embedding_service
 from ingestion.chroma_client import (
     get_chroma_service,
-    get_reports_collection,
-    get_kpi_collection
+    get_reports_collection
 )
-from ingestion.ingest_reports import ingest_reports, delete_reports_by_ids, query_reports
-from ingestion.ingest_kpi import ingest_kpi, delete_kpi_by_ids, query_kpi
 
 __all__ = [
-    # Embedding
-    "embed_text",
-    "embed_texts",
-    "get_embedding_service",
-    
     # Chroma Client
     "get_chroma_service",
     "get_reports_collection",
-    "get_kpi_collection",
-    
-    # Reports Ingestion
-    "ingest_reports",
-    "delete_reports_by_ids",
-    "query_reports",
-    
-    # KPI Ingestion
-    "ingest_kpi",
-    "delete_kpi_by_ids",
-    "query_kpi",
 ]
 
