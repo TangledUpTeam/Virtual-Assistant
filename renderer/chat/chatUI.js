@@ -245,7 +245,7 @@ async function handleSendMessage() {
   try {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
     const result = await sendMultiAgentMessage(text);
-    addMessage('assistant', result.answer);
+    addMessage('assistant', result.answer, result.agent_used);
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
@@ -306,8 +306,18 @@ async function handleSimpleResponse(text) {
 /**
  * 메시지 추가
  */
-function addMessage(role, text) {
-  messages.push({ role, text });
+function addMessage(role, text, agentUsed = null) {
+  // 메시지 객체에 에이전트 정보 포함
+  const messageObj = { 
+    role, 
+    content: text
+  };
+  
+  if (agentUsed) {
+    messageObj.agent_used = agentUsed;
+  }
+  
+  messages.push(messageObj);
 
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${role}`;
@@ -508,3 +518,10 @@ function openBrainstormingPopup() {
     addMessage('assistant', '❌ 브레인스토밍 팝업을 열 수 없습니다.');
   }
 }
+
+/**
+ * 메시지 히스토리 가져오기 (Notion Agent가 사용)
+ */
+window.getMessages = function() {
+  return messages;
+};

@@ -72,8 +72,23 @@ class SupervisorAgent:
    - 예시: "안녕하세요!", "오늘 날씨 좋네요", "고마워요"
 
 2. **rag_tool**: 회사 문서, 규정, 정책 검색
-   - 키워드: 연차, 휴가, 근로시간, 유연근무, 근무지, 변경, 급여, 성과급, 연말정산, 명세서, 복지, 건강검진, 보험, 선택적, 제휴, 교육, 승진, 인사평가, 포상, 의무교육, 법인카드, 규정, 정보보호, 개인정보, 가치평가, 금융소비자, 프로세스, 신청, 지원, 기준, 정책, 규칙, 가이드, 매뉴얼, 절차, 방법, 회사, 사내, 내부, 문서, 자료, 찾아, 검색, 알려줘, 말해줘, 확인, 조회, 보여줘, 설명
-   - 예시: "연차 규정이 어떻게 돼?", "복지 정책 알려줘", "급여 명세서는 어디서 확인해?"
+   - 사용 조건:
+     * 사용자가 회사 내부 규정, 정책, 절차에 대한 구체적인 사실 관계를 원할 때
+     * 일반적인 지식이 아닌, '우리 회사'의 특정한 정보를 문서 기반으로 확인해야 할 때
+     * "연차 규정이 뭐야?" 처럼 정해진 규칙이나 매뉴얼에 대한 답변이 필요한 경우
+   - 트리거 상황:
+     * 명시적 검색 요청: "규정 찾아줘", "정책 알려줘", "매뉴얼 검색해줘", "자료 보여줘"
+     * 규정/제도 문의: "연차는 며칠이야?", "야근 식대 기준이 뭐야?", "복지 포인트 사용처 알려줘"
+     * 절차 확인: "휴가 신청 방법 알려줘", "법인카드 사용 절차", "지출결의서 작성법"
+   - 예시 (도구 사용 O):
+     * "연차 수당 지급 기준 알려줘"
+     * "의무교육은 어디서 들어야해?"
+     * "승진하려면 어떤 노력을 해야해?"
+     * "제휴사 목록 알려줘"
+   - 예시 (도구 사용 X - chatbot_tool 사용):
+     * "연차가 영어로 뭐야?" → 일반 상식/어학 (chatbot_tool)
+     * "회사 가기 싫다, 휴가 가고 싶어" → 감정 표현 (therapy_tool)
+     * "점심 메뉴 추천해줘" → 일반 대화 (chatbot_tool)
 
 3. **brainstorming_tool**: 창의적 아이디어 발상 및 브레인스토밍 지원
    - 사용 조건:
@@ -119,17 +134,68 @@ class SupervisorAgent:
      * 영어: counseling, therapy, help, depressed, anxious, sad, angry, lonely, frustrated, stressed, worried, scared, afraid, fear, panic, hopeless, helpless, worthless, empty, guilt, shame, regret, remorse, jealous, envy, tired, exhausted, burnout, overwhelmed, confused, lost, psychology, mental health, counselor, therapist, support, comfort, encouragement, empathy, trauma, alcoholic, drunk, abusive, violence, trust, mistrust, trustworthy, parent, family, perfect, perfectionism, insecure, instability, inflexible, overbearing, control
    - 예시: "스트레스가 많아서 힘들어", "우울한 기분이 들어", "대인관계 문제로 고민이야", "번아웃이 와", "상사가 무서워", "자존감이 낮아", "트라우마가 있어"
 
-**에이전트 선택 가이드:**
-1. **"브레인스토밍"이라는 단어가 명시적으로 포함되면 무조건 brainstorming_tool을 선택하세요.**
-2. 질문에 포함된 키워드를 먼저 확인하세요.
-3. 여러 에이전트의 키워드가 겹치면, 질문의 주요 목적을 파악하세요.
-4. 감정적 표현(힘들어, 우울해 등)이 있으면 therapy_tool을 우선 고려하세요.
-5. 회사/업무 관련 정보 요청은 rag_tool을 사용하세요.
-6. 일반적인 인사나 잡담은 chatbot_tool을 사용하세요.
+7. **notion_tool**: Notion 페이지 관리 (검색, 생성, 대화 내용 저장)
+   - **핵심 의도**: 사용자가 Notion에 무언가를 **저장, 기록, 메모**하거나, 기존 페이지를 **검색, 조회, 수정**하려는 경우
+   - **사용 조건**:
+     * 사용자가 Notion에 **실제로 페이지를 만들거나 내용을 저장**하려는 명확한 의도가 있을 때
+     * "노션", "notion", "페이지" 단어와 함께 **행동 동사**(만들어, 저장, 적어, 기록 등)가 있을 때
+     * 대화 내용을 정리해서 보관하고 싶을 때
+   - **트리거 상황**:
+     * 페이지 생성: "X 페이지 만들어줘", "X라는 페이지 생성해줘"
+     * 내용 작성: "X라고 적어줘", "제목은 X, 내용은 Y로 만들어줘"
+     * 대화 저장: "상담 내용 노션에 저장해줘", "이거 정리해서 노션에 올려줘"
+     * 페이지 검색: "노션에서 X 찾아줘", "X 페이지 어디 있어?"
+   - **예시 (notion_tool 사용 O)**:
+     * ✅ "안녕이라는 페이지 만들고 오늘 할일 목록 다이소 들리기 라고 적어줘"
+       → 제목: "안녕", 내용: "오늘 할일 목록 다이소 들리기"
+     * ✅ "내 노션에 제목은 안녕, 내용은 클레오파트라 라고 적어줘"
+       → 제목: "안녕", 내용: "클레오파트라"
+     * ✅ "개인 페이지에 '회의록'이라고 적어줘"
+       → 개인 페이지에 "회의록" 페이지 생성
+     * ✅ "상담 내용 노션에 기록해줘"
+       → 대화 히스토리를 Notion에 저장
+     * ✅ "노션에서 프로젝트 페이지 찾아줘"
+       → Notion 페이지 검색
+   - **예시 (notion_tool 사용 X - chatbot_tool 사용)**:
+     * ❌ "노션이 뭐야?" → 개념 설명 (chatbot_tool)
+     * ❌ "페이지 만드는 방법 알려줘" → 방법 설명 (chatbot_tool)
+     * ❌ "노션 사용법 알려줘" → 사용법 설명 (chatbot_tool)
+
+**에이전트 선택 가이드 (최우선 규칙):**
+
+**🔴 절대 우선순위 (이 규칙이 가장 중요합니다!):**
+1. **"노션", "notion", "페이지"** + **"만들어", "생성", "적어", "저장", "기록", "올려", "정리", "넣어"** → **무조건 notion_tool**
+   - 예: "안녕이라는 페이지 만들어줘" → notion_tool
+   - 예: "제목은 X, 내용은 Y로 적어줘" → notion_tool
+   - 예: "상담 내용 노션에 저장해줘" → notion_tool
+   - 예: "방금 답변해준 내용 노션에 정리해서 넣어줘" → notion_tool
+   - 예: "제휴사 목록 페이지 만들어서 정리해줘" → notion_tool
+
+2. **"브레인스토밍"** 단어가 명시적으로 포함 → **무조건 brainstorming_tool**
+
+3. **감정 표현** (힘들어, 우울해, 스트레스 등) → **therapy_tool 우선**
+
+**🟡 일반 규칙:**
+4. 회사 규정/정책/문서 검색 → rag_tool
+5. 일정/계획 관리 → planner_tool
+6. 리포트/실적 분석 → report_tool
+7. 일반 대화/인사/잡담 → chatbot_tool
 
 **중요한 규칙:**
-- 질문의 핵심 의도를 정확히 파악하세요.
-- 가장 적합한 에이전트 하나를 선택하세요.
+- **사용자의 의도를 정확히 파악하는 것이 최우선입니다.**
+- **행동 동사**(만들어, 저장, 적어, 기록, 생성 등)가 있으면 **실행 의도**입니다.
+- **질문 동사**(뭐야, 어떻게, 알려줘 등)만 있으면 **정보 요청**입니다.
+
+**의도 판별 예시:**
+- ✅ "안녕이라는 페이지 만들어줘" → **실행 의도** → notion_tool
+- ❌ "페이지 만드는 방법 알려줘" → **정보 요청** → chatbot_tool
+- ✅ "제목은 X, 내용은 Y로 적어줘" → **실행 의도** → notion_tool
+- ❌ "노션이 뭐야?" → **정보 요청** → chatbot_tool
+- ✅ "상담 내용 저장해줘" → **실행 의도** → notion_tool
+- ❌ "저장하는 방법 알려줘" → **정보 요청** → chatbot_tool
+
+**최종 체크:**
+- 가장 적합한 에이전트 **하나만** 선택하세요.
 - 에이전트의 응답을 그대로 사용자에게 전달하세요.
 - 에이전트가 이미 충분한 답변을 제공했다면 추가 설명 없이 그대로 전달하세요.
 - 한국어로 응답하세요.
@@ -143,6 +209,10 @@ class SupervisorAgent:
         start_time = time.time()
         
         try:
+            # Context를 agent_tools에 설정 (Notion Agent가 사용할 수 있도록)
+            from .tools.agent_tools import set_context
+            set_context(request.context or {}, request.user_id or "default_user")
+            
             # LangGraph Agent 실행
             result = await self.agent_executor.ainvoke({
                 "messages": [HumanMessage(content=request.query)]
@@ -190,6 +260,25 @@ class SupervisorAgent:
                 processing_time=processing_time,
                 session_id=request.session_id
             )
+            
+            # 세션에 대화 내용 저장
+            if request.session_id:
+                try:
+                    from app.domain.chatbot.session_manager import SessionManager
+                    session_manager = SessionManager()
+                    
+                    # 사용자 질문 저장
+                    session_manager.add_message(request.session_id, "user", request.query)
+                    
+                    # AI 답변 저장
+                    session_manager.add_message(request.session_id, "assistant", answer)
+                    
+                    # 사용된 에이전트 정보도 메타데이터로 저장하고 싶지만, 
+                    # 현재 SessionManager는 role/content만 저장함.
+                    # 추후 확장을 위해 일단 기본 메시지만 저장.
+                    
+                except Exception as e:
+                    print(f"[ERROR] 세션 저장 실패: {e}")
             
             return response
             

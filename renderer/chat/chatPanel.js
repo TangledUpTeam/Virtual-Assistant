@@ -26,24 +26,24 @@ let sendBtn = null;
  */
 export function initChatPanel() {
   console.log('💬 채팅 패널 초기화 중...');
-  
+
   // DOM 요소 가져오기
   chatPanel = document.getElementById('chat-panel');
   messagesContainer = document.getElementById('messages');
   chatInput = document.getElementById('chat-input');
   sendBtn = document.getElementById('send-btn');
-  
+
   if (!chatPanel || !messagesContainer || !chatInput || !sendBtn) {
     console.error('❌ 채팅 패널 요소를 찾을 수 없습니다.');
     return;
   }
-  
+
   // 초기 메시지 추가
   addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊');
-  
+
   // 이벤트 리스너 등록
   setupEventListeners();
-  
+
   console.log('✅ 채팅 패널 초기화 완료');
 }
 
@@ -53,7 +53,7 @@ export function initChatPanel() {
 function setupEventListeners() {
   // 전송 버튼 클릭
   sendBtn.addEventListener('click', handleSendMessage);
-  
+
   // Enter 키로 전송
   chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -61,7 +61,7 @@ function setupEventListeners() {
       handleSendMessage();
     }
   });
-  
+
   // Cmd/Ctrl + Enter로 패널 토글
   window.addEventListener('keydown', (e) => {
     // Cmd (Mac) 또는 Ctrl (Windows/Linux)
@@ -77,13 +77,13 @@ function setupEventListeners() {
  */
 async function handleSendMessage() {
   const text = chatInput.value.trim();
-  
+
   if (!text) return;
-  
+
   // /hr 명령어 체크 (HR 팝업 열기)
   if (text.toLowerCase() === '/hr') {
     addMessage('assistant', '📚 HR 도우미 팝업을 엽니다...');
-    
+
     // Electron IPC로 HR 팝업 열기
     if (typeof require !== 'undefined') {
       try {
@@ -97,25 +97,25 @@ async function handleSendMessage() {
     } else {
       addMessage('assistant', '❌ Electron 환경에서만 사용 가능합니다.');
     }
-    
+
     chatInput.value = '';
     return;
   }
-  
+
   // 사용자 메시지 추가
   addMessage('user', text);
-  
+
   // 입력창 초기화
   chatInput.value = '';
-  
+
   // 버튼 비활성화 (응답 대기)
   sendBtn.disabled = true;
   sendBtn.textContent = '...';
-  
+
   try {
     // AI 응답 받기
-    const response = await callChatModule(text);
-    
+    const response = await callChatModule(text, messages);
+
     // 응답 타입에 따라 처리
     if (response.type === 'task_recommendations') {
       // 추천 업무 카드 UI 표시
@@ -126,8 +126,8 @@ async function handleSendMessage() {
     } else if (response.type === 'error') {
       addMessage('assistant', response.data);
     } else {
-      // 일반 텍스트 응답
-      addMessage('assistant', response.data);
+      // 일반 텍스트 응답 (에이전트 정보 전달)
+      addMessage('assistant', response.data, response.agent_used);
     }
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
@@ -143,26 +143,38 @@ async function handleSendMessage() {
  * 메시지 추가
  * @param {'user' | 'assistant'} role - 메시지 역할
  * @param {string} text - 메시지 내용
+ * @param {string} [agent] - 사용된 에이전트 (rag, notion 등)
  */
-function addMessage(role, text) {
+function addMessage(role, text, agent = null) {
   // 상태에 저장
-  messages.push({ role, text });
-  
+  messages.push({ role, text, agent });
+
   // DOM에 추가
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${role}`;
-  
+
+  // 에이전트별 클래스 추가
+  if (agent) {
+    messageDiv.classList.add(agent);
+  }
+
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = text;
-  
+
+  // RAG(HR) 에이전트인 경우 마크다운 렌더링
+  if (agent === 'rag' && typeof marked !== 'undefined') {
+    bubble.innerHTML = marked.parse(text);
+  } else {
+    bubble.textContent = text;
+  }
+
   messageDiv.appendChild(bubble);
   messagesContainer.appendChild(messageDiv);
-  
+
   // 스크롤을 맨 아래로
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  
-  console.log(`💬 [${role}]: ${text}`);
+
+  console.log(`💬 [${role}${agent ? `/${agent}` : ''}]: ${text}`);
 }
 
 /**
@@ -173,28 +185,28 @@ function addMessage(role, text) {
 function addTherapyMessage(text, mode) {
   // 상태에 저장
   messages.push({ role: 'therapy', text, mode });
-  
+
   // DOM에 추가
   const messageDiv = document.createElement('div');
   messageDiv.className = 'message assistant therapy';
-  
+
   // 아들러 아이콘 추가
   const icon = document.createElement('div');
   icon.className = 'therapy-icon';
   icon.textContent = '🎭';
   icon.title = '아들러 심리 상담사';
-  
+
   const bubble = document.createElement('div');
   bubble.className = 'bubble therapy-bubble';
   bubble.textContent = text;
-  
+
   messageDiv.appendChild(icon);
   messageDiv.appendChild(bubble);
   messagesContainer.appendChild(messageDiv);
-  
+
   // 스크롤을 맨 아래로
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  
+
   console.log(`🎭 [아들러 상담사 - ${mode}]: ${text}`);
 }
 
@@ -204,44 +216,44 @@ function addTherapyMessage(text, mode) {
  */
 function addTaskRecommendations(data) {
   const { tasks, summary, owner, target_date } = data;
-  
+
   // 현재 추천 저장
   currentRecommendation = { owner, target_date, tasks };
   selectedTasks.clear();
-  
+
   // 상태에 저장
   messages.push({ role: 'assistant', type: 'task_recommendations', data });
-  
+
   // DOM에 추가
   const messageDiv = document.createElement('div');
   messageDiv.className = 'message assistant';
-  
+
   const container = document.createElement('div');
   container.className = 'task-recommendations-container';
-  
+
   // 요약 메시지
   const summaryDiv = document.createElement('div');
   summaryDiv.className = 'bubble';
   summaryDiv.textContent = summary || '오늘의 추천 업무입니다!';
   container.appendChild(summaryDiv);
-  
+
   // 안내 메시지
   const guideDiv = document.createElement('div');
   guideDiv.className = 'task-guide';
   guideDiv.textContent = '📌 수행할 업무를 선택해주세요 (2~4개 권장)';
   container.appendChild(guideDiv);
-  
+
   // 업무 카드 리스트
   const cardsContainer = document.createElement('div');
   cardsContainer.className = 'task-cards';
-  
+
   tasks.forEach((task, index) => {
     const card = createTaskCard(task, index);
     cardsContainer.appendChild(card);
   });
-  
+
   container.appendChild(cardsContainer);
-  
+
   // 저장 버튼
   const saveButton = document.createElement('button');
   saveButton.className = 'task-save-button';
@@ -249,13 +261,13 @@ function addTaskRecommendations(data) {
   saveButton.disabled = true;
   saveButton.addEventListener('click', handleSaveSelectedTasks);
   container.appendChild(saveButton);
-  
+
   messageDiv.appendChild(container);
   messagesContainer.appendChild(messageDiv);
-  
+
   // 스크롤을 맨 아래로
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  
+
   console.log(`🎯 추천 업무 ${tasks.length}개 표시`);
 }
 
@@ -269,7 +281,7 @@ function createTaskCard(task, index) {
   const card = document.createElement('div');
   card.className = 'task-card';
   card.dataset.index = index;
-  
+
   // 우선순위 뱃지
   const priorityBadge = document.createElement('span');
   priorityBadge.className = `priority-badge priority-${task.priority}`;
@@ -278,17 +290,17 @@ function createTaskCard(task, index) {
     'medium': '보통',
     'low': '낮음'
   }[task.priority] || '보통';
-  
+
   // 제목
   const title = document.createElement('div');
   title.className = 'task-title';
   title.textContent = task.title;
-  
+
   // 설명
   const description = document.createElement('div');
   description.className = 'task-description';
   description.textContent = task.description;
-  
+
   // 메타 정보
   const meta = document.createElement('div');
   meta.className = 'task-meta';
@@ -296,17 +308,17 @@ function createTaskCard(task, index) {
     <span class="task-category">📁 ${task.category}</span>
     <span class="task-time">⏰ ${task.expected_time}</span>
   `;
-  
+
   card.appendChild(priorityBadge);
   card.appendChild(title);
   card.appendChild(description);
   card.appendChild(meta);
-  
+
   // 클릭 이벤트
   card.addEventListener('click', () => {
     toggleTaskSelection(card, index);
   });
-  
+
   return card;
 }
 
@@ -325,11 +337,11 @@ function toggleTaskSelection(card, index) {
     selectedTasks.add(index);
     card.classList.add('selected');
   }
-  
+
   // 저장 버튼 활성화/비활성화
   const saveButton = card.closest('.task-recommendations-container').querySelector('.task-save-button');
   saveButton.disabled = selectedTasks.size === 0;
-  
+
   console.log(`✅ 선택된 업무: ${selectedTasks.size}개`);
 }
 
@@ -340,29 +352,29 @@ async function handleSaveSelectedTasks() {
   if (!currentRecommendation || selectedTasks.size === 0) {
     return;
   }
-  
+
   const { owner, target_date, tasks } = currentRecommendation;
-  
+
   // 선택된 업무만 추출
   const selectedTasksList = Array.from(selectedTasks).map(index => tasks[index]);
-  
+
   // 버튼 비활성화
   const saveButton = event.target;
   saveButton.disabled = true;
   saveButton.textContent = '저장 중...';
-  
+
   try {
     // API 호출
     const result = await saveSelectedTasks(owner, target_date, selectedTasksList);
-    
+
     if (result.success) {
       // 성공 메시지
       addMessage('assistant', `✅ ${result.saved_count}개의 업무가 저장되었습니다! 금일 진행 업무 선택이 완료되었습니다.`);
-      
+
       // 선택 초기화
       selectedTasks.clear();
       currentRecommendation = null;
-      
+
       // 카드 컨테이너 숨기기
       saveButton.closest('.task-recommendations-container').style.opacity = '0.5';
       saveButton.textContent = '저장 완료';
@@ -384,7 +396,7 @@ async function handleSaveSelectedTasks() {
  */
 function togglePanel() {
   isPanelVisible = !isPanelVisible;
-  
+
   if (isPanelVisible) {
     chatPanel.style.display = 'flex';
     console.log('👁️ 채팅 패널 표시');
@@ -409,4 +421,3 @@ export function clearMessages() {
   messagesContainer.innerHTML = '';
   console.log('🗑️ 메시지 초기화');
 }
-

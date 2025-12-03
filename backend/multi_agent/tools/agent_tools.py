@@ -17,6 +17,11 @@ _brainstorming_agent = None
 _planner_agent = None
 _report_agent = None
 _therapy_agent = None
+_notion_agent = None
+
+# Context 저장 (Supervisor에서 설정)
+_current_context = None
+_current_user_id = None
 
 # 챗봇 에이전트 호출
 def get_chatbot_agent():
@@ -58,13 +63,30 @@ def get_report_agent():
         _report_agent = ReportAgent()
     return _report_agent
 
-# 심리상담 에이전트 호출
+# 심리 상담 에이전트 호출
 def get_therapy_agent():
     global _therapy_agent
     if _therapy_agent is None:
         from backend.multi_agent.agents.therapy_agent import TherapyAgent
         _therapy_agent = TherapyAgent()
     return _therapy_agent
+
+# Notion 에이전트 호출
+def get_notion_agent():
+    global _notion_agent
+    if _notion_agent is None:
+        from backend.multi_agent.agents.notion_agent import NotionAgent
+        _notion_agent = NotionAgent()
+    return _notion_agent
+
+# Context 설정 함수
+def set_context(context: dict, user_id: str):
+    global _current_context, _current_user_id
+    _current_context = context
+    _current_user_id = user_id
+
+def get_context():
+    return _current_context, _current_user_id
 
 
 # Tool 정의
@@ -112,6 +134,28 @@ async def therapy_tool(query: str) -> str:
     agent = get_therapy_agent()
     return await agent.process(query)
 
+# Notion 페이지 관리
+@tool
+async def notion_tool(query: str) -> str:
+    """Notion 페이지를 관리합니다. 페이지 검색, 생성, 대화 내용 저장 등을 처리합니다."""
+    agent = get_notion_agent()
+    context, user_id = get_context()
+    
+    # user_id가 없으면 기본값 사용
+    if not user_id:
+        user_id = "default_user"
+        
+    # context가 없으면 빈 딕셔너리 사용
+    if context is None:
+        context = {}
+    
+    result = await agent.process(query, user_id, context)
+    
+    # 결과가 dict 형태면 answer 추출
+    if isinstance(result, dict):
+        return result.get("answer", str(result))
+    return str(result)
+
 # 모든 에이전트를 도구로 해서 도구 리스트 리턴
 def get_all_agent_tools() -> List[Tool]:
     return [
@@ -121,4 +165,5 @@ def get_all_agent_tools() -> List[Tool]:
         planner_tool,
         report_tool,
         therapy_tool,
+        notion_tool,
     ]
