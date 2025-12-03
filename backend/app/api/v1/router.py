@@ -7,13 +7,6 @@ from app.api.v1.endpoints.report.daily import router as daily_router
 from app.api.v1.endpoints.report.daily_report import router as daily_report_router
 from app.api.v1.endpoints.report.weekly_report import router as weekly_report_router
 from app.api.v1.endpoints.report.monthly_report import router as monthly_report_router
-# PDF export는 선택적 (PyPDF2 의존성)
-try:
-    from app.api.v1.endpoints.report.pdf_export import router as pdf_export_router
-    PDF_EXPORT_AVAILABLE = True
-except ImportError:
-    pdf_export_router = None
-    PDF_EXPORT_AVAILABLE = False
 from app.api.v1.endpoints.rag import router as rag_router
 from app.api.v1.endpoints.brainstorming import router as brainstorming_router
 from app.api.v1.endpoints.chatbot import router as chatbot_router
@@ -76,13 +69,6 @@ api_router.include_router(
     monthly_report_router,
     tags=["Monthly Report"]
 )
-
-# PDF Export (PDF 다운로드) 엔드포인트 (선택적)
-if PDF_EXPORT_AVAILABLE and pdf_export_router:
-    api_router.include_router(
-        pdf_export_router,
-        tags=["PDF Export"]
-    )
 
 # RAG 엔드포인트
 api_router.include_router(

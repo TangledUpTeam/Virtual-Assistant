@@ -18,12 +18,6 @@ from app.domain.report.weekly.repository import WeeklyReportRepository
 from app.domain.report.weekly.schemas import WeeklyReportCreate, WeeklyReportResponse, WeeklyReportListResponse
 from app.domain.report.core.canonical_models import CanonicalReport
 from app.infrastructure.database.session import get_db
-# PDF generator는 선택적으로 import (PyPDF2 의존성)
-try:
-    from app.reporting.pdf_generator.weekly_report_pdf import WeeklyReportPDFGenerator
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
 from app.reporting.html_renderer import render_report_html
 from urllib.parse import quote
 
@@ -83,25 +77,7 @@ async def generate_weekly(
         action = "생성" if is_created else "업데이트"
         print(f"💾 주간 보고서 저장 완료 ({action}): {report.owner} - {report.period_start}~{report.period_end}")
         
-        # 🔥 3. PDF 자동 생성 및 저장
-        try:
-            # PDF 저장 디렉토리 생성
-            pdf_dir = Path("output/report_result/weekly")
-            pdf_dir.mkdir(parents=True, exist_ok=True)
-            
-            # PDF 파일명 생성
-            pdf_filename = f"{report.owner}_{report.period_start}_{report.period_end}_주간보고서.pdf"
-            pdf_path = pdf_dir / pdf_filename
-            
-            # PDF 생성
-            pdf_generator = WeeklyReportPDFGenerator()
-            pdf_generator.generate(report, str(pdf_path))
-            
-            print(f"📄 주간 보고서 PDF 생성 완료: {pdf_path}")
-        except Exception as pdf_error:
-            print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
-        
-        # 🔥 4. HTML 생성 및 저장
+        # 🔥 3. HTML 생성 및 저장
         html_path = None
         html_url = None
         html_filename = None

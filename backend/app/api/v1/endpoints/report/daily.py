@@ -26,12 +26,6 @@ from app.domain.report.daily.schemas import DailyReportCreate
 from app.llm.client import get_llm
 from app.domain.report.core.canonical_models import CanonicalReport
 from app.infrastructure.database.session import get_db
-# PDF generator는 선택적으로 import (PyPDF2 의존성)
-try:
-    from app.reporting.pdf_generator.daily_report_pdf import DailyReportPDFGenerator
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
 from app.reporting.html_renderer import render_report_html
 from app.domain.report.core.chunker import chunk_canonical_report
 from app.domain.report.core.embedding_pipeline import EmbeddingPipeline
@@ -261,24 +255,6 @@ async def answer_daily_question(
                     
                     print(f"💾 운영 DB 생성 완료: {report.owner} - {report.period_start}")
                     is_created = True
-                
-                # 🔥 PDF 자동 생성 및 저장
-                try:
-                    # PDF 저장 디렉토리 생성
-                    pdf_dir = Path("output/report_result/daily")
-                    pdf_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    # PDF 파일명 생성
-                    pdf_filename = f"{report.owner}_{report.period_start}_일일보고서.pdf"
-                    pdf_path = pdf_dir / pdf_filename
-                    
-                    # PDF 생성
-                    pdf_generator = DailyReportPDFGenerator()
-                    pdf_generator.generate(report, str(pdf_path))
-                    
-                    print(f"📄 일일 보고서 PDF 생성 완료: {pdf_path}")
-                except Exception as pdf_error:
-                    print(f"⚠️  PDF 생성 실패 (보고서는 저장됨): {str(pdf_error)}")
                 
                 # 🔥 HTML 생성 및 저장
                 html_path = None

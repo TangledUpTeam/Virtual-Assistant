@@ -99,12 +99,6 @@ google-auth-oauthlib==1.2.1
 # Notion 공식 SDK
 notion-client==2.2.1
 
-# pip install reportlab
-reportlab==4.4.5
-
-# pip install pypdf2
-pypdf2==3.0.1
-
 # ========================================
 # HTML Template Engine (보고서 HTML 생성)
 # ========================================
