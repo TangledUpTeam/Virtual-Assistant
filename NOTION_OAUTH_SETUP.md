@@ -101,15 +101,8 @@ https://api.notion.com/v1/oauth/authorize?client_id=YOUR_CLIENT_ID&redirect_uri=
 
 **우리 프로젝트는 Public Integration이 필요합니다!**
 
-## 현재 설정 확인
 
-현재 `.env`에 설정된 값:
-```
-NOTION_CLIENT_ID=2bdd872b-594c-8090-b9f7-00373265451f
-NOTION_CLIENT_SECRET=secret_4wpQb7hWYw0Z6skbbozq6wug7CL9RG6k9Sy4HHC08AW
-```
-
-이 값들이:
+값들이:
 - ✅ Public Integration의 OAuth credentials인지 확인
 - ❌ Internal Integration의 Secret이 아닌지 확인
 
