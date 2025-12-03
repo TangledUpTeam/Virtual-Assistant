@@ -151,6 +151,52 @@ async function handleSlackConnectClick() {
 }
 
 /**
+ * "Notion 연동하기" 클릭
+ */
+async function handleNotionConnectClick() {
+    console.log('📚 Notion 연동 클릭');
+    
+    // 로그인 체크
+    if (!isLoggedIn()) {
+        alert('먼저 로그인이 필요합니다.');
+        window.location.href = '/login';
+        return;
+    }
+    
+    try {
+        // Notion OAuth URL 요청
+        const response = await fetch('http://localhost:8000/api/v1/auth/notion/login');
+        const data = await response.json();
+        
+        if (data.authorization_url) {
+            console.log('🔗 Notion OAuth URL:', data.authorization_url);
+            
+            // Electron 환경 체크
+            if (typeof window.require !== 'undefined') {
+                try {
+                    // Electron에서는 새 창으로 OAuth 처리
+                    const { ipcRenderer } = window.require('electron');
+                    ipcRenderer.send('open-notion-oauth', data.authorization_url);
+                    console.log('✅ Notion OAuth 창 열기');
+                } catch (err) {
+                    console.error('OAuth 창 열기 실패:', err);
+                    // 실패 시 일반 방식으로 시도
+                    window.location.href = data.authorization_url;
+                }
+            } else {
+                // 브라우저에서는 일반 방식으로 이동
+                window.location.href = data.authorization_url;
+            }
+        } else {
+            alert('Notion 연동 URL을 가져올 수 없습니다.');
+        }
+    } catch (error) {
+        console.error('❌ Notion 연동 오류:', error);
+        alert('Notion 연동 중 오류가 발생했습니다.');
+    }
+}
+
+/**
  * "로그아웃" 클릭
  */
 function handleLogoutClick() {
@@ -164,6 +210,7 @@ function handleLogoutClick() {
         deleteCookie('logged_in');
         deleteCookie('slack_access_token');
         deleteCookie('slack_team_name');
+        deleteCookie('notion_workspace');
         
         // 페이지 새로고침
         console.log('🔄 페이지 새로고침');
@@ -224,6 +271,22 @@ function updateLoginUI() {
 window.addEventListener('DOMContentLoaded', () => {
     console.log('📄 Landing 페이지 로드');
     
+    // URL 파라미터 체크 (Notion 연동 성공 메시지)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('notion_connected') === 'true') {
+        const workspace = urlParams.get('workspace') || 'Notion';
+        alert(`✅ ${workspace} 연동이 완료되었습니다!`);
+        // URL 파라미터 제거
+        window.history.replaceState({}, document.title, '/landing');
+    }
+    
+    // 에러 메시지 표시
+    if (urlParams.get('error')) {
+        const errorMsg = urlParams.get('message') || '연동 중 오류가 발생했습니다.';
+        alert(`❌ ${errorMsg}`);
+        window.history.replaceState({}, document.title, '/landing');
+    }
+    
     // 우측 상단 로그인 UI 업데이트
     updateLoginUI();
     
@@ -232,6 +295,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const loginTrigger = document.getElementById('loginTrigger');
     const changeLoginBtn = document.getElementById('changeLoginBtn');
     const slackConnectBtn = document.getElementById('slackConnectBtn');
+    const notionConnectBtn = document.getElementById('notionConnectBtn');
     const logoutBtn = document.getElementById('logoutBtn');
     
     if (startBtn) {
@@ -248,6 +312,10 @@ window.addEventListener('DOMContentLoaded', () => {
     
     if (slackConnectBtn) {
         slackConnectBtn.addEventListener('click', handleSlackConnectClick);
+    }
+    
+    if (notionConnectBtn) {
+        notionConnectBtn.addEventListener('click', handleNotionConnectClick);
     }
     
     if (logoutBtn) {

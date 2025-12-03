@@ -3,8 +3,8 @@ import pandas as pd
 import json
 from typing import List, Dict, Any
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers.json import SimpleJsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 
 class RAGEvaluator:
     def __init__(self, model_name: str = "gpt-4o"):
@@ -15,7 +15,7 @@ class RAGEvaluator:
             model_name: 평가에 사용할 LLM 모델명 (기본값: gpt-4o)
         """
         self.llm = ChatOpenAI(model=model_name, temperature=0)
-        self.output_parser = SimpleJsonOutputParser()
+        self.output_parser = JsonOutputParser()
         
         # Ground Truth 데이터 로드 (실시간 조회를 위해)
         # 현재 파일 위치: backend/app/domain/rag/HR/evaluator.py

@@ -35,6 +35,21 @@ class AddDatabaseItemRequest(BaseModel):
     database_id: str
     properties_dict: Dict[str, Any]
 
+class GetPageContentRequest(BaseModel):
+    user_id: str
+    page_id: str
+
+class SearchPagesRequest(BaseModel):
+    user_id: str
+    query: str
+    page_size: int = 10
+
+class CreatePageFromMarkdownRequest(BaseModel):
+    user_id: str
+    parent_id: str
+    title: str
+    markdown: str
+
 # Google Drive Endpoints
 @tools_router.post("/drive/create-folder")
 async def api_create_folder(request: CreateFolderRequest):
@@ -59,6 +74,21 @@ async def api_create_page(request: CreatePageRequest):
 @tools_router.post("/notion/add-database-item")
 async def api_add_database_item(request: AddDatabaseItemRequest):
     return await notion_tool.add_database_item(request.user_id, request.database_id, request.properties_dict)
+
+@tools_router.post("/notion/get-page-content")
+async def api_get_page_content(request: GetPageContentRequest):
+    """Notion 페이지 내용을 마크다운으로 가져오기"""
+    return await notion_tool.get_page_content(request.user_id, request.page_id)
+
+@tools_router.post("/notion/search-pages")
+async def api_search_pages(request: SearchPagesRequest):
+    """Notion 페이지 검색"""
+    return await notion_tool.search_pages(request.user_id, request.query, request.page_size)
+
+@tools_router.post("/notion/create-page-from-markdown")
+async def api_create_page_from_markdown(request: CreatePageFromMarkdownRequest):
+    """마크다운으로 Notion 페이지 생성"""
+    return await notion_tool.create_page_from_markdown(request.user_id, request.parent_id, request.title, request.markdown)
 
 # Health Check
 @tools_router.get("/health")

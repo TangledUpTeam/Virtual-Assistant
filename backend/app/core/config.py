@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     SLACK_CLIENT_SECRET: str = ""
     SLACK_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/slack/callback"
     
+    # OAuth - Notion (사용자 개인 연동)
+    NOTION_CLIENT_ID: str = ""
+    NOTION_CLIENT_SECRET: str = ""
+    NOTION_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/notion/callback"
+    
     # OpenAI
     OPENAI_API_KEY: str
     
