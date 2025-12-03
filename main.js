@@ -259,6 +259,71 @@ ipcMain.on('va:request-quit', () => {
 // 브레인스토밍 팝업 열기
 let brainstormingWin = null;
 
+// HR 팝업 열기
+let hrWin = null;
+
+function openHRPopup() {
+  console.log('📚 HR 팝업 생성');
+
+  // 이미 팝업이 열려있으면 포커스만
+  if (hrWin && !hrWin.isDestroyed()) {
+    hrWin.focus();
+    return;
+  }
+
+  // HR 팝업 창 생성
+  const hrWindowOptions = {
+    width: 700,
+    height: 732, // 700 + 32 (타이틀바)
+    center: true,
+    resizable: true,
+    frame: false, // 툴바 제거
+    backgroundColor: '#f5f5f5',
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: true
+    },
+    modal: false,
+    alwaysOnTop: true, // 항상 위에 표시
+    titleBarStyle: 'customButtonsOnHover', // macOS 버튼 완전 숨김
+    trafficLightPosition: { x: -100, y: -100 } // 버튼을 화면 밖으로
+  };
+  
+  // characterWin이 있으면 부모로 설정
+  if (characterWin && !characterWin.isDestroyed()) {
+    hrWindowOptions.parent = characterWin;
+  }
+  
+  hrWin = new BrowserWindow(hrWindowOptions);
+
+  // HR 전용 페이지 로드
+  hrWin.loadFile('hr-popup.html');
+
+  // 개발자 도구 (F12)
+  hrWin.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      if (hrWin.webContents.isDevToolsOpened()) {
+        hrWin.webContents.closeDevTools();
+      } else {
+        hrWin.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+  });
+
+  // 팝업 로드 완료
+  hrWin.webContents.on('did-finish-load', () => {
+    console.log('📚 HR 팝업 로드 완료');
+  });
+
+  // 팝업 종료 시
+  hrWin.on('closed', () => {
+    console.log('📚 HR 팝업 닫힘');
+    hrWin = null;
+  });
+
+  console.log('✅ HR 팝업 생성 완료');
+}
+
 function openBrainstormingPopup() {
   console.log('🧠 브레인스토밍 팝업 생성');
 
@@ -379,6 +444,140 @@ ipcMain.on('close-brainstorming-window', () => {
   console.log('🧠 브레인스토밍 창 닫기 요청 (세션 삭제 완료)');
   if (brainstormingWin && !brainstormingWin.isDestroyed()) {
     brainstormingWin.close();
+  }
+});
+
+// IPC: 챗봇에서 HR 팝업 열기
+ipcMain.on('open-hr-popup', (event) => {
+  console.log('💼 HR 팝업 생성 요청 (챗봇)');
+  openHRPopup();
+});
+
+// HR 창 최대화 토글
+ipcMain.on('toggle-hr-maximize', () => {
+  if (hrWin && !hrWin.isDestroyed()) {
+    if (hrWin.isMaximized()) {
+      hrWin.unmaximize();
+    } else {
+      hrWin.maximize();
+    }
+  }
+});
+
+// HR 창 닫기 (렌더러에서 요청)
+ipcMain.on('close-hr-window', () => {
+  console.log('💼 HR 창 닫기 요청');
+  if (hrWin && !hrWin.isDestroyed()) {
+    hrWin.close();
+  }
+});
+
+// Notion OAuth 창 열기
+let notionOAuthWin = null;
+
+ipcMain.on('open-notion-oauth', async (event, authUrl) => {
+  console.log('🔗 Notion OAuth 창 열기:', authUrl);
+  
+  // 이미 창이 열려있으면 포커스
+  if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
+    notionOAuthWin.focus();
+    return;
+  }
+  
+  // OAuth 전용 창 생성 (세션 공유)
+  notionOAuthWin = new BrowserWindow({
+    width: 800,
+    height: 700,
+    center: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+      // partition 제거 - 기본 세션 사용하여 로그인 상태 유지
+    }
+  });
+  
+  // Notion 쿠키만 삭제 (로그인 세션은 유지)
+  const { session } = require('electron');
+  try {
+    console.log('🗑️ Notion 쿠키 삭제 중...');
+    const cookies = await session.defaultSession.cookies.get({ domain: '.notion.so' });
+    for (const cookie of cookies) {
+      await session.defaultSession.cookies.remove(`https://${cookie.domain}${cookie.path}`, cookie.name);
+      console.log(`   삭제: ${cookie.name}`);
+    }
+    console.log('✅ Notion 쿠키 삭제 완료');
+  } catch (error) {
+    console.error('⚠️ Notion 쿠키 삭제 실패:', error);
+  }
+  
+  // OAuth URL 로드
+  notionOAuthWin.loadURL(authUrl);
+  
+  // URL 변경 감지 (콜백 URL로 리디렉션되면 자동으로 처리)
+  notionOAuthWin.webContents.on('will-redirect', (event, url) => {
+    console.log('🔄 리디렉션 감지:', url);
+    
+    // 콜백 URL인지 확인
+    if (url.startsWith('http://localhost:8000/api/v1/auth/notion/callback')) {
+      console.log('✅ Notion OAuth 콜백 감지 - 창 닫기');
+      
+      // 콜백 URL을 메인 창에서 처리하도록 로드
+      if (loginWin && !loginWin.isDestroyed()) {
+        // 콜백을 처리하고 /landing으로 리디렉션될 것임
+        loginWin.loadURL(url);
+      }
+      
+      // OAuth 창 즉시 닫기
+      if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
+        notionOAuthWin.close();
+      }
+    }
+  });
+  
+  // did-navigate 이벤트도 감지 (일부 경우 will-redirect가 안 잡힐 수 있음)
+  notionOAuthWin.webContents.on('did-navigate', (event, url) => {
+    console.log('🔄 네비게이션 감지:', url);
+    
+    // 콜백 URL이거나 /landing으로 리디렉션되면 창 닫기
+    if (url.startsWith('http://localhost:8000/api/v1/auth/notion/callback') || 
+        url.includes('/landing?notion_connected=true')) {
+      console.log('✅ Notion OAuth 완료 - 창 닫기');
+      
+      // 메인 창에 알림
+      if (loginWin && !loginWin.isDestroyed()) {
+        loginWin.loadURL('http://localhost:8000/landing?notion_connected=true');
+      }
+      
+      // OAuth 창 즉시 닫기
+      if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
+        notionOAuthWin.close();
+      }
+    }
+  });
+  
+  // 창 닫힘 이벤트
+  notionOAuthWin.on('closed', () => {
+    console.log('🔗 Notion OAuth 창 닫힘');
+    notionOAuthWin = null;
+  });
+});
+
+// HR 창 최대화 토글
+ipcMain.on('toggle-hr-maximize', () => {
+  if (hrWin && !hrWin.isDestroyed()) {
+    if (hrWin.isMaximized()) {
+      hrWin.unmaximize();
+    } else {
+      hrWin.maximize();
+    }
+  }
+});
+
+// HR 창 닫기 (렌더러에서 요청)
+ipcMain.on('close-hr-window', () => {
+  console.log('📚 HR 창 닫기 요청');
+  if (hrWin && !hrWin.isDestroyed()) {
+    hrWin.close();
   }
 });
 

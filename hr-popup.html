@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>HR 도우미</title>
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="renderer/styles/hr.css" />
+  
+  <!-- Marked.js for Markdown Rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+    
+    /* 드래그 가능한 상단 바 */
+    .titlebar {
+      -webkit-app-region: drag;
+      background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .titlebar-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .titlebar-buttons {
+      -webkit-app-region: no-drag;
+      display: flex;
+      gap: 8px;
+    }
+    
+    .titlebar-btn {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    
+    .titlebar-btn:hover {
+      opacity: 0.8;
+    }
+    
+    .btn-close {
+      background: #ff5f57;
+    }
+    
+    .btn-minimize {
+      background: #ffbd2e;
+    }
+    
+    .btn-maximize {
+      background: #28ca42;
+    }
+    
+    #hr-panel {
+      position: static !important;
+      width: 100% !important;
+      height: calc(100% - 32px) !important;
+      display: flex !important;
+      border: none !important;
+      border-radius: 0 !important;
+      transform: none !important;
+      left: auto !important;
+      top: auto !important;
+      box-shadow: none !important;
+    }
+    
+    /* 헤더 숨기기 (타이틀바에 이미 있음) */
+    #hr-panel h2 {
+      display: none !important;
+    }
+    
+    /* 콘텐츠 영역 높이 조정 */
+    #hr-content {
+      max-height: none !important;
+      flex: 1 !important;
+    }
+    
+    /* 입력 영역 */
+    #hr-input-area {
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 커스텀 타이틀바 -->
+  <div class="titlebar">
+    <div class="titlebar-title">
+      📚 HR 도우미
+    </div>
+    <div class="titlebar-buttons">
+      <button class="titlebar-btn btn-close" onclick="window.close()"></button>
+      <button class="titlebar-btn btn-minimize" onclick="require('electron').remote.getCurrentWindow().minimize()"></button>
+      <button class="titlebar-btn btn-maximize" onclick="toggleMaximize()"></button>
+    </div>
+  </div>
+
+  <!-- HR 패널 (전체 화면) -->
+  <div id="hr-panel">
+    <h2>📚 HR 도우미</h2>
+    <div id="hr-content"></div>
+    <div id="hr-input-area">
+      <input 
+        type="text" 
+        id="hr-input" 
+        placeholder="질문을 입력하세요..." 
+        autocomplete="off"
+      />
+      <button id="hr-submit-btn">전송</button>
+    </div>
+  </div>
+
+  <!-- HR 패널 스크립트 -->
+  <script type="module">
+    import { initHRPanel, getCurrentSessionId } from './renderer/chat/hrPanel.js';
+    
+    // 페이지 로드 시 자동 초기화
+    window.addEventListener('DOMContentLoaded', () => {
+      console.log('📚 HR 팝업 초기화');
+      initHRPanel();
+    });
+    
+    // getCurrentSessionId를 전역으로 노출 (Electron에서 접근 가능하도록)
+    window.getCurrentSessionId = getCurrentSessionId;
+    
+    // 최대화 토글
+    function toggleMaximize() {
+      const { ipcRenderer } = require('electron');
+      ipcRenderer.send('toggle-hr-maximize');
+    }
+    
+    // 전역으로 노출
+    window.toggleMaximize = toggleMaximize;
+  </script>
+</body>
+</html>
+
