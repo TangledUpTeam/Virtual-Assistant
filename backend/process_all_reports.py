@@ -15,8 +15,8 @@ if sys.platform == "win32":
 # 프로젝트 루트를 Python Path에 추가
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.domain.report.service import ReportProcessingService
-from app.domain.report.chunker import chunk_report, get_chunk_statistics
+from app.domain.report.core.service import ReportProcessingService
+from app.domain.report.core.chunker import chunk_canonical_report
 
 def process_report(pdf_path: str, service: ReportProcessingService):
     """단일 보고서 처리"""
@@ -45,11 +45,9 @@ def process_report(pdf_path: str, service: ReportProcessingService):
     
     # 3. Chunking
     print("⏳ Step 3: Canonical → Chunks")
-    chunks = chunk_report(canonical_report)
-    stats = get_chunk_statistics(chunks)
+    chunks = chunk_canonical_report(canonical_report)
     print(f"✅ 청킹 완료")
-    print(f"  - 총 청크: {stats['total_chunks']}개")
-    print(f"  - 타입별 청크: {stats['chunk_types']}")
+    print(f"  - 총 청크: {len(chunks)}개")
     
     # 4. 파일 저장
     output_dir = Path("output/reports")

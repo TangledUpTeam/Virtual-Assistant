@@ -1,20 +1,26 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.users import router as users_router
-from app.api.v1.endpoints.reports import router as reports_router
-from app.api.v1.endpoints.plan import router as plan_router
-from app.api.v1.endpoints.daily import router as daily_router
-from app.api.v1.endpoints.daily_report import router as daily_report_router
-from app.api.v1.endpoints.weekly_report import router as weekly_report_router
-from app.api.v1.endpoints.monthly_report import router as monthly_report_router
-from app.api.v1.endpoints.pdf_export import router as pdf_export_router
+from app.api.v1.endpoints.report.reports import router as reports_router
+from app.api.v1.endpoints.report.plan import router as plan_router
+from app.api.v1.endpoints.report.daily import router as daily_router
+from app.api.v1.endpoints.report.daily_report import router as daily_report_router
+from app.api.v1.endpoints.report.weekly_report import router as weekly_report_router
+from app.api.v1.endpoints.report.monthly_report import router as monthly_report_router
+# PDF export는 선택적 (PyPDF2 의존성)
+try:
+    from app.api.v1.endpoints.report.pdf_export import router as pdf_export_router
+    PDF_EXPORT_AVAILABLE = True
+except ImportError:
+    pdf_export_router = None
+    PDF_EXPORT_AVAILABLE = False
 from app.api.v1.endpoints.rag import router as rag_router
 from app.api.v1.endpoints.brainstorming import router as brainstorming_router
 from app.api.v1.endpoints.chatbot import router as chatbot_router
 from app.api.v1.endpoints.therapy import router as therapy_router
 from app.api.v1.endpoints.multi_agent import router as multi_agent_router
 from app.api.v1.endpoints.agent_router import router as agent_router  # 보고서 Agent 시스템
-from app.api.v1.endpoints.report_chat import router as report_chat_router  # 보고서 RAG 챗봇
+from app.api.v1.endpoints.report.report_chat import router as report_chat_router  # 보고서 RAG 챗봇
 
 api_router = APIRouter()
 
@@ -71,11 +77,12 @@ api_router.include_router(
     tags=["Monthly Report"]
 )
 
-# PDF Export (PDF 다운로드) 엔드포인트
-api_router.include_router(
-    pdf_export_router,
-    tags=["PDF Export"]
-)
+# PDF Export (PDF 다운로드) 엔드포인트 (선택적)
+if PDF_EXPORT_AVAILABLE and pdf_export_router:
+    api_router.include_router(
+        pdf_export_router,
+        tags=["PDF Export"]
+    )
 
 # RAG 엔드포인트
 api_router.include_router(

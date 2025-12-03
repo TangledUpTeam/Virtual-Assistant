@@ -34,9 +34,9 @@ def main():
         
         print("\n✅ 실행 완료!")
         print("\n다음 단계:")
-        print("  1. 주간 보고서 생성: python backend/debug/test_weekly_chain.py")
-        print("  2. 월간 보고서 생성: python backend/debug/test_monthly_chain.py")
-        print("  3. 실적 보고서 생성: python backend/debug/test_performance_chain.py")
+        print("  1. 주간 보고서 생성: python -m debug.report.test_weekly_chain")
+        print("  2. 월간 보고서 생성: python -m debug.report.test_monthly_chain")
+        print("  3. 실적 보고서 생성: python -m debug.report.test_performance_chain")
         print("  4. API 서버 시작: python assistant.py")
         
     except KeyboardInterrupt:

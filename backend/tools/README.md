@@ -172,13 +172,13 @@ alembic upgrade head
 
 ```bash
 # 1. 주간 보고서 생성
-python backend/debug/test_weekly_chain.py
+python -m debug.report.test_weekly_chain
 
 # 2. 월간 보고서 생성
-python backend/debug/test_monthly_chain.py
+python -m debug.report.test_monthly_chain
 
 # 3. 실적 보고서 생성
-python backend/debug/test_performance_chain.py
+python -m debug.report.test_performance_chain
 ```
 
 또는 API를 통해:
@@ -276,8 +276,8 @@ python backend/tools/run_bulk_ingest_example.py
 
 ### 3단계: 주간/월간 보고서 생성
 ```bash
-python backend/debug/test_weekly_chain.py
-python backend/debug/test_monthly_chain.py
-python backend/debug/test_performance_chain.py
+python -m debug.report.test_weekly_chain
+python -m debug.report.test_monthly_chain
+python -m debug.report.test_performance_chain
 ```
 

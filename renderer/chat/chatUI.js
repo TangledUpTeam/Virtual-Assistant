@@ -4,7 +4,7 @@
  */
 
 import { sendMultiAgentMessage, initChatbotService } from './chatbotService.js';
-import { getTodayPlan, saveSelectedTasks } from '../tasks/taskService.js';
+import { getTodayPlan, saveSelectedTasks } from '../report/taskService.js';
 
 // 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
 const accessToken = sessionStorage.getItem('access_token');

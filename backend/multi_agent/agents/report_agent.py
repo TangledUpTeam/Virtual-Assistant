@@ -61,7 +61,7 @@ class ReportAgent(BaseAgent):
             from app.domain.weekly.repository import WeeklyReportRepository
             from app.domain.monthly.repository import MonthlyReportRepository
             from app.domain.performance.repository import PerformanceReportRepository
-            from app.domain.report.schemas import CanonicalReport
+            from app.domain.report.core.canonical_models import CanonicalReport
             
             # 컨텍스트에서 정보 추출
             owner = "user"  # 기본값

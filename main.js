@@ -301,8 +301,56 @@ function openBrainstormingPopup() {
     }
   });
 
+  // 팝업 로드 완료
+  brainstormingWin.webContents.on('did-finish-load', () => {
+    console.log('🧠 브레인스토밍 팝업 로드 완료');
+  });
+
+  // 팝업 종료 시 세션 자동 삭제 및 챗봇에 알림
+  brainstormingWin.on('close', async (e) => {
+    console.log('🧠 브레인스토밍 팝업 닫기 시작');
+
+    // 렌더러에서 세션 ID 가져오기
+    try {
+      const sessionId = await brainstormingWin.webContents.executeJavaScript('getCurrentSessionId()');
+
+      if (sessionId) {
+        console.log('🗑️ 세션 자동 삭제 시작:', sessionId);
+
+        // 세션 삭제 API 호출
+        const http = require('http');
+        const options = {
+          hostname: 'localhost',
+          port: 8000,
+          path: `/api/v1/brainstorming/session/${sessionId}`,
+          method: 'DELETE'
+        };
+
+        const req = http.request(options, (res) => {
+          console.log('✅ 세션 삭제 완료:', sessionId);
+        });
+
+        req.on('error', (error) => {
+          console.error('❌ 세션 삭제 실패:', error);
+        });
+
+        req.end();
+      }
+    } catch (error) {
+      console.error('❌ 세션 ID 가져오기 실패:', error);
+    }
+  });
+
   brainstormingWin.on('closed', () => {
     console.log('🧠 브레인스토밍 팝업 닫힘');
+
+    // 챗봇에 종료 이벤트 전송
+    if (characterWin && !characterWin.isDestroyed()) {
+      characterWin.webContents.send('brainstorming-closed', {
+        // ideasCount 제거 - 단순히 종료만 알림
+      });
+    }
+
     brainstormingWin = null;
   });
 }
@@ -357,70 +405,6 @@ function openReportPopup() {
     reportWin = null;
   });
 }
-
-  // 개발자 도구 (F12)
-  brainstormingWin.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
-      if (brainstormingWin.webContents.isDevToolsOpened()) {
-        brainstormingWin.webContents.closeDevTools();
-      } else {
-        brainstormingWin.webContents.openDevTools({ mode: 'detach' });
-      }
-    }
-  });
-
-  // 팝업 로드 완료
-  brainstormingWin.webContents.on('did-finish-load', () => {
-    console.log('🧠 브레인스토밍 팝업 로드 완료');
-  });
-
-  // 팝업 종료 시 세션 자동 삭제 및 챗봇에 알림
-  brainstormingWin.on('close', async (e) => {
-    console.log('🧠 브레인스토밍 팝업 닫기 시작');
-
-    // 렌더러에서 세션 ID 가져오기
-    try {
-      const sessionId = await brainstormingWin.webContents.executeJavaScript('getCurrentSessionId()');
-
-      if (sessionId) {
-        console.log('🗑️ 세션 자동 삭제 시작:', sessionId);
-
-        // 세션 삭제 API 호출
-        const http = require('http');
-        const options = {
-          hostname: 'localhost',
-          port: 8000,
-          path: `/api/v1/brainstorming/session/${sessionId}`,
-          method: 'DELETE'
-        };
-
-        const req = http.request(options, (res) => {
-          console.log('✅ 세션 삭제 완료:', sessionId);
-        });
-
-        req.on('error', (error) => {
-          console.error('❌ 세션 삭제 실패:', error);
-        });
-
-        req.end();
-      }
-    } catch (error) {
-      console.error('❌ 세션 ID 가져오기 실패:', error);
-    }
-  });
-
-  brainstormingWin.on('closed', () => {
-    console.log('🧠 브레인스토밍 팝업 닫힘');
-
-    // 챗봇에 종료 이벤트 전송
-    if (characterWin && !characterWin.isDestroyed()) {
-      characterWin.webContents.send('brainstorming-closed', {
-        // ideasCount 제거 - 단순히 종료만 알림
-      });
-    }
-
-    brainstormingWin = null;
-  });
 
 // IPC: 챗봇에서 브레인스토밍 팝업 열기
 ipcMain.on('open-brainstorming-popup', (event) => {
