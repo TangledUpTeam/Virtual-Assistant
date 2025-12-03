@@ -56,7 +56,7 @@ class ChatService:
         
         # Tool 함수 매핑 (Function Calling 실행용)
         if TOOLS_AVAILABLE:
-            from tools import drive_tool, gmail_tool, slack_tool, notion_tool
+            from tools import drive_tool, gmail_tool, notion_tool
             self.tool_map = {
                 "create_folder": drive_tool.create_folder,
                 "upload_file": drive_tool.upload_file,
@@ -65,8 +65,7 @@ class ChatService:
                 "send_email": gmail_tool.send_email,
                 "list_messages": gmail_tool.list_messages,
                 "get_message": gmail_tool.get_message,
-                "send_dm": slack_tool.send_dm,
-                "send_channel_message": slack_tool.send_channel_message,
+
                 "create_page": notion_tool.create_page,
                 "add_database_item": notion_tool.add_database_item,
             }
@@ -222,7 +221,6 @@ class ChatService:
                         
                         # 모든 도구는 user_id가 필요함
                         if function_name in ["send_email", "list_messages", "get_message", 
-                                            "send_dm", "send_channel_message", 
                                             "create_page", "add_database_item",
                                             "create_folder", "upload_file", "search_files", "download_file"]:
                             # user_id를 문자열로 변환하여 전달
@@ -242,7 +240,8 @@ class ChatService:
                         result = await tool_func(**function_args)
                         
                         if result["success"]:
-                            ai_message = f"✅ 작업 완료!\n\n{json.dumps(result['data'], ensure_ascii=False, indent=2)}"
+                            # 사용자 친화적인 메시지 생성
+                            ai_message = self._format_tool_success_message(function_name, function_args, result['data'])
                         else:
                             ai_message = f"❌ 작업 실패: {result['error']}"
                     except Exception as e:
@@ -265,6 +264,61 @@ class ChatService:
             error_message = f"죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}"
             self.session_manager.add_message(session_id, "assistant", error_message)
             return error_message
+    
+    def _format_tool_success_message(self, function_name: str, function_args: dict, result_data: dict) -> str:
+        """
+        Tool 실행 성공 시 사용자 친화적인 메시지 생성
+        
+        Args:
+            function_name: 실행된 tool 함수 이름
+            function_args: 함수에 전달된 인자들
+            result_data: tool 함수의 반환 데이터
+            
+        Returns:
+            str: 사용자 친화적인 완료 메시지
+        """
+        # Google Drive 관련 메시지
+        if function_name == "create_folder":
+            folder_name = function_args.get("name", "폴더")
+            return f"✅ Google Drive에 '{folder_name}' 폴더 생성 완료!"
+        
+        elif function_name == "upload_file":
+            file_name = function_args.get("file_name") or result_data.get("name", "파일")
+            return f"✅ Google Drive에 '{file_name}' 파일 업로드 완료!"
+        
+        elif function_name == "search_files":
+            count = result_data.get("count", 0)
+            return f"✅ Google Drive에서 {count}개의 파일을 찾았습니다!"
+        
+        elif function_name == "download_file":
+            file_name = result_data.get("name", "파일")
+            return f"✅ Google Drive에서 '{file_name}' 파일 다운로드 완료!"
+        
+        # Gmail 관련 메시지
+        elif function_name == "send_email":
+            to = function_args.get("to", "")
+            subject = function_args.get("subject", "")
+            return f"✅ '{to}'에게 '{subject}' 이메일 전송 완료!"
+        
+        elif function_name == "list_messages":
+            count = result_data.get("count", 0)
+            return f"✅ Gmail에서 {count}개의 메시지를 찾았습니다!"
+        
+        elif function_name == "get_message":
+            subject = result_data.get("subject", "")
+            return f"✅ Gmail 메시지 조회 완료: '{subject}'"
+        
+        # Notion 관련 메시지
+        elif function_name == "create_page":
+            title = function_args.get("title", "페이지")
+            return f"✅ Notion에 '{title}' 페이지 생성 완료!"
+        
+        elif function_name == "add_database_item":
+            return f"✅ Notion 데이터베이스에 항목 추가 완료!"
+        
+        # 기본 메시지 (알 수 없는 tool)
+        else:
+            return f"✅ 작업 완료!"
     
     def _update_summary(self, session_id: str):
         """

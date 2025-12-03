@@ -73,3 +73,47 @@ export function getHRKeywords() {
   return [...HR_KEYWORDS];
 }
 
+/**
+ * Notion 컨텍스트를 포함한 HR 질의
+ * @param {string} query - 사용자 질문
+ * @param {string} notionContext - Notion 페이지 내용 (마크다운)
+ * @returns {Promise<{type: string, data: any}>}
+ */
+export async function queryHRWithNotion(query, notionContext) {
+  try {
+    console.log('📚 HR RAG API 호출 (Notion 컨텍스트 포함):', query);
+    
+    // Notion 컨텍스트를 질문에 추가
+    const enhancedQuery = `${query}\n\n참고 자료:\n${notionContext}`;
+    
+    const response = await fetch(`${API_BASE_URL}/rag/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: enhancedQuery,
+        top_k: 3
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`RAG API 호출 실패: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ HR RAG 응답 (Notion 컨텍스트 포함):', result);
+    
+    return {
+      type: 'text',
+      data: result.answer
+    };
+  } catch (error) {
+    console.error('❌ HR RAG API 호출 오류:', error);
+    return {
+      type: 'error',
+      data: 'HR 문서 검색 중 오류가 발생했습니다.'
+    };
+  }
+}
+

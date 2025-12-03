@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from urllib.parse import urlencode
@@ -7,7 +7,7 @@ import time
 from app.infrastructure.database import get_db
 from app.domain.auth.service import AuthService
 from app.domain.auth.schemas import OAuthCallbackResponse, RefreshTokenRequest, Token
-from app.infrastructure.oauth import google_oauth, kakao_oauth, naver_oauth
+from app.infrastructure.oauth import google_oauth, kakao_oauth, naver_oauth, notion_oauth
 from app.core.config import settings
 
 # Tools OAuth 토큰 저장
@@ -526,6 +526,143 @@ async def slack_callback(
         error_params = {'error': str(e), 'slack_error': 'true'}
         redirect_url = f"/landing?{urlencode(error_params)}"
         return RedirectResponse(url=redirect_url)
+
+
+# ========================================
+# Notion OAuth (사용자 개인 연동)
+# ========================================
+
+@router.get("/notion/login")
+async def notion_login():
+    """
+    Notion OAuth 로그인 URL 반환
+    
+    프론트엔드에서 이 URL로 리다이렉트하여 Notion 연동 시작
+    """
+    print("\n🔵 Notion OAuth 로그인 요청")
+    authorization_url = notion_oauth.get_authorization_url()
+    print(f"✅ Notion OAuth URL 생성: {authorization_url[:50]}...")
+    return {"authorization_url": authorization_url}
+
+
+@router.get("/notion/callback")
+async def notion_callback(
+    request: Request,
+    code: str = Query(..., description="Notion Authorization Code"),
+    state: str = Query(None, description="State parameter")
+):
+    """
+    Notion OAuth 콜백
+    
+    Notion 연동 후 리다이렉트되는 엔드포인트
+    토큰을 token_manager에 저장하고 /landing으로 리다이렉션
+    
+    ⚠️ 중요: 기존 로그인 세션 유지 (쿠키에서 user 정보 읽기)
+    """
+    print(f"\n{'='*60}")
+    print(f"🟣 Notion OAuth 콜백 시작")
+    print(f"{'='*60}")
+    print(f"   Authorization Code 받음: {code[:20]}...")
+    
+    try:
+        # 1. Access Token 받기
+        print(f"   1️⃣ Notion에 Access Token 요청 중...")
+        token_data = await notion_oauth.get_access_token(code)
+        print(f"   ✅ Access Token 받음")
+        
+        access_token = token_data.get("access_token")
+        workspace_id = token_data.get("workspace_id")
+        workspace_name = token_data.get("workspace_name", "Unknown Workspace")
+        bot_id = token_data.get("bot_id")
+        
+        print(f"   📦 Workspace: {workspace_name} (ID: {workspace_id})")
+        
+        # 2. 쿠키에서 현재 로그인한 사용자 정보 가져오기 (중요!)
+        print(f"   2️⃣ 현재 로그인 사용자 확인 중...")
+        from urllib.parse import unquote
+        import json
+        
+        user_cookie = request.cookies.get("user")
+        if not user_cookie:
+            print(f"   ❌ 로그인 세션이 없습니다 - user 쿠키 없음")
+            error_params = {'error': 'not_logged_in', 'message': '먼저 로그인이 필요합니다'}
+            redirect_url = f"/landing?{urlencode(error_params)}"
+            return RedirectResponse(url=redirect_url, status_code=302)
+        
+        try:
+            user_json = unquote(user_cookie)
+            user_data = json.loads(user_json)
+            user_id = str(user_data.get("id"))
+            user_email = user_data.get("email")
+            print(f"   ✅ 로그인 사용자 확인: {user_email} (ID: {user_id})")
+        except Exception as parse_error:
+            print(f"   ❌ user 쿠키 파싱 실패: {parse_error}")
+            error_params = {'error': 'invalid_session', 'message': '세션 정보가 올바르지 않습니다'}
+            redirect_url = f"/landing?{urlencode(error_params)}"
+            return RedirectResponse(url=redirect_url, status_code=302)
+        
+        # 3. token_manager에 토큰 저장
+        print(f"   3️⃣ Notion 토큰 저장 중...")
+        
+        try:
+            # token_manager에 저장할 데이터
+            notion_token_data = {
+                "access_token": access_token,
+                "workspace_id": workspace_id,
+                "workspace_name": workspace_name,
+                "bot_id": bot_id,
+                "token_type": token_data.get("token_type", "bearer")
+            }
+            
+            # token_manager를 사용하여 저장
+            await save_token(user_id, "notion", notion_token_data)
+            print(f"   ✅ Notion 토큰 저장 완료: {workspace_name}")
+        except Exception as save_error:
+            print(f"   ❌ 토큰 저장 실패: {save_error}")
+            import traceback
+            traceback.print_exc()
+            # 저장 실패해도 계속 진행 (사용자에게 알림)
+            error_params = {'error': 'token_save_failed', 'message': '토큰 저장에 실패했습니다'}
+            redirect_url = f"/landing?{urlencode(error_params)}"
+            response = RedirectResponse(url=redirect_url, status_code=302)
+            return response
+        
+        # 4. /landing으로 리다이렉션 (쿠키 유지)
+        print(f"   4️⃣ /landing으로 리다이렉션")
+        
+        from urllib.parse import quote
+        import base64
+        
+        workspace_encoded = quote(workspace_name)
+        redirect_url = f"/landing?notion_connected=true&workspace={workspace_encoded}"
+        print(f"✅ Notion OAuth 콜백 완료 - 리다이렉션: {redirect_url}")
+        
+        # Response 객체 생성 (status_code=302 명시)
+        response = RedirectResponse(url=redirect_url, status_code=302)
+        
+        # Notion workspace 정보를 쿠키에 저장 (한글 인코딩 문제 해결: base64 사용)
+        workspace_name_encoded = base64.b64encode(workspace_name.encode('utf-8')).decode('ascii')
+        response.set_cookie(
+            key="notion_workspace",
+            value=workspace_name_encoded,
+            httponly=False,
+            secure=False,
+            samesite="Lax",
+            max_age=60 * 60 * 24 * 365,
+            path="/",
+            domain=None
+        )
+        
+        return response
+    
+    except Exception as e:
+        print(f"\n❌ Notion OAuth 콜백 에러: {type(e).__name__} - {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        error_params = {'error': 'notion_auth_failed', 'message': str(e)}
+        redirect_url = f"/landing?{urlencode(error_params)}"
+        return RedirectResponse(url=redirect_url, status_code=302)
 
 
 # ========================================

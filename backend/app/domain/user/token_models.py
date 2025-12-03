@@ -1,6 +1,6 @@
 """
 OAuth Token 저장 모델
-외부 서비스(Google, Slack, Notion) OAuth 토큰 관리
+외부 서비스(Google, Notion) OAuth 토큰 관리
 """
 
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
@@ -16,7 +16,7 @@ class UserToken(Base):
     # 기본 필드
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True, comment="사용자 ID")
-    service = Column(String(50), nullable=False, index=True, comment="서비스명 (google, slack, notion)")
+    service = Column(String(50), nullable=False, index=True, comment="서비스명 (google, notion)")
     
     # 토큰 정보
     access_token = Column(Text, nullable=False, comment="Access Token")
