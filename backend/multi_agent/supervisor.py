@@ -45,10 +45,11 @@ class SupervisorAgent:
         self.system_message = self._create_system_message()
         
         # LangGraph Agent 생성 (LangChain 1.1.0 + LangGraph 1.0.4 호환)
+        # LangGraph 1.0.4에서는 prompt 파라미터를 사용하여 system message 전달
         self.agent_executor = create_react_agent(
             model=self.llm,
             tools=self.tools,
-            state_modifier=self.system_message
+            prompt=self.system_message
         )
     
     # System message 생성 함수(45줄에 rtn)
