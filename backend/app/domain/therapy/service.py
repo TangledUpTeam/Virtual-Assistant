@@ -64,8 +64,8 @@ class TherapyService:
             }
         
         try:
-            # RAG 시스템으로 상담 진행 (스코어링 옵션 전달)
-            response = self._rag_system.chat(user_input, enable_scoring=enable_scoring)
+            # RAG 시스템으로 상담 진행
+            response = self._rag_system.chat(user_input)
             return response
         except Exception as e:
             print(f"상담 처리 중 오류: {e}")
