@@ -417,14 +417,14 @@ app.whenReady().then(async () => {
   console.log('📝 세션 기반 - 앱 종료 시 로그인 정보 삭제됨');
   console.log('⌨️  단축키: ESC = 종료, F12 = 개발자 도구');
 
-  // 🔥 앱 시작 시 이전 세션 완전 삭제 (로그인 정보 초기화)
-  console.log('🗑️  이전 세션 삭제 중...');
+  // 🔥 앱 시작 시 캐시만 삭제 (Refresh Token은 유지 - 15일 자동 로그인)
+  console.log('🗑️  캐시 삭제 중...');
   const { session } = require('electron');
   await session.defaultSession.clearStorageData({
-    storages: ['cookies', 'localstorage', 'sessionstorage', 'cachestorage']
+    storages: ['localstorage', 'sessionstorage', 'cachestorage']
   });
   await session.defaultSession.clearCache();
-  console.log('✅ 이전 세션 삭제 완료 - 로그인 정보 초기화됨');
+  console.log('✅ 캐시 삭제 완료 - Refresh Token 유지됨');
 
   // 백엔드 서버 시작
   console.log('🔧 백엔드 서버 시작 중...');
@@ -467,12 +467,12 @@ app.on('window-all-closed', () => {
     backendProcess.kill('SIGTERM');
   }
 
-  // 세션 삭제 (로그인 정보 초기화)
+  // 세션 삭제 (Refresh Token은 유지 - 15일 자동 로그인)
   const { session } = require('electron');
   session.defaultSession.clearStorageData({
-    storages: ['cookies', 'localstorage', 'sessionstorage']
+    storages: ['localstorage', 'sessionstorage']
   }).then(() => {
-    console.log('🗑️  세션 삭제 완료');
+    console.log('🗑️  세션 삭제 완료 - Refresh Token 유지됨');
     app.quit();
   });
 });
@@ -492,15 +492,15 @@ app.on('before-quit', async (event) => {
     backendProcess.kill('SIGTERM');
   }
 
-  // 세션 삭제 (로그인 정보 초기화)
+  // 세션 삭제 (Refresh Token은 유지 - 15일 자동 로그인)
   console.log('🗑️  세션 삭제 중...');
   const { session } = require('electron');
   try {
     await session.defaultSession.clearStorageData({
-      storages: ['cookies', 'localstorage', 'sessionstorage', 'cachestorage']
+      storages: ['localstorage', 'sessionstorage', 'cachestorage']
     });
     await session.defaultSession.clearCache();
-    console.log('✅ 세션 삭제 완료');
+    console.log('✅ 세션 삭제 완료 - Refresh Token 유지됨');
   } catch (err) {
     console.error('⚠️ 세션 삭제 실패:', err);
   }
