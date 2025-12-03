@@ -34,30 +34,29 @@ class BrainstormingAgent(BaseAgent):
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
 
         try:
-            # 컨텍스트에서 context_count 추출 (기본값: 3)
-            context_count = 3
-            if context and "context_count" in context:
-                context_count = context["context_count"]
+            # Supervisor가 이 에이전트를 선택했다는 것은
+            # 사용자가 아이디어/브레인스토밍이 필요한 상황이라는 의미
+            # RAG 검색 없이 바로 브레인스토밍 도구 사용을 제안
             
-            # 브레인스토밍 제안 생성
-            result = self.brainstorming_service.generate_suggestions(
-                query=query,
-                context_count=context_count
-            )
+            print(f"[BrainstormingAgent] 쿼리: {query}")
+            print(f"[BrainstormingAgent] 브레인스토밍 도구 제안 모드")
             
-            # 제안과 출처 포함한 응답 생성
-            answer = result["suggestions"]
+            # 사용자의 쿼리에서 주제 추출 (간단하게)
+            # 예: "빵집 매출 증대 아이디어" -> "빵집 매출 증대"
+            topic_hint = ""
+            if "빵집" in query or "카페" in query or "가게" in query:
+                topic_hint = "관련 "
+            elif "마케팅" in query:
+                topic_hint = "마케팅 "
+            elif "프로젝트" in query or "기획" in query:
+                topic_hint = "프로젝트 "
             
-            # 출처 정보 추가
-            if result.get("sources"):
-                answer += "\n\n📚 **참고한 브레인스토밍 기법:**\n"
-                for source in result["sources"]:
-                    answer += f"- {source['title']} (유사도: {source['similarity']:.2f})\n"
-            
-            return answer
+            # 간결한 제안 메시지 반환
+            return f"SUGGESTION: 브레인스토밍 도구로 {topic_hint}아이디어를 함께 만들어볼까요? 🚀"
             
         except Exception as e:
-            return f"브레인스토밍 제안 생성 중 오류가 발생했습니다: {str(e)}"
+            print(f"[BrainstormingAgent] 오류: {e}")
+            return f"브레인스토밍 제안 중 오류가 발생했습니다: {str(e)}"
     
     # 브레인스토밍 에이전트 기능 목록 리턴
     def get_capabilities(self) -> list:
