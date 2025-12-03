@@ -7,6 +7,8 @@ LangChain 체인과 LangSmith를 사용하여 RAG 시스템을 구현합니다.
 from typing import List, Optional, Dict, Any
 import time
 import os
+import json
+import datetime
 
 # LangChain imports
 from langchain_core.prompts import ChatPromptTemplate
@@ -21,6 +23,7 @@ from .config import rag_config
 from .vector_store import VectorStore
 from .schemas import QueryRequest, QueryResponse, RetrievedChunk
 from .utils import get_logger
+from .evaluator import RAGEvaluator
 
 logger = get_logger(__name__)
 
@@ -42,9 +45,18 @@ class RAGRetriever:
         # Lazy loading: LLM을 실제 사용 시에만 로드
         self._llm = None
         self._rag_chain = None
+        self._rag_chain = None
         self._smalltalk_chain = None
+        self._evaluator = None
         
         logger.info("RAGRetriever 초기화 완료 (LLM lazy loading)")
+
+    @property
+    def evaluator(self):
+        """Evaluator lazy loading"""
+        if self._evaluator is None:
+            self._evaluator = RAGEvaluator()
+        return self._evaluator
     
     @property
     def llm(self):
@@ -68,9 +80,12 @@ class RAGRetriever:
 다음 규칙을 따라주세요:
 1. 제공된 문서 내용만을 기반으로 답변하세요.
 2. 문서에 없는 내용은 추측하지 마세요.
-3. 답변 먼저 한 후 마지막에 출처를 제공하세요 (예시: 출처 : 연차규정.txt)
-4. 명확하고 구조화된 답변을 제공하세요.
-5. 한국어로 답변하세요."""),
+3. 답변의 가독성을 높이기 위해 **Markdown 문법**을 적극적으로 사용하세요.
+   - 핵심 키워드나 중요한 내용은 **볼드체**로 강조하세요.
+   - 단계별 설명이나 나열이 필요한 경우 반드시 **글머리 기호(Bullet points)**나 **번호 매기기**를 사용하세요.
+   - 섹션이 나뉘는 경우 `###` 헤더를 사용하여 구분하세요.
+   - 줄글로 길게 늘어놓지 말고, 단락을 자주 나누어 가독성을 높이세요.
+4. 한국어로 답변하세요."""),
             ("user", """다음 문서들을 참고하여 질문에 답변해주세요.
 
 {context}
@@ -189,7 +204,8 @@ class RAGRetriever:
                     filtered_chunks.append(chunk)
                     logger.info(f"  ✓ 파일: {filename}, 페이지: {page_num}, 유사도: {chunk.score:.4f} >= {dynamic_threshold:.4f}")
                 else:
-                    logger.info(f"  ✗ 필터링: {filename}, 페이지: {page_num}, 유사도: {chunk.score:.4f} < {dynamic_threshold:.4f}")
+                    # logger.info(f"  ✗ 필터링: {filename}, 페이지: {page_num}, 유사도: {chunk.score:.4f} < {dynamic_threshold:.4f}")
+                    pass
             
             # 상위 k개만 선택
             retrieved_chunks = filtered_chunks[:top_k]
@@ -398,6 +414,73 @@ class RAGRetriever:
                 processing_time=processing_time,
                 model_used=self.config.OPENAI_MODEL
             )
+            
+            # 실시간 평가 수행 (터미널 출력용)
+            try:
+                print("\n" + "="*50)
+                print("🔍 실시간 RAG 답변 평가 수행 중...")
+                # Ground Truth 조회 (평가용으로만 사용)
+                ground_truth = self.evaluator.lookup_ground_truth(request.query)
+                
+                eval_result = self.evaluator.evaluate_single(
+                    question=request.query,
+                    answer=answer,
+                    context="\n".join([chunk.text for chunk in retrieved_chunks]),
+                    ground_truth=ground_truth
+                )
+                print(f"  - 정확성 (Faithfulness): {eval_result.get('faithfulness_score')}점")
+                print(f"  - 완전성 (Completeness): {eval_result.get('completeness_score')}점")
+                print(f"  - 연관성 (Answer Relevancy): {eval_result.get('answer_relevancy_score')}점")
+                print(f"  - 정밀도 (Context Precision): {eval_result.get('context_precision_score')}점")
+                print(f"  - 일치도 (Answer Correctness): {eval_result.get('answer_correctness_score')}점")
+                
+                # 결과 JSON 저장
+                try:
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    
+                    # 절대 경로 계산: backend/data/HR_RAG/HR_RAG_result
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    # backend/app/domain/rag/HR -> ... -> backend
+                    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
+                    result_dir = os.path.join(backend_dir, "data", "HR_RAG", "HR_RAG_result")
+                    
+                    os.makedirs(result_dir, exist_ok=True)
+                    
+                    result_file = os.path.join(result_dir, f"evaluation_{timestamp}.json")
+                    
+                    # 저장할 데이터 구성
+                    save_data = {
+                        "timestamp": timestamp,
+                        "query": request.query,
+                        "answer": answer,
+                        "retrieved_chunks": [
+                            {
+                                "filename": chunk.metadata.get("filename", "Unknown"),
+                                "page": chunk.metadata.get("page_number", "?"),
+                                "score": chunk.score,
+                                "text": chunk.text
+                            } for chunk in retrieved_chunks
+                        ],
+                        "ground_truth": ground_truth,
+                        "evaluation": eval_result
+                    }
+                    
+                    with open(result_file, 'w', encoding='utf-8') as f:
+                        json.dump(save_data, f, ensure_ascii=False, indent=4)
+                        
+                    logger.info(f"평가 결과 저장 완료: {result_file}")
+                    print(f"  - 결과 파일 저장: {result_file}")
+                    
+                except Exception as save_e:
+                    logger.error(f"평가 결과 저장 실패: {save_e}")
+                    print(f"  - 결과 파일 저장 실패: {save_e}")
+
+                print("="*50 + "\n")
+                    
+            except Exception as eval_e:
+                logger.warning(f"실시간 평가 중 오류 발생: {eval_e}")
+                print(f"❌ 실시간 평가 중 오류 발생: {eval_e}")
+                print("="*50 + "\n")
             
             # LangSmith 메타데이터 로깅
             from langsmith import traceable

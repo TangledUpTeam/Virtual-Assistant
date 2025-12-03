@@ -288,12 +288,29 @@ export async function sendMultiAgentMessage(userMessage) {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
 
+    // 쿠키에서 user ID 가져오기
+    let userId = null;
+    try {
+      const userCookie = document.cookie.split('; ').find(row => row.startsWith('user='));
+      if (userCookie) {
+        const userJson = decodeURIComponent(userCookie.split('=')[1]);
+        const userData = JSON.parse(userJson);
+        userId = userData.id;
+      }
+    } catch (error) {
+      console.warn('⚠️ user 쿠키 파싱 실패:', error);
+    }
+
     const requestBody = {
       query: userMessage
     };
 
     if (sessionId) {
       requestBody.session_id = sessionId;
+    }
+
+    if (userId) {
+      requestBody.user_id = userId;
     }
 
     const response = await fetch(`${API_BASE_URL}/multi-agent/query`, {

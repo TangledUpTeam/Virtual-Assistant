@@ -422,9 +422,6 @@ function openReportPopup() {
     brainstormingWin = null;
   });
 
-  console.log('✅ 브레인스토밍 팝업 생성 완료');
-}
-
 // IPC: 챗봇에서 브레인스토밍 팝업 열기
 ipcMain.on('open-brainstorming-popup', (event) => {
   console.log('🧠 브레인스토밍 팝업 생성 요청 (챗봇)');

@@ -46,8 +46,8 @@ openai==1.109.1
 # ========================================
 langchain==1.1.0
 langchain-core==1.1.0
-langchain-community>=0.3.0
-langchain-openai>=0.2.0
+langchain-community==0.4
+langchain-openai==1.1.0
 langchain-text-splitters==1.0.0
 langgraph==1.0.4
 langgraph-checkpoint==3.0.1

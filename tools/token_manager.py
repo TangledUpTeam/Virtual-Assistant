@@ -21,7 +21,7 @@ class TokenManager:
         
         Args:
             user_id: 사용자 ID (문자열)
-            service: 서비스 이름 (google, slack, notion 등)
+            service: 서비스 이름 (google, notion 등)
         
         Returns:
             토큰 정보 딕셔너리 또는 None
@@ -134,10 +134,7 @@ class TokenManager:
                         
                         return new_token_data
             
-            elif service == "slack":
-                # Slack은 토큰이 만료되지 않음 (revoke만 가능)
-                return token_data
-            
+
             elif service == "notion":
                 # Notion도 토큰이 만료되지 않음
                 return token_data

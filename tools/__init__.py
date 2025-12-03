@@ -3,7 +3,7 @@ Tool Layer for External Service Integration
 완전히 모듈화된 독립형 Tool Layer
 
 사용법:
-    from tools import drive_tool, gmail_tool, slack_tool, notion_tool
+    from tools import drive_tool, gmail_tool, notion_tool
     from tools.router import tools_router
     
     # FastAPI 앱에 라우터 추가 (선택적)
@@ -23,11 +23,6 @@ from .gmail_tool import (
     get_message,
 )
 
-from .slack_tool import (
-    send_dm,
-    send_channel_message,
-)
-
 from .notion_tool import (
     create_page,
     add_database_item,
@@ -45,13 +40,9 @@ __all__ = [
     "send_email",
     "list_messages",
     "get_message",
-    # Slack
-    "send_dm",
-    "send_channel_message",
     # Notion
     "create_page",
     "add_database_item",
     # Schemas
     "function_definitions",
 ]
-
