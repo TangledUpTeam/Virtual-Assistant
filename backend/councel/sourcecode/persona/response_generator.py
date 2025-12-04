@@ -8,76 +8,72 @@
 from typing import List, Dict, Any
 from openai import OpenAI
 
-
+# 답변 생성 클래스
 class ResponseGenerator:
-    """답변 생성 클래스"""
-    
+
+    # 초기화 함수    
     def __init__(self, openai_client: OpenAI, counseling_keywords: List[str]):
-        """
-        초기화
-        
-        Args:
-            openai_client: OpenAI 클라이언트
-            counseling_keywords: 상담 키워드 리스트
-        """
+
+        # OpenAI, 상담 키워드
         self.openai_client = openai_client
         self.counseling_keywords = counseling_keywords
+        # 키워드 매칭 최적화: 리스트를 set으로 변환하여 O(1) 조회 가능
+        self.counseling_keywords_set = set(keyword.lower() for keyword in counseling_keywords)
     
+    # 사용자 입력 분류(set 연산 사용)
     def classify_input(self, user_input: str) -> str:
-        """사용자의 입력 분류(아들러, 감정/상담, 일반)"""
+
         user_input_lower = user_input.lower()
+        user_words = set(user_input_lower.split())
         
         # 아들러 키워드 체크
         if "아들러" in user_input or "adler" in user_input_lower:
             return "adler"
         
-        # 감정/상담 키워드 체크
-        for keyword in self.counseling_keywords:
+        # 감정/상담 키워드 체크 (set 연산으로 최적화)
+        # 단어 단위 매칭 시도
+        if user_words & self.counseling_keywords_set:
+            return "counseling"
+        
+        # 부분 문자열 매칭 (하위 호환성)
+        for keyword in self.counseling_keywords_set:
             if keyword in user_input_lower:
                 return "counseling"
         
         return "general"
     
+    # 입력된 질문이 심리 상담 관련인지 확인하는 함수
     def is_therapy_related(self, user_input: str) -> bool:
-        """입력된 질문이 심리 상담 관련인지 확인"""
         input_type = self.classify_input(user_input)
         return input_type in ["adler", "counseling"]
     
+    # RAG없이 LLM(Vector DB)만으로 답변 생성
     def _generate_llm_only_response(self, user_input: str, adler_persona: str, chat_history: List[Dict[str, str]], counseling_keywords: List[str]) -> Dict[str, Any]:
-        """
-        RAG 없이 LLM 단독으로 답변 생성 (유사도가 높을 때)
-        
-        Args:
-            user_input: 사용자 질문
-            adler_persona: 아들러 페르소나 프롬프트
-            chat_history: 대화 히스토리
-            counseling_keywords: 상담 키워드 리스트
-            
-        Returns:
-            답변 딕셔너리
-        """
+
         try:
             # 아들러 페르소나 사용
             persona_prompt = adler_persona
             
-            # 대화 히스토리에서 감정 맥락 파악
+            # 대화 히스토리에서 감정 맥락 파악 (최적화: set 연산 사용)
             emotion_context = ""
             if chat_history:
                 recent_emotions = []
+                counseling_keywords_set = set(kw.lower() for kw in counseling_keywords[:30])  # 주요 감정 키워드만
                 for history in chat_history[-2:]:
-                    # 최근 대화에서 감정 키워드 추출
-                    for keyword in counseling_keywords[:20]:  # 주요 감정 키워드만
-                        if keyword in history["user"].lower():
-                            recent_emotions.append(keyword)
+                    # 최근 대화에서 감정 키워드 추출 (set 연산으로 최적화)
+                    history_words = set(history["user"].lower().split())
+                    matched = history_words & counseling_keywords_set
+                    if matched:
+                        recent_emotions.extend(list(matched)[:3])
                 
                 if recent_emotions:
                     emotion_context = f"\n[이전 대화 맥락: 사용자가 '{', '.join(set(recent_emotions[:3]))}' 관련 감정을 표현했습니다. 이를 고려하여 답변하세요.]"
             
-            # 대화 히스토리 추가
+            # 대화 히스토리 추가 (최적화: 최근 2개만 포함)
             messages = [{"role": "system", "content": persona_prompt + emotion_context}]
             
-            # 최근 3개의 대화만 포함
-            for history in chat_history[-3:]:
+            # 최근 2개의 대화만 포함 (컨텍스트 길이 최적화)
+            for history in chat_history[-2:]:
                 messages.append({"role": "user", "content": history["user"]})
                 messages.append({"role": "assistant", "content": history["assistant"]})
             
@@ -91,12 +87,12 @@ class ResponseGenerator:
             
             messages.append({"role": "user", "content": enhanced_input})
             
-            # OpenAI API 호출
+            # OpenAI API 호출 (최적화: max_tokens 조정)
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                temperature=0.3,
-                max_tokens=200  # 공감 표현을 위해 약간 늘림
+                temperature=0.3,  # 일관된 답변을 위해 낮은 temperature 유지
+                max_tokens=180  # 토큰 수 최적화 (200 → 180)
             )
             
             answer = response.choices[0].message.content.strip()
@@ -120,22 +116,9 @@ class ResponseGenerator:
                 "continue_conversation": True
             }
     
+    # 페르소나 기반 답변 생성
     def generate_response_with_persona(self, user_input: str, retrieved_chunks: List[Dict[str, Any]], adler_persona: str, chat_history: List[Dict[str, str]], mode: str = "adler", distance_to_similarity_func=None, summarize_chunk_func=None) -> Dict[str, Any]:
-        """
-        페르소나 기반 답변 생성
-        
-        Args:
-            user_input: 사용자 질문
-            retrieved_chunks: 검색된 청크 리스트
-            adler_persona: 아들러 페르소나 프롬프트
-            chat_history: 대화 히스토리
-            mode: 모드 (adler, counseling, general)
-            distance_to_similarity_func: distance를 similarity로 변환하는 함수
-            summarize_chunk_func: 청크를 요약하는 함수
-            
-        Returns:
-            답변 딕셔너리
-        """
+
         # 검색된 청크가 없는 경우
         if not retrieved_chunks:
             return {
@@ -179,12 +162,26 @@ class ResponseGenerator:
         
         context = "\n\n".join(context_parts)
         
-        # 사용자 입력에서 감정 키워드 추출
+        # 사용자 입력에서 감정 키워드 추출 (최적화: set 연산 사용)
         detected_emotions = []
         user_input_lower = user_input.lower()
-        for keyword in self.counseling_keywords[:30]:  # 주요 감정 키워드
-            if keyword in user_input_lower:
-                detected_emotions.append(keyword)
+        user_words = set(user_input_lower.split())
+        
+        # 주요 감정 키워드 set 생성
+        main_keywords_set = set(kw.lower() for kw in self.counseling_keywords[:30])
+        
+        # 단어 단위 매칭 (set 연산으로 최적화)
+        matched = user_words & main_keywords_set
+        if matched:
+            detected_emotions.extend(list(matched)[:3])
+        
+        # 부분 문자열 매칭 (하위 호환성)
+        if not detected_emotions:
+            for keyword in main_keywords_set:
+                if keyword in user_input_lower:
+                    detected_emotions.append(keyword)
+                    if len(detected_emotions) >= 3:
+                        break
         
         emotion_note = ""
         if detected_emotions:
@@ -218,23 +215,23 @@ class ResponseGenerator:
 - 감정을 판단하거나 최소화하지 않기
 - 따뜻하고 수용적인 톤 유지"""
         
-        # 대화 히스토리 추가 (단기 기억)
+        # 대화 히스토리 추가 (단기 기억, 최적화: 최근 5개만 포함)
         messages = [{"role": "system", "content": persona_prompt}]
         
-        # 최근 10개의 대화만 포함 (컨텍스트 길이 관리)
-        for history in chat_history[-10:]:
+        # 최근 5개의 대화만 포함 (컨텍스트 길이 최적화: 10개 → 5개)
+        for history in chat_history[-5:]:
             messages.append({"role": "user", "content": history["user"]})
             messages.append({"role": "assistant", "content": history["assistant"]})
         
         messages.append({"role": "user", "content": user_message})
         
-        # OpenAI API 호출
+        # OpenAI API 호출 (최적화: max_tokens 조정)
         try:
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
                 temperature=0.3,  # 낮은 temperature로 일관된 답변 생성
-                max_tokens=250  # 답변 길이 제한 (1000 -> 200 -> 100 -> 80 -> 150 -> 250)
+                max_tokens=200  # 답변 길이 최적화 (250 → 200)
             )
             
             answer = response.choices[0].message.content.strip()
@@ -256,4 +253,3 @@ class ResponseGenerator:
                 "mode": mode,
                 "continue_conversation": True
             }
-

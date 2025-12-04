@@ -10,6 +10,11 @@ from app.core.config import settings
 from app.api.v1 import api_router
 from app.infrastructure.database import engine, Base
 
+import warnings
+# LangSmith UUID v7 경고 억제
+warnings.filterwarnings("ignore", message=".*LangSmith now uses UUID v7.*")
+warnings.filterwarnings("ignore", message=".*Future versions will require UUID v7.*")
+
 # 경로 설정
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Virtual-Assistant 루트
 COUNCEL_DIR = BASE_DIR / "backend" / "councel"

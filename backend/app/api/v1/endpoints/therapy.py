@@ -43,7 +43,7 @@ async def chat_therapy(request: TherapyRequest):
             )
         
         # 상담 진행 (스코어링 옵션 전달)
-        response = therapy_service.chat(
+        response = await therapy_service.chat(
             request.message, 
             enable_scoring=request.enable_scoring
         )

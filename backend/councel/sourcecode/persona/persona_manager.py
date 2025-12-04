@@ -12,19 +12,13 @@ from typing import Optional
 from threading import Thread
 from openai import OpenAI
 
-
+# 페르소나 생성 및 관리 클래스
 class PersonaManager:
-    """페르소나 생성 및 관리 클래스"""
     
+    # 초기화 함수
     def __init__(self, openai_client: OpenAI, collection, base_dir: Path):
-        """
-        초기화
-        
-        Args:
-            openai_client: OpenAI 클라이언트
-            collection: ChromaDB 컬렉션
-            base_dir: 기본 디렉토리 경로
-        """
+
+        # OpenAI, 컬렉션, 기본 경로 설정
         self.openai_client = openai_client
         self.collection = collection
         self.base_dir = base_dir
@@ -34,7 +28,7 @@ class PersonaManager:
         cache_dir.mkdir(exist_ok=True)
         self.persona_cache_path = cache_dir / "adler_persona_cache.json"
         
-        # 페르소나 상태 플래그
+        # 페르소나 상태 플래그(기본값)
         self._persona_ready = False
         self._rag_persona_ready = False
         self.adler_persona = None
@@ -55,12 +49,13 @@ class PersonaManager:
             # 백그라운드에서 RAG 페르소나 생성
             self._start_background_persona_generation()
     
+    # RAG 기반 페르소나 생성(Vector DB + 웹 검색)
     def generate_persona_with_rag(self) -> str:
-        """RAG 기반 페르소나 생성(Vector DB + 웹 검색)"""
         return self._generate_persona_from_rag()
     
+    # 프롬프트 엔지니어링으로 페르소나 생성(기본 페르소나)
     def generate_persona_with_prompt_engineering(self) -> str:
-        """프롬프트 엔지니어링으로만 페르소나 생성"""
+
         return """
 
             당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자입니다.
@@ -101,12 +96,13 @@ class PersonaManager:
 
         """
     
+    # 페르소나 디폴트 값(프롬프트 엔지니어링으로 만든 페르소나)
     def _get_default_persona(self) -> str:
-        """페르소나 디폴트 값(프롬프트 엔지니어링 사용한 페르소나)"""
         return self.generate_persona_with_prompt_engineering()
     
+    # 저장된 페르소나 캐시 로드(캐시는 24시간 동안 유효)
     def _load_cached_persona(self) -> Optional[str]:
-        """캐시된 페르소나 로드(캐시는 24시간 유효)"""
+
         try:
             if self.persona_cache_path.exists():
                 with open(self.persona_cache_path, 'r', encoding='utf-8') as f:
@@ -117,13 +113,14 @@ class PersonaManager:
                     if current_time - cache_timestamp < 86400:  # 24시간 = 86400초
                         return data.get('persona')
                     else:
-                        print(f"[정보] 캐시가 만료되었습니다 (생성 시각: {time.ctime(cache_timestamp)})")
+                        print(f"[정보] 캐시가 만료되었습니다")
         except Exception as e:
             print(f"[경고] 캐시 로드 실패: {e}")
         return None
     
+    # 페르소나를 캐시에 저장
     def _save_persona_cache(self, persona: str):
-        """페르소나를 캐시에 저장"""
+
         try:
             data = {
                 'persona': persona,
@@ -134,8 +131,10 @@ class PersonaManager:
         except Exception as e:
             print(f"[경고] 캐시 저장 실패: {e}")
     
+    # 백그라운드에서 RAG 페르소나 생성 및 캐싱
     def _start_background_persona_generation(self):
-        """백그라운드에서 RAG 페르소나 생성 및 캐싱"""
+
+        # 백그라운드에서 실행하는 함수
         def generate_in_background():
             try:
                 rag_persona = self._generate_persona_from_rag()
@@ -153,12 +152,13 @@ class PersonaManager:
         thread = Thread(target=generate_in_background, daemon=True)
         thread.start()
     
+    # 페르소나 준비 여부 확인 함수
     def is_rag_persona_ready(self) -> bool:
-        """RAG 페르소나 생성 완료 여부 확인"""
         return self._rag_persona_ready
     
+    # 웹 검색 -> 아들러 정보 수집(페르소나 생성 용도)
     def _search_web_for_adler(self) -> str:
-        """웹 검색 -> 아들러 정보 수집(페르소나 생성 용도)"""
+ 
         try:
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -187,22 +187,14 @@ Keep it concise but comprehensive."""
             print(f"[경고] 웹 검색 실패: {e}")
             return ""
     
+    # RAG 사용 -> 페르소나 생성 함수
     def _generate_persona_from_rag(self) -> str:
-        """RAG 기반 페르소나 생성(Vector DB + 웹 검색)"""
-        # retrieve_chunks 함수는 search_engine에서 가져와야 함
-        # 일단 여기서는 직접 구현하거나, 나중에 의존성 주입으로 처리
-        from .search_engine import SearchEngine
-        
-        # 임시로 SearchEngine 인스턴스 생성 (나중에 의존성 주입으로 개선 가능)
-        # 하지만 여기서는 collection과 openai_client만 있으면 됨
-        # 일단 기본 검색 로직을 직접 구현
+
+        # 검색 쿼리 최적화: 6개 → 3개로 축소 (핵심 개념만 선별)
         persona_queries = [
             "Alfred Adler individual psychology core principles",
             "inferiority complex and superiority striving",
-            "social interest and community feeling",
-            "lifestyle and life style pattern",
-            "encouragement therapy techniques",
-            "teleological perspective goal orientation"
+            "social interest and community feeling"
         ]
         
         # 1. Vector DB에서 관련 청크 수집
@@ -243,15 +235,14 @@ Keep it concise but comprehensive."""
                 seen_ids.add(chunk['id'])
                 unique_chunks.append(chunk)
         
-        # 상위 10개 청크만 사용
-        unique_chunks = unique_chunks[:10]
+        # 상위 5개 청크만 사용 -> 10개에서 5개로 축소 -> 속도 줄이기 위함
+        unique_chunks = unique_chunks[:5]
         
         # 2. 웹 검색으로 최신 정보 수집
         web_info = self._search_web_for_adler()
         
         # 3. 검색된 청크가 없으면 기본 페르소나 사용
         if not unique_chunks and not web_info:
-            print("[경고] 페르소나 생성용 자료를 찾을 수 없어 기본 페르소나를 사용합니다.")
             return self._get_default_persona()
         
         # 4. Vector DB 청크 텍스트 추출
@@ -329,4 +320,3 @@ Keep it concise but comprehensive."""
         except Exception as e:
             print(f"[경고] 페르소나 생성 실패, 기본 페르소나 사용: {e}")
             return self._get_default_persona()
-
