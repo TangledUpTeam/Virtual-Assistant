@@ -34,10 +34,19 @@ class DocumentConverter:
         self.config = rag_config
         self.encoding = tiktoken.get_encoding("cl100k_base")
         
-        # LangChain 텍스트 분할기 설정
+        # LangChain 텍스트 분할기 설정 - 텍스트용
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.config.RAG_CHUNK_SIZE,
-            chunk_overlap=self.config.RAG_CHUNK_OVERLAP,
+            chunk_size=self.config.RAG_TEXT_CHUNK_SIZE,
+            chunk_overlap=self.config.RAG_TEXT_CHUNK_OVERLAP,
+            length_function=self._token_length,
+            separators=["\n\n", "\n", ". ", " ", ""],
+            is_separator_regex=False
+        )
+        
+        # LangChain 텍스트 분할기 설정 - 표/그래프/이미지용
+        self.visual_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.config.RAG_VISUAL_CHUNK_SIZE,
+            chunk_overlap=self.config.RAG_VISUAL_CHUNK_OVERLAP,
             length_function=self._token_length,
             separators=["\n\n", "\n", ". ", " ", ""],
             is_separator_regex=False
@@ -107,8 +116,18 @@ class DocumentConverter:
             # 토큰 길이 확인
             token_length = self._token_length(markdown_text)
             
+            # 컨텐츠 타입에 따라 다른 splitter와 설정 사용
+            is_visual = content.content_type in [ContentType.TABLE, ContentType.IMAGE]
+            splitter = self.visual_splitter if is_visual else self.text_splitter
+            max_chunk_size = self.config.RAG_VISUAL_MAX_CHUNK_SIZE if is_visual else self.config.RAG_TEXT_MAX_CHUNK_SIZE
+            min_chunk_size = self.config.RAG_VISUAL_MIN_CHUNK_SIZE if is_visual else self.config.RAG_TEXT_MIN_CHUNK_SIZE
+            
+            logger.info(f"청킹 타입: {'표/그래프/이미지' if is_visual else '텍스트'}, "
+                       f"크기: {token_length} 토큰, "
+                       f"최대: {max_chunk_size}, 최소: {min_chunk_size}")
+            
             # 청크 크기보다 작으면 분할하지 않음
-            if token_length <= self.config.RAG_MAX_CHUNK_SIZE:
+            if token_length <= max_chunk_size:
                 # UUID 기반 청크 ID 생성
                 chunk_id = str(uuid.uuid4())
                 
@@ -140,12 +159,12 @@ class DocumentConverter:
                     }
                 )
                 
-                # LangChain Text Splitter로 분할
-                split_docs = self.text_splitter.split_documents([langchain_doc])
+                # 컨텐츠 타입에 따라 적절한 Splitter로 분할
+                split_docs = splitter.split_documents([langchain_doc])
                 
                 for idx, split_doc in enumerate(split_docs):
                     # 최소 청크 크기 확인
-                    if self._token_length(split_doc.page_content) < self.config.RAG_MIN_CHUNK_SIZE:
+                    if self._token_length(split_doc.page_content) < min_chunk_size:
                         continue
                     
                     # UUID 기반 청크 ID 생성
@@ -186,17 +205,20 @@ class DocumentConverter:
         
         for chunk in chunks:
             token_length = self._token_length(chunk.text)
+            is_visual = chunk.metadata.content_type in [ContentType.TABLE, ContentType.IMAGE]
+            min_size = self.config.RAG_VISUAL_MIN_CHUNK_SIZE if is_visual else self.config.RAG_TEXT_MIN_CHUNK_SIZE
+            max_size = self.config.RAG_VISUAL_MAX_CHUNK_SIZE if is_visual else self.config.RAG_TEXT_MAX_CHUNK_SIZE
             
-            if token_length < self.config.RAG_MIN_CHUNK_SIZE:
+            if token_length < min_size:
                 logger.warning(
                     f"청크가 너무 작습니다: {chunk.metadata.chunk_id} "
-                    f"({token_length} 토큰)"
+                    f"({token_length} 토큰, 최소: {min_size})"
                 )
                 
-            if token_length > self.config.RAG_MAX_CHUNK_SIZE * 1.5:
+            if token_length > max_size * 1.5:
                 logger.warning(
                     f"청크가 너무 큽니다: {chunk.metadata.chunk_id} "
-                    f"({token_length} 토큰)"
+                    f"({token_length} 토큰, 최대: {max_size})"
                 )
         
         return True
