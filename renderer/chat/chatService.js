@@ -71,7 +71,7 @@ async function getOrCreateMultiAgentSession() {
  * @param {string} userText - 사용자 입력 텍스트
  * @returns {Promise<{type: string, data: any}>} 챗봇 응답 (type과 data 포함)
  */
-export async function callChatModule(userText) {
+export async function callChatModule(userText, history = []) {
   console.log('📨 사용자 메시지:', userText);
 
   try {
@@ -93,7 +93,14 @@ export async function callChatModule(userText) {
       credentials: 'include',
       body: JSON.stringify({
         query: userText,
-        session_id: sessionId
+        session_id: sessionId,
+        context: {
+          conversation_history: history.map(msg => ({
+            role: msg.role,
+            content: msg.text,
+            agent_used: msg.agent // 에이전트 정보도 포함
+          }))
+        }
       })
     });
 

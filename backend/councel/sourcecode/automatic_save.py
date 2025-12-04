@@ -201,10 +201,6 @@ class AutomaticSaveManager:
     
     # 전체 프로세스 실행
     def run(self) -> bool:
-
-        print("\n" + "="*60)
-        print("자동 저장 프로세스 시작")
-        print("="*60)
         
         try:
             # Step 1: 청크 파일 생성

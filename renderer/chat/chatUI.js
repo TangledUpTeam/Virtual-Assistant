@@ -254,9 +254,14 @@ async function handleSendMessage() {
                            lowerText.includes('뭐해') || lowerText.includes('해야') || 
                            lowerText.includes('업무');
     
+
+    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
+
     // 사용된 에이전트 로그
     if (result.agent_used) {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
+    }
 
       // 보고서/플래닝 에이전트가 사용되었으면
       if (result.agent_used === 'planner' || result.agent_used === 'report' || 
@@ -299,7 +304,31 @@ async function handleSendMessage() {
           });
         }
         return;
+    // 브레인스토밍 에이전트인 경우 (특수 처리)
+    if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
+      // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
+      if (result.answer.includes('SUGGESTION:')) {
+        const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
+        addMessage('assistant', cleanMessage, isMarkdown);
+
+        addConfirmationButton('브레인스토밍 시작하기', () => {
+          openBrainstormingPopup();
+          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+        });
       }
+      // 2. 그 외 (일반 답변 + 도구 열기 버튼)
+      else {
+        addMessage('assistant', result.answer, isMarkdown);
+
+        addConfirmationButton('브레인스토밍 도구 열기', () => {
+          openBrainstormingPopup();
+          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+        });
+      }
+    }
+    // 그 외 일반 에이전트
+    else {
+      addMessage('assistant', result.answer, isMarkdown);
     }
     
     // 기본: 멀티에이전트 응답 표시
@@ -333,15 +362,27 @@ async function handleSimpleResponse(text) {
 /**
  * 메시지 추가
  */
-function addMessage(role, text) {
-  messages.push({ role, text });
+function addMessage(role, text, isMarkdown = false) {
+  // 메시지 객체에 에이전트 정보 포함
+  const messageObj = {
+    role,
+    content: text
+  };
+
+  messages.push(messageObj);
 
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${role}`;
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = text;
+
+  // 마크다운 렌더링 (HR RAG 등)
+  if (isMarkdown && role === 'assistant' && typeof marked !== 'undefined') {
+    bubble.innerHTML = marked.parse(text);
+  } else {
+    bubble.textContent = text;
+  }
 
   messageDiv.appendChild(bubble);
   messagesContainer.appendChild(messageDiv);
@@ -672,3 +713,8 @@ function openReportPopup() {
   }
 }
 
+ * 메시지 히스토리 가져오기 (Notion Agent가 사용)
+ */
+window.getMessages = function () {
+  return messages;
+};

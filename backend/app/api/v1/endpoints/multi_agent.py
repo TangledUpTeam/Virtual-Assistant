@@ -42,6 +42,24 @@ async def multi_agent_query(
     request: MultiAgentRequest,
     supervisor: SupervisorAgent = Depends(get_supervisor_agent)
 ):
+    # 세션 ID가 있으면 대화 히스토리 주입
+    if request.session_id:
+        from app.domain.chatbot.session_manager import SessionManager
+        session_manager = SessionManager()
+        
+        # 히스토리 가져오기
+        history = session_manager.get_history(request.session_id)
+        
+        # Context 초기화 및 히스토리 추가
+        if request.context is None:
+            request.context = {}
+            
+        request.context["conversation_history"] = history
+        request.context["session_id"] = request.session_id
+        
+        # 사용자 ID도 context에 추가
+        if request.user_id:
+            request.context["user_id"] = request.user_id
 
     try:
         response = await supervisor.process(request)
