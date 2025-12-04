@@ -170,9 +170,42 @@ async def get_page_content(user_id: str, page_id: str) -> Dict[str, Any]:
                     title = title_array[0].get("text", {}).get("content", "Untitled")
                 break
         
-        # 페이지 블록 가져오기
-        blocks_response = await notion.blocks.children.list(block_id=page_id)
-        blocks = blocks_response.get("results", [])
+        # 페이지 블록 가져오기 (재귀적으로 모든 자식 포함)
+        async def _fetch_children_recursive(block_id: str) -> List[Dict]:
+            """블록의 자식들을 재귀적으로 가져오는 헬퍼 함수"""
+            all_results = []
+            try:
+                # 첫 페이지 가져오기
+                response = await notion.blocks.children.list(block_id=block_id)
+                children = response.get("results", [])
+                
+                # 페이지네이션 처리
+                while True:
+                    for child in children:
+                        # 자식이 있는 경우 재귀 호출 (has_children이 True인 경우)
+                        if child.get("has_children", False):
+                            child_blocks = await _fetch_children_recursive(child["id"])
+                            child["children"] = child_blocks
+                        all_results.append(child)
+                    
+                    # 다음 페이지가 없으면 종료
+                    if not response.get("has_more"):
+                        break
+                        
+                    # 다음 페이지 가져오기
+                    response = await notion.blocks.children.list(
+                        block_id=block_id, 
+                        start_cursor=response.get("next_cursor")
+                    )
+                    children = response.get("results", [])
+                    
+            except Exception as e:
+                print(f"[WARNING] 자식 블록 가져오기 실패 (ID: {block_id}): {e}")
+                
+            return all_results
+
+        # 최상위 블록 가져오기
+        blocks = await _fetch_children_recursive(page_id)
         
         # 마크다운으로 변환
         markdown = blocks_to_markdown(blocks)
