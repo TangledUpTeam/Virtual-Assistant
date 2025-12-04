@@ -291,8 +291,8 @@ def build_daily_report(
                 note=note
             ))
     
-    # summary_tasks = planned_tasks (금일 예정 업무)
-    summary_tasks = [task.get("title", "") for task in main_tasks if task.get("title")]
+    # todo_tasks = planned_tasks (금일 예정 업무)
+    todo_tasks = [task.get("title", "") for task in main_tasks if task.get("title")]
     
     # 로그 출력
     print(f"\n📊 일일보고서 생성 요약:")
@@ -307,16 +307,19 @@ def build_daily_report(
         print(f"  - 미종결 목록: {', '.join(unresolved_tasks)}")
     
     # 새 Canonical 구조로 생성
+    notes_text = "\n".join(special_notes) if special_notes else ""
+    summary_text = notes_text  # 특이사항을 summary로도 사용
     canonical_daily = CanonicalDaily(
         header={
             "작성일자": target_date.isoformat(),
             "성명": owner
         },
-        summary_tasks=summary_tasks,
+        todo_tasks=todo_tasks,
         detail_tasks=detail_tasks,
         pending=unresolved_tasks,
         plans=next_day_plans,
-        notes="\n".join(special_notes) if special_notes else ""
+        notes=notes_text,
+        summary=summary_text
     )
     
     return CanonicalReport(

@@ -19,7 +19,7 @@ load_dotenv()
 # 프로젝트 루트를 path에 추가
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.infrastructure.vector_store import get_unified_collection
+from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.search.retriever import UnifiedRetriever
 from app.domain.report.search.intent_router import IntentRouter
 from app.domain.report.search.service import UnifiedSearchService
@@ -69,7 +69,7 @@ def test_scenario_1():
     query = "신규 고객 상담 업무 내용 알려줘"
     
     # 서비스 초기화
-    collection = get_unified_collection()
+    collection = get_report_vector_store().get_collection()
     retriever = UnifiedRetriever(collection)
     router = IntentRouter()
     service = UnifiedSearchService(retriever, router)
@@ -90,7 +90,7 @@ def test_scenario_2():
     query = "암보험 실적 KPI 정리해줘"
     
     # 서비스 초기화
-    collection = get_unified_collection()
+    collection = get_report_vector_store().get_collection()
     retriever = UnifiedRetriever(collection)
     router = IntentRouter()
     service = UnifiedSearchService(retriever, router)
@@ -111,7 +111,7 @@ def test_scenario_3():
     query = "월간 업무 보고서 양식 다시 보여줘"
     
     # 서비스 초기화
-    collection = get_unified_collection()
+    collection = get_report_vector_store().get_collection()
     retriever = UnifiedRetriever(collection)
     router = IntentRouter()
     service = UnifiedSearchService(retriever, router)

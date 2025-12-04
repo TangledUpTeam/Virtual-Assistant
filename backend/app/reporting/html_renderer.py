@@ -93,7 +93,7 @@ class HTMLReportRenderer:
         
         return {
             "header": header,
-            "summary_tasks": daily.summary_tasks or [],
+            "summary_tasks": daily.todo_tasks or [],  # todo_tasks 사용 (하위 호환성을 위해 키는 summary_tasks 유지)
             "detail_tasks": detail_tasks,
             "pending": pending_text,
             "plans": plans_text,

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from fastapi.responses import JSONResponse
+from typing import Optional
 
 from app.domain.report.core.service import ReportProcessingService
 from app.domain.report.core.schemas import (
@@ -14,6 +15,8 @@ from app.domain.report.core.schemas import (
     ReportTypeDetectionResponse,
     ReportType
 )
+from app.domain.auth.dependencies import get_current_user_optional
+from app.domain.user.models import User
 from app.core.config import settings
 
 
@@ -29,13 +32,15 @@ def get_report_service() -> ReportProcessingService:
 @router.post("/parse", response_model=ReportParseWithCanonicalResponse)
 async def parse_report(
     file: UploadFile = File(...),
-    service: ReportProcessingService = Depends(get_report_service)
+    service: ReportProcessingService = Depends(get_report_service),
+    current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     """
     보고서 PDF 파일을 업로드하여 JSON으로 파싱 (Raw + Canonical)
     
     Args:
         file: 업로드할 PDF 파일
+        current_user: 현재 로그인한 사용자 (선택, 있으면 owner로 사용)
         
     Returns:
         파싱된 보고서 데이터 (Raw JSON + Canonical JSON)
@@ -57,8 +62,11 @@ async def parse_report(
         # 보고서 처리 (Vision API → Raw JSON)
         report_type, raw_json = service.process_report(str(temp_path))
         
+        # owner_override 결정: 로그인한 사용자가 있으면 사용자 이름 사용
+        owner_override = current_user.name if current_user and current_user.name else None
+        
         # Raw JSON → Canonical JSON 변환
-        canonical_report = service.normalize_report(report_type, raw_json)
+        canonical_report = service.normalize_report(report_type, raw_json, owner_override=owner_override)
         
         # 임시 파일 삭제
         temp_path.unlink()

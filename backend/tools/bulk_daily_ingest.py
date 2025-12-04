@@ -24,6 +24,13 @@ if sys.platform == 'win32':
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
+# 환경 변수 로드 (config 설정을 위해 필요)
+from dotenv import load_dotenv
+load_dotenv(backend_dir / ".env")
+report_env = backend_dir / ".env.report"
+if report_env.exists():
+    load_dotenv(report_env, override=False)
+
 from app.infrastructure.database.session import SessionLocal
 from app.domain.report.daily.repository import DailyReportRepository
 from app.domain.report.daily.schemas import DailyReportCreate
@@ -99,14 +106,14 @@ def convert_to_canonical_report(raw_json: Dict[str, Any]) -> CanonicalReport:
         "성명": 성명
     }
     
-    # 3. summary_tasks (금일_진행_업무)
-    summary_tasks = []
+    # 3. todo_tasks (금일_진행_업무)
+    todo_tasks = []
     금일진행업무 = raw_json.get("금일_진행_업무", "")
     if 금일진행업무:
         if isinstance(금일진행업무, list):
-            summary_tasks = 금일진행업무
+            todo_tasks = 금일진행업무
         else:
-            summary_tasks = [금일진행업무] if 금일진행업무.strip() else []
+            todo_tasks = [금일진행업무] if 금일진행업무.strip() else []
     
     # 4. detail_tasks (세부업무)
     detail_tasks = []
@@ -145,17 +152,19 @@ def convert_to_canonical_report(raw_json: Dict[str, Any]) -> CanonicalReport:
         else:
             plans = [익일계획] if 익일계획.strip() else []
     
-    # 7. notes (특이사항)
+    # 7. notes (특이사항) - notes와 summary 모두 설정
     notes = raw_json.get("특이사항", "") or ""
+    summary = raw_json.get("특이사항", "") or ""  # 특이사항을 summary로도 사용
     
     # 8. CanonicalDaily 생성
     canonical_daily = CanonicalDaily(
         header=header,
-        summary_tasks=summary_tasks,
+        todo_tasks=todo_tasks,
         detail_tasks=detail_tasks,
         pending=pending,
         plans=plans,
-        notes=notes
+        notes=notes,
+        summary=summary
     )
     
     # 9. CanonicalReport 생성
@@ -249,6 +258,111 @@ def find_all_txt_files(base_dir: Path, year: Optional[int] = None, month: Option
             continue
     
     return sorted(filtered_files)
+
+
+def preview_files(year: Optional[int] = None, month: Optional[int] = None):
+    """
+    파일 미리보기 (DB 저장 없이)
+    
+    Args:
+        year: 필터링할 연도 (None이면 모든 연도)
+        month: 필터링할 월 (None이면 모든 월, 예: 11 = 11월)
+    """
+    print("=" * 70)
+    print("👀 Daily Report 파일 미리보기")
+    if year or month:
+        filter_msg = []
+        if year:
+            filter_msg.append(f"{year}년")
+        if month:
+            filter_msg.append(f"{month}월")
+        print(f"필터: {' '.join(filter_msg)}")
+    print("=" * 70)
+    
+    # 1. 기본 경로 설정
+    base_dir = backend_dir / "Data" / "mock_reports" / "daily"
+    
+    if not base_dir.exists():
+        print(f"❌ 디렉토리가 존재하지 않습니다: {base_dir}")
+        return
+    
+    print(f"\n📁 대상 디렉토리: {base_dir}")
+    
+    # 2. 모든 txt 파일 찾기
+    txt_files = find_all_txt_files(base_dir, year=year, month=month)
+    print(f"📄 발견된 txt 파일: {len(txt_files)}개\n")
+    
+    if not txt_files:
+        print("⚠️  txt 파일이 없습니다.")
+        return
+    
+    # 3. 각 폴더별 파일 통계
+    folder_stats = {}
+    total_json_count = 0
+    
+    for file_path in txt_files:
+        folder_name = file_path.parent.name
+        
+        # JSON 객체 수 확인
+        json_objects = read_json_objects_from_file(file_path)
+        json_count = len(json_objects)
+        total_json_count += json_count
+        
+        if folder_name not in folder_stats:
+            folder_stats[folder_name] = {
+                "files": [],
+                "total_json": 0
+            }
+        
+        folder_stats[folder_name]["files"].append({
+            "name": file_path.name,
+            "json_count": json_count
+        })
+        folder_stats[folder_name]["total_json"] += json_count
+    
+    # 4. 폴더별 출력
+    print("📂 폴더별 파일 목록:\n")
+    
+    for folder_name in sorted(folder_stats.keys()):
+        stats = folder_stats[folder_name]
+        print(f"📁 {folder_name}")
+        print(f"   ├─ 파일 수: {len(stats['files'])}개")
+        print(f"   ├─ 보고서 수: {stats['total_json']}개")
+        print(f"   └─ 파일 목록:")
+        
+        for file_info in stats["files"]:
+            print(f"      ├─ {file_info['name']} ({file_info['json_count']}개)")
+        
+        print()
+    
+    # 5. 전체 통계
+    print("=" * 70)
+    print("📊 전체 통계:")
+    print(f"   ├─ 폴더 수: {len(folder_stats)}개")
+    print(f"   ├─ 파일 수: {len(txt_files)}개")
+    print(f"   └─ 총 보고서 수: {total_json_count}개")
+    print("=" * 70)
+    
+    # 6. 샘플 미리보기
+    print("\n📖 첫 번째 파일 샘플 미리보기:\n")
+    
+    if txt_files:
+        first_file = txt_files[0]
+        json_objects = read_json_objects_from_file(first_file)
+        
+        if json_objects:
+            first_json = json_objects[0]
+            print(f"파일: {first_file.name}")
+            print(f"작성일자: {first_json.get('상단정보', {}).get('작성일자', 'N/A')}")
+            print(f"성명: {first_json.get('상단정보', {}).get('성명', 'N/A')}")
+            print(f"세부업무 수: {len(first_json.get('세부업무', []))}개")
+            print(f"금일 진행 업무: {first_json.get('금일_진행_업무', 'N/A')[:50]}...")
+    
+    print("\n" + "=" * 70)
+    print("✅ 미리보기 완료!")
+    print("\n실행하려면:")
+    print("  python backend/tools/bulk_daily_ingest.py")
+    print("=" * 70)
 
 
 def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] = None):
@@ -369,6 +483,31 @@ def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] =
 
 
 if __name__ == "__main__":
-    # 모든 목업 데이터를 PostgreSQL에 저장
-    bulk_ingest_daily_reports()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="일일보고서 Bulk Ingestion 스크립트")
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="미리보기 모드 (DB 저장하지 않음)"
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        help="필터링할 연도 (예: 2025)"
+    )
+    parser.add_argument(
+        "--month",
+        type=int,
+        help="필터링할 월 (예: 11)"
+    )
+    
+    args = parser.parse_args()
+    
+    if args.preview:
+        # 미리보기 모드
+        preview_files(year=args.year, month=args.month)
+    else:
+        # 실제 저장 모드
+        bulk_ingest_daily_reports(year=args.year, month=args.month)
 

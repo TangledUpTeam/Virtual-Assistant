@@ -22,7 +22,7 @@ from app.domain.report.planner.today_plan_chain import TodayPlanGenerator
 from app.domain.report.planner.tools import YesterdayReportTool
 from app.domain.report.planner.schemas import TodayPlanRequest
 from app.domain.report.search.retriever import UnifiedRetriever
-from app.infrastructure.vector_store import get_unified_collection
+from app.infrastructure.vector_store_report import get_report_vector_store
 from app.llm.client import get_llm
 
 
@@ -40,7 +40,7 @@ def test_main_tasks_flow():
     print("-" * 60)
     
     try:
-        collection = get_unified_collection()
+        collection = get_report_vector_store().get_collection()
         retriever = UnifiedRetriever(collection)
         retriever_tool = YesterdayReportTool(retriever)
         llm_client = get_llm(model="gpt-4o-mini", temperature=0.7)

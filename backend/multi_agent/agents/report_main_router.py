@@ -86,7 +86,9 @@ class ReportMainRouterAgent(ReportBaseAgent):
         # RAG 키워드 (검색, 과거 업무 조회)
         rag_keywords = [
             "언제", "찾아", "검색", "조회", "했었", "미종결", "고객",
-            "when", "search", "find", "lookup", "unresolved", "customer"
+            "지난주", "저번주", "이번주", "지난달", "저번달", "이번달", "지난해", "저번해",
+            "when", "search", "find", "lookup", "unresolved", "customer",
+            "last week", "last month", "last year"
         ]
         
         # 키워드 매칭

@@ -302,12 +302,13 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
                 continue
         return None
 
-    def normalize_daily(self, raw_json: Dict[str, Any]) -> CanonicalReport:
+    def normalize_daily(self, raw_json: Dict[str, Any], owner_override: str | None = None) -> CanonicalReport:
         """
         일일 보고서 Raw JSON → Canonical 변환 (새 구조 사용)
         
         Args:
             raw_json: Vision API로부터 받은 원본 JSON
+            owner_override: owner 필드를 강제로 설정할 값 (None이면 raw_json의 성명 사용)
             
         Returns:
             CanonicalReport 객체
@@ -316,14 +317,15 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         daily_schema = DailyReportSchema(**raw_json)
         
         # 새 Canonical 변환기 사용
-        return convert_daily_to_canonical(daily_schema)
+        return convert_daily_to_canonical(daily_schema, owner_override=owner_override)
 
-    def normalize_weekly(self, raw_json: Dict[str, Any]) -> CanonicalReport:
+    def normalize_weekly(self, raw_json: Dict[str, Any], owner_override: str | None = None) -> CanonicalReport:
         """
         주간 보고서 Raw JSON → Canonical 변환 (새 구조 사용)
         
         Args:
             raw_json: Vision API로부터 받은 원본 JSON
+            owner_override: owner 필드를 강제로 설정할 값 (None이면 raw_json의 성명 사용)
             
         Returns:
             CanonicalReport 객체
@@ -332,14 +334,15 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         weekly_schema = WeeklyReportSchema(**raw_json)
         
         # 새 Canonical 변환기 사용
-        return convert_weekly_to_canonical(weekly_schema)
+        return convert_weekly_to_canonical(weekly_schema, owner_override=owner_override)
 
-    def normalize_monthly(self, raw_json: Dict[str, Any]) -> CanonicalReport:
+    def normalize_monthly(self, raw_json: Dict[str, Any], owner_override: str | None = None) -> CanonicalReport:
         """
         월간 보고서 Raw JSON → Canonical 변환 (새 구조 사용)
         
         Args:
             raw_json: Vision API로부터 받은 원본 JSON
+            owner_override: owner 필드를 강제로 설정할 값 (None이면 raw_json의 성명 사용)
             
         Returns:
             CanonicalReport 객체
@@ -348,12 +351,13 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         monthly_schema = MonthlyReportSchema(**raw_json)
         
         # 새 Canonical 변환기 사용
-        return convert_monthly_to_canonical(monthly_schema)
+        return convert_monthly_to_canonical(monthly_schema, owner_override=owner_override)
 
     def normalize_report(
         self, 
         report_type: ReportType | str, 
-        raw_json: Dict[str, Any]
+        raw_json: Dict[str, Any],
+        owner_override: str | None = None
     ) -> CanonicalReport:
         """
         보고서 타입에 따라 적절한 normalize 함수 호출
@@ -361,6 +365,7 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         Args:
             report_type: 보고서 타입
             raw_json: Vision API로부터 받은 원본 JSON
+            owner_override: owner 필드를 강제로 설정할 값 (None이면 raw_json의 성명 사용)
             
         Returns:
             CanonicalReport 객체
@@ -385,5 +390,5 @@ PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
         if not normalize_func:
             raise ValueError(f"지원하지 않는 보고서 타입: {report_type_str}")
         
-        return normalize_func(raw_json)
+        return normalize_func(raw_json, owner_override=owner_override)
 

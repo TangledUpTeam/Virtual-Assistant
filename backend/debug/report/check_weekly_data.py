@@ -6,10 +6,10 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.infrastructure.vector_store import get_unified_collection
+from app.infrastructure.vector_store_report import get_report_vector_store
 
 # Collection 가져오기
-col = get_unified_collection()
+col = get_report_vector_store().get_collection()
 
 # Weekly 문서 샘플 확인
 print("="*80)

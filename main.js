@@ -114,7 +114,8 @@ function createCharacterWindow() {
     backgroundColor: '#00000000',
     webPreferences: {
       contextIsolation: false,
-      nodeIntegration: true
+      nodeIntegration: true,
+      partition: 'persist:main' // 세션 공유를 위한 partition 설정
     }
   });
 
@@ -377,7 +378,8 @@ function openReportPopup() {
     backgroundColor: '#f5f5f5',
     webPreferences: {
       contextIsolation: false,
-      nodeIntegration: true
+      nodeIntegration: true,
+      partition: 'persist:main' // 메인 창과 같은 세션 공유
     },
     parent: characterWin, // 부모 창 설정
     modal: false,
@@ -388,6 +390,51 @@ function openReportPopup() {
 
   // 보고서 전용 페이지 로드
   reportWin.loadFile('report-popup.html');
+  
+  // 페이지 로드 후 쿠키 복사 (메인 창에서)
+  reportWin.webContents.on('did-finish-load', async () => {
+    console.log('📝 보고서 팝업 로드 완료, 쿠키 복사 시작');
+    
+    // 메인 창(characterWin)의 쿠키를 보고서 팝업으로 복사
+    if (characterWin && !characterWin.isDestroyed()) {
+      try {
+        const mainSession = characterWin.webContents.session;
+        const reportSession = reportWin.webContents.session;
+        
+        // 메인 창의 모든 쿠키 가져오기
+        const cookies = await mainSession.cookies.get({});
+        console.log(`🍪 쿠키 ${cookies.length}개 복사 중...`);
+        
+        // 각 쿠키를 보고서 팝업 세션에 설정
+        const cookiePromises = cookies.map((cookie) => {
+          return reportSession.cookies.set({
+            url: `http://localhost:8000`,
+            name: cookie.name,
+            value: cookie.value,
+            domain: cookie.domain || '.localhost',
+            path: cookie.path || '/',
+            secure: cookie.secure || false,
+            httpOnly: cookie.httpOnly || false,
+            sameSite: cookie.sameSite || 'unspecified'
+          });
+        });
+        
+        await Promise.all(cookiePromises);
+        console.log('✅ 쿠키 복사 완료');
+        
+        // 쿠키 복사 확인
+        const copiedCookies = await reportSession.cookies.get({ url: 'http://localhost:8000' });
+        console.log(`✅ 복사된 쿠키 확인: ${copiedCookies.length}개`);
+        copiedCookies.forEach(cookie => {
+          console.log(`  - ${cookie.name}: ${cookie.value.substring(0, 20)}...`);
+        });
+      } catch (error) {
+        console.error('❌ 쿠키 복사 실패:', error);
+      }
+    } else {
+      console.warn('⚠️ 메인 창이 없어 쿠키를 복사할 수 없습니다.');
+    }
+  });
 
   // 개발자 도구 (F12)
   reportWin.webContents.on('before-input-event', (event, input) => {
@@ -427,6 +474,32 @@ ipcMain.on('toggle-brainstorming-maximize', () => {
 ipcMain.on('open-report-popup', () => {
   console.log('📨 보고서 팝업 요청 받음');
   openReportPopup();
+});
+
+// 보고서 팝업에서 메인 창의 쿠키 가져오기 요청
+ipcMain.handle('get-main-cookies', async () => {
+  console.log('🍪 메인 창 쿠키 요청 받음');
+  
+  if (characterWin && !characterWin.isDestroyed()) {
+    try {
+      const mainSession = characterWin.webContents.session;
+      const cookies = await mainSession.cookies.get({ url: 'http://localhost:8000' });
+      console.log(`🍪 메인 창 쿠키 ${cookies.length}개 반환`);
+      
+      // 쿠키를 객체로 변환
+      const cookieObj = {};
+      cookies.forEach(cookie => {
+        cookieObj[cookie.name] = cookie.value;
+      });
+      
+      return cookieObj;
+    } catch (error) {
+      console.error('❌ 쿠키 가져오기 실패:', error);
+      return {};
+    }
+  }
+  
+  return {};
 });
 
 // 보고서 창 최대화 토글

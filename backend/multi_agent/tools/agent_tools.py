@@ -21,7 +21,7 @@ _therapy_agent = None
 def get_chatbot_agent():
     global _chatbot_agent
     if _chatbot_agent is None:
-        from backend.multi_agent.agents.chatbot_agent import ChatbotAgent
+        from multi_agent.agents.chatbot_agent import ChatbotAgent
         _chatbot_agent = ChatbotAgent()
     return _chatbot_agent
 
@@ -29,7 +29,7 @@ def get_chatbot_agent():
 def get_rag_agent():
     global _rag_agent
     if _rag_agent is None:
-        from backend.multi_agent.agents.rag_agent import RAGAgent
+        from multi_agent.agents.rag_agent import RAGAgent
         _rag_agent = RAGAgent()
     return _rag_agent
 
@@ -37,7 +37,7 @@ def get_rag_agent():
 def get_brainstorming_agent():
     global _brainstorming_agent
     if _brainstorming_agent is None:
-        from backend.multi_agent.agents.brainstorming_agent import BrainstormingAgent
+        from multi_agent.agents.brainstorming_agent import BrainstormingAgent
         _brainstorming_agent = BrainstormingAgent()
     return _brainstorming_agent
 
@@ -46,7 +46,7 @@ def get_brainstorming_agent():
 def get_report_agent():
     global _report_agent
     if _report_agent is None:
-        from backend.multi_agent.agents.report_agent import ReportAgent
+        from multi_agent.agents.report_agent import ReportAgent
         _report_agent = ReportAgent()
     return _report_agent
 
@@ -54,7 +54,7 @@ def get_report_agent():
 def get_therapy_agent():
     global _therapy_agent
     if _therapy_agent is None:
-        from backend.multi_agent.agents.therapy_agent import TherapyAgent
+        from multi_agent.agents.therapy_agent import TherapyAgent
         _therapy_agent = TherapyAgent()
     return _therapy_agent
 

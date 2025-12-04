@@ -6,7 +6,7 @@ Daily Report API 엔드포인트
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from datetime import date
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from app.infrastructure.database.session import get_db
 from app.domain.report.daily.repository import DailyReportRepository
@@ -16,6 +16,8 @@ from app.domain.report.daily.schemas import (
     DailyReportListResponse
 )
 from app.domain.report.core.canonical_models import CanonicalReport
+from app.domain.auth.dependencies import get_current_user
+from app.domain.user.models import User
 
 
 router = APIRouter(prefix="/daily-report", tags=["daily-report"])
@@ -24,34 +26,43 @@ router = APIRouter(prefix="/daily-report", tags=["daily-report"])
 @router.post("", response_model=DailyReportResponse, status_code=201)
 async def save_daily_report(
     report: CanonicalReport,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     일일보고서 저장 (생성 또는 업데이트)
     
     - owner + date 조합이 이미 존재하면 업데이트
     - 없으면 새로 생성
+    - owner는 로그인한 사용자 이름으로 강제 설정
     
     Args:
         report: CanonicalReport (전체 JSON)
         db: 데이터베이스 세션
+        current_user: 현재 로그인한 사용자
         
     Returns:
         저장된 DailyReportResponse
     """
     try:
-        # CanonicalReport를 dict로 변환
-        report_dict = report.model_dump(mode='json')
-        
-        # owner와 date 추출
-        owner = report.owner
-        report_date = report.period_start  # daily는 period_start == period_end
-        
-        if not owner:
+        # owner를 로그인한 사용자 이름으로 강제 설정
+        if not current_user.name:
             raise HTTPException(
                 status_code=400,
-                detail="owner 필드가 필요합니다."
+                detail="사용자 이름이 설정되지 않았습니다."
             )
+        
+        owner = current_user.name
+        
+        # CanonicalReport의 owner 필드 업데이트
+        report_dict = report.model_dump(mode='json')
+        report_dict['owner'] = owner
+        
+        # header의 성명도 업데이트 (일관성 유지)
+        if 'daily' in report_dict and 'header' in report_dict['daily']:
+            report_dict['daily']['header']['성명'] = owner
+        
+        report_date = report.period_start  # daily는 period_start == period_end
         
         if not report_date:
             raise HTTPException(

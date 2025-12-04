@@ -12,7 +12,7 @@ from datetime import date
 
 from multi_agent.agents.report_base import ReportBaseAgent
 from app.domain.report.planner.today_plan_chain import TodayPlanGenerator
-from app.domain.report.planner.tools import YesterdayReportTool
+from app.domain.report.planner.tools import YesterdayReportTool, get_yesterday_report
 from app.domain.report.planner.schemas import TodayPlanRequest
 from app.domain.report.search.retriever import UnifiedRetriever
 from app.infrastructure.vector_store_report import get_report_vector_store
@@ -35,7 +35,13 @@ class ReportPlanningAgent(ReportBaseAgent):
         from app.infrastructure.database.session import SessionLocal
         
         self.db_session_factory = SessionLocal
-        self.retriever_tool = YesterdayReportTool()
+        # YesterdayReportTool은 db 세션이 필요하므로,
+        # 여기서는 임시 세션으로 초기화
+        # 실제로는 TodayPlanGenerator에서 사용할 때마다 새로운 세션을 생성해서 사용해야 하지만,
+        # YesterdayReportTool의 구조상 초기화 시 세션이 필요하므로 임시로 생성
+        temp_db = SessionLocal()
+        retriever_tool = YesterdayReportTool(temp_db)
+        temp_db.close()  # 임시 세션 닫기 (실제 사용 시에는 새로운 세션 사용)
         
         # VectorDB 검색기 초기화 (선택적)
         try:
@@ -52,7 +58,7 @@ class ReportPlanningAgent(ReportBaseAgent):
         
         # TodayPlanGenerator 생성
         self.plan_generator = TodayPlanGenerator(
-            retriever_tool=self.retriever_tool,
+            retriever_tool=retriever_tool,
             llm_client=self.llm,
             vector_retriever=self.vector_retriever
         )

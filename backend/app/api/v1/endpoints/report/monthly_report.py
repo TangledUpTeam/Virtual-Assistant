@@ -19,6 +19,8 @@ from app.domain.report.monthly.schemas import MonthlyReportCreate, MonthlyReport
 from app.domain.report.core.canonical_models import CanonicalReport
 from app.infrastructure.database.session import get_db
 from app.reporting.html_renderer import render_report_html
+from app.domain.auth.dependencies import get_current_user
+from app.domain.user.models import User
 from urllib.parse import quote
 
 
@@ -47,21 +49,32 @@ class MonthlyReportGenerateResponse(BaseModel):
 @router.post("/generate", response_model=MonthlyReportGenerateResponse)
 async def generate_monthly(
     request: MonthlyReportGenerateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     월간 보고서 자동 생성
     
     target_date가 속한 달의 1일~말일 일일보고서를 집계하여 월간 보고서를 생성하고 DB에 저장합니다.
+    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
     """
     try:
+        # owner를 로그인한 사용자 이름으로 강제 설정
+        if not current_user.name:
+            raise HTTPException(
+                status_code=400,
+                detail="사용자 이름이 설정되지 않았습니다."
+            )
+        
+        owner = current_user.name
+        
         # target_date 생성 (해당 월의 1일)
         target_date = date(request.year, request.month, 1)
         
         # 1. 월간 보고서 생성
         report = generate_monthly_report(
             db=db,
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             target_date=target_date
         )
         

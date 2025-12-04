@@ -34,32 +34,36 @@ def parse_date(date_str: str) -> date | None:
     return None
 
 
-def convert_daily_to_canonical(raw: DailyReportSchema) -> CanonicalReport:
+def convert_daily_to_canonical(raw: DailyReportSchema, owner_override: str | None = None) -> CanonicalReport:
     """
     일일 보고서 Raw → Canonical 변환
     
     Args:
         raw: DailyReportSchema 객체
+        owner_override: owner 필드를 강제로 설정할 값 (None이면 raw.상단정보.성명 사용)
         
     Returns:
         CanonicalReport 객체
     """
+    # owner 결정: owner_override가 있으면 우선 사용, 없으면 raw에서 추출
+    owner = owner_override or raw.상단정보.성명
+    
     # 헤더 정보
     header = {
         "작성일자": raw.상단정보.작성일자,
-        "성명": raw.상단정보.성명
+        "성명": owner  # 헤더에도 owner_override 반영
     }
     
     # 날짜 파싱
     report_date = parse_date(raw.상단정보.작성일자)
     
-    # summary_tasks (금일_진행_업무)
-    summary_tasks = []
+    # todo_tasks (금일_진행_업무)
+    todo_tasks = []
     if raw.금일_진행_업무:
         if isinstance(raw.금일_진행_업무, list):
-            summary_tasks = raw.금일_진행_업무
+            todo_tasks = raw.금일_진행_업무
         else:
-            summary_tasks = [raw.금일_진행_업무] if raw.금일_진행_업무 else []
+            todo_tasks = [raw.금일_진행_업무] if raw.금일_진행_업무 else []
     
     # detail_tasks (세부업무)
     detail_tasks = []
@@ -103,44 +107,50 @@ def convert_daily_to_canonical(raw: DailyReportSchema) -> CanonicalReport:
         else:
             plans = [raw.익일_업무계획] if raw.익일_업무계획 else []
     
-    # notes (특이사항)
+    # notes (특이사항) - notes와 summary 모두 설정
     notes = raw.특이사항 or ""
+    summary = raw.특이사항 or ""  # 특이사항을 summary로도 사용
     
     # CanonicalDaily 생성
     canonical_daily = CanonicalDaily(
         header=header,
-        summary_tasks=summary_tasks,
+        todo_tasks=todo_tasks,
         detail_tasks=detail_tasks,
         pending=pending,
         plans=plans,
-        notes=notes
+        notes=notes,
+        summary=summary
     )
     
     # CanonicalReport 생성
     return CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="daily",
-        owner=raw.상단정보.성명,
+        owner=owner,  # owner_override 또는 raw.상단정보.성명
         period_start=report_date,
         period_end=report_date,
         daily=canonical_daily
     )
 
 
-def convert_weekly_to_canonical(raw: WeeklyReportSchema) -> CanonicalReport:
+def convert_weekly_to_canonical(raw: WeeklyReportSchema, owner_override: str | None = None) -> CanonicalReport:
     """
     주간 보고서 Raw → Canonical 변환
     
     Args:
         raw: WeeklyReportSchema 객체
+        owner_override: owner 필드를 강제로 설정할 값 (None이면 raw.상단정보.성명 사용)
         
     Returns:
         CanonicalReport 객체
     """
+    # owner 결정: owner_override가 있으면 우선 사용, 없으면 raw에서 추출
+    owner = owner_override or raw.상단정보.성명
+    
     # 헤더 정보
     header = {
         "작성일자": raw.상단정보.작성일자,
-        "성명": raw.상단정보.성명
+        "성명": owner  # 헤더에도 owner_override 반영
     }
     
     # 날짜 파싱
@@ -187,28 +197,32 @@ def convert_weekly_to_canonical(raw: WeeklyReportSchema) -> CanonicalReport:
     return CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="weekly",
-        owner=raw.상단정보.성명,
+        owner=owner,  # owner_override 또는 raw.상단정보.성명
         period_start=report_date,
         period_end=report_date,
         weekly=canonical_weekly
     )
 
 
-def convert_monthly_to_canonical(raw: MonthlyReportSchema) -> CanonicalReport:
+def convert_monthly_to_canonical(raw: MonthlyReportSchema, owner_override: str | None = None) -> CanonicalReport:
     """
     월간 보고서 Raw → Canonical 변환
     
     Args:
         raw: MonthlyReportSchema 객체
+        owner_override: owner 필드를 강제로 설정할 값 (None이면 raw.상단정보.성명 사용)
         
     Returns:
         CanonicalReport 객체
     """
+    # owner 결정: owner_override가 있으면 우선 사용, 없으면 raw에서 추출
+    owner = owner_override or raw.상단정보.성명
+    
     # 헤더 정보
     header = {
         "월": raw.상단정보.월,
         "작성일자": raw.상단정보.작성일자,
-        "성명": raw.상단정보.성명
+        "성명": owner  # 헤더에도 owner_override 반영
     }
     
     # 날짜 파싱
@@ -239,7 +253,7 @@ def convert_monthly_to_canonical(raw: MonthlyReportSchema) -> CanonicalReport:
     return CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="monthly",
-        owner=raw.상단정보.성명,
+        owner=owner,  # owner_override 또는 raw.상단정보.성명
         period_start=report_date,
         period_end=report_date,
         monthly=canonical_monthly

@@ -17,7 +17,7 @@ ChromaDB에서 검색된 일일보고서 청크 배열이 제공됩니다.
   "metadata": {{
     "date": "2025-11-24",
     "level": "daily",
-    "chunk_type": "summary | detail | pending | plan_note",
+    "chunk_type": "summary | detail | pending | plan",
     "week": "2025-W48",
     "month": "2025-11",
     "owner": "작성자명"
@@ -64,7 +64,7 @@ ChromaDB에서 검색된 일일보고서 청크 배열이 제공됩니다.
 - 각 항목은 구체적인 업무 내용으로 작성
 
 ### 4. 특이사항 (notes)
-- chunk_type="plan_note"인 청크 중 notes 성격 문장만 추출
+- chunk_type="plan"인 청크 중 notes 성격 문장만 추출
 - "특이사항:" 섹션의 내용만 사용
 - 고객 반응, 컴플레인, 내부 이슈 등을 중심으로 기록
 - 여러 날짜의 특이사항을 하나의 문단으로 통합
@@ -127,7 +127,7 @@ MONTHLY_REPORT_RAG_PROMPT = """당신은 주간보고서와 일일보고서 데�
   "text": "[일일_DETAIL] 2025-11-01\n...",
   "metadata": {
     "date": "2025-11-01",
-    "chunk_type": "summary | detail | pending | plan_note",
+    "chunk_type": "summary | detail | pending | plan",
     "month": "2025-11"
   }
 }

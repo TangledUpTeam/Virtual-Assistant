@@ -3,10 +3,13 @@ Report Chat API Endpoints
 
 일일보고서 RAG 챗봇 API
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import date
+
+from app.domain.auth.dependencies import get_current_user
+from app.domain.user.models import User
 
 router = APIRouter(prefix="/report-chat", tags=["report-chat"])
 
@@ -38,12 +41,18 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_with_reports(request: ChatRequest):
+async def chat_with_reports(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     일일보고서 데이터 기반 RAG 챗봇 대화 (Agent 기반)
     
+    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
+    
     Args:
-        request: ChatRequest (owner, query, date_start, date_end)
+        request: ChatRequest (query, date_start, date_end)
+        current_user: 현재 로그인한 사용자
         
     Returns:
         ChatResponse (answer, sources, has_results)
@@ -56,6 +65,15 @@ async def chat_with_reports(request: ChatRequest):
         - "지난주에 처리 못한 미종결 업무 뭐 있었지?"
     """
     try:
+        # owner를 로그인한 사용자 이름으로 강제 설정
+        if not current_user.name:
+            raise HTTPException(
+                status_code=400,
+                detail="사용자 이름이 설정되지 않았습니다."
+            )
+        
+        owner = current_user.name
+        
         from multi_agent.agents.report_tools import get_report_rag_agent
         
         # 날짜 범위 파싱
@@ -75,7 +93,7 @@ async def chat_with_reports(request: ChatRequest):
         # ReportRAGAgent 사용
         rag_agent = get_report_rag_agent()
         result = await rag_agent.search_reports(
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             query=request.query,
             date_range=date_range,
             reference_date=reference_date

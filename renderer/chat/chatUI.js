@@ -4,7 +4,7 @@
  */
 
 import { sendMultiAgentMessage, initChatbotService } from './chatbotService.js';
-import { getTodayPlan, saveSelectedTasks } from '../report/taskService.js';
+import { addTaskRecommendations, showCustomTaskInput } from '../report/taskUI.js';
 
 // 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
 const accessToken = sessionStorage.getItem('access_token');
@@ -50,7 +50,7 @@ export function initChatPanel() {
   }
 
   // 초기 메시지 추가
-  addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊\n\n💡 Tip: Ctrl+Shift+R을 눌러 보고서 & 업무 관리 패널을 열 수 있습니다!');
+  addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊');
 
   // 이벤트 리스너 등록
   sendBtn.addEventListener('click', handleSendMessage);
@@ -245,14 +245,42 @@ async function handleSendMessage() {
   try {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
     const result = await sendMultiAgentMessage(text);
-    addMessage('assistant', result.answer);
-
+    
+    // 업무 플래닝 쿼리인지 먼저 확인 (응답 표시 여부 결정)
+    const lowerText = text.toLowerCase();
+    const isPlanningQuery = lowerText.includes('오늘') || lowerText.includes('금일') || 
+                           lowerText.includes('플래닝') || lowerText.includes('추천') || 
+                           lowerText.includes('할일') || lowerText.includes('뭐해야') ||
+                           lowerText.includes('뭐해') || lowerText.includes('해야') || 
+                           lowerText.includes('업무');
+    
     // 사용된 에이전트 로그
     if (result.agent_used) {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
 
+      // 보고서/플래닝 에이전트가 사용되었으면
+      if (result.agent_used === 'planner' || result.agent_used === 'report' || 
+          result.agent_used === 'planner_tool' || result.agent_used === 'report_tool') {
+        
+        if (isPlanningQuery) {
+          // 업무 플래닝: 멀티에이전트 응답 표시하지 않고 바로 카드 UI 표시
+          console.log('📋 [ChatUI] 업무 플래닝 요청으로 감지, 업무 카드 UI 표시');
+          await loadAndDisplayTaskCards();
+          return; // 멀티에이전트 응답 표시하지 않음
+        } else {
+          // 일반 보고서 요청: 멀티에이전트 응답 표시 후 보고서 도구 열기 버튼
+          addMessage('assistant', result.answer);
+          addConfirmationButton('📝 보고서 도구 열기', () => {
+            openReportPopup();
+            addMessage('assistant', '보고서 도구를 열었습니다! 📝');
+          });
+          return;
+        }
+      }
+      
       // 브레인스토밍 에이전트가 사용되었으면
       if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
+        addMessage('assistant', result.answer);
 
         // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
         if (result.answer.includes('SUGGESTION:')) {
@@ -270,17 +298,12 @@ async function handleSendMessage() {
             addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
           });
         }
-      }
-      
-      // 보고서/플래닝 에이전트가 사용되었으면
-      if (result.agent_used === 'planner' || result.agent_used === 'report' || 
-          result.agent_used === 'planner_tool' || result.agent_used === 'report_tool') {
-        addConfirmationButton('📝 보고서 & 업무 관리 열기', () => {
-          openReportPopup();
-          addMessage('assistant', '보고서 & 업무 관리 패널을 열었습니다! 📝');
-        });
+        return;
       }
     }
+    
+    // 기본: 멀티에이전트 응답 표시
+    addMessage('assistant', result.answer);
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
     addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
@@ -296,11 +319,6 @@ async function handleSendMessage() {
 async function handleSimpleResponse(text) {
   const lower = text.toLowerCase();
 
-  // 보고서/업무 관련 요청은 다른 패널로 안내
-  if (lower.includes('보고서') || lower.includes('추천') || lower.includes('업무')) {
-    addMessage('assistant', '보고서 및 업무 관리는 **Ctrl+Shift+R**을 눌러\n보고서 & 업무 패널을 열어주세요! 📝');
-    return;
-  }
 
   // 브레인스토밍 안내
   if (lower.includes('브레인') || lower.includes('아이디어')) {
@@ -309,7 +327,7 @@ async function handleSimpleResponse(text) {
   }
 
   // 일반 응답
-  addMessage('assistant', `"${text}" - 답변을 준비 중입니다! 😊\n\n사용 가능한 기능:\n• Ctrl+Shift+R - 보고서 & 업무 관리\n• Ctrl+Shift+B - 브레인스토밍`);
+  addMessage('assistant', `"${text}" - 답변을 준비 중입니다! 😊\n\n사용 가능한 기능:\n• Ctrl+Shift+B - 브레인스토밍`);
 }
 
 /**
@@ -330,6 +348,124 @@ function addMessage(role, text) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
   console.log(`💬 [${role}]: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+}
+
+/**
+ * 업무 카드 UI 로드 및 표시 (보고서 팝업과 동일한 로직)
+ */
+async function loadAndDisplayTaskCards() {
+  const requestId = `chat_load_tasks_${Date.now()}`;
+  console.log(`[${requestId}] 📋 업무 카드 로드 시작`);
+  
+  try {
+    // owner 가져오기 (쿠키에서 또는 기본값)
+    let owner = '김보험'; // 기본값
+    try {
+      const userCookie = document.cookie.split('; ').find(row => row.startsWith('user='));
+      if (userCookie) {
+        const userJson = decodeURIComponent(userCookie.split('=')[1]);
+        const userData = JSON.parse(userJson);
+        owner = userData.name || owner;
+      }
+    } catch (error) {
+      console.warn(`[${requestId}] ⚠️ user 쿠키 파싱 실패, 기본값 사용:`, error);
+    }
+    
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    const requestBody = {
+      owner: owner,
+      target_date: new Date().toISOString().split('T')[0]
+    };
+    
+    console.log(`[${requestId}] 📤 API 요청 (인증 불필요):`, {
+      url: `http://localhost:8000/api/v1/plan/today`,
+      method: 'POST',
+      body: requestBody
+    });
+    
+    const response = await fetch(`http://localhost:8000/api/v1/plan/today`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { detail: errorText || `API 오류: ${response.status}` };
+      }
+      throw new Error(errorData.detail || `API 오류: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`[${requestId}] ✅ 업무 데이터 로드 성공:`, {
+      summary: data.summary,
+      tasksCount: data.tasks?.length || 0
+    });
+    
+    // 업무 카드 UI 표시 (taskUI.js 사용 - summary는 addTaskRecommendations에서 표시)
+    if (data.tasks && data.tasks.length > 0) {
+      console.log(`[${requestId}] 📋 업무 카드 UI 표시: ${data.tasks.length}개`);
+      addTaskRecommendations({
+        tasks: data.tasks,
+        summary: data.summary || '오늘의 추천 업무입니다!',
+        owner: data.owner || owner,
+        target_date: data.target_date || new Date().toISOString().split('T')[0]
+      }, addMessage, messagesContainer);
+    } else {
+      console.warn(`[${requestId}] ⚠️ 추천할 업무가 없습니다.`);
+      addMessage('assistant', '추천할 업무가 없습니다. 직접 작성해주세요! 😊');
+      
+      // 직접 작성하기 버튼 표시
+      const buttonDiv = document.createElement('div');
+      buttonDiv.className = 'message assistant';
+      
+      const button = document.createElement('button');
+      button.textContent = '✏️ 직접 작성하기';
+      button.style.cssText = `
+        background: #fdbc66;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 10px;
+      `;
+      button.addEventListener('click', () => {
+        const targetDate = new Date().toISOString().split('T')[0];
+        showCustomTaskInput(owner, targetDate, addMessage);
+      });
+      buttonDiv.appendChild(button);
+      messagesContainer.appendChild(buttonDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    console.log(`[${requestId}] ✅ 업무 카드 로드 완료`);
+  } catch (error) {
+    console.error(`[${requestId}] ❌ 업무 카드 로드 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    
+    addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
+  }
 }
 
 /**
@@ -529,13 +665,10 @@ function openReportPopup() {
     const { ipcRenderer } = window.require('electron');
     ipcRenderer.send('open-report-popup');
 
-    // 챗봇 패널 숨기기 (선택사항)
-    // chatPanel.style.display = 'none';
-    // isPanelVisible = false;
-
     console.log('✅ 보고서 팝업 요청 전송');
   } else {
     console.error('❌ Electron IPC를 사용할 수 없습니다.');
     addMessage('assistant', '❌ 보고서 팝업을 열 수 없습니다.');
   }
 }
+

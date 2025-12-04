@@ -30,6 +30,8 @@ from app.reporting.html_renderer import render_report_html
 from app.domain.report.core.chunker import chunk_canonical_report
 from app.domain.report.core.embedding_pipeline import EmbeddingPipeline
 from app.infrastructure.vector_store_report import get_report_vector_store
+from app.domain.auth.dependencies import get_current_user, get_current_user_optional
+from app.domain.user.models import User
 from urllib.parse import quote
 
 
@@ -77,7 +79,10 @@ class DailyAnswerResponse(BaseModel):
 
 
 @router.post("/start", response_model=DailyStartResponse)
-async def start_daily_report(request: DailyStartRequest):
+async def start_daily_report(
+    request: DailyStartRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     일일보고서 작성 시작
     
@@ -85,8 +90,18 @@ async def start_daily_report(request: DailyStartRequest):
     FSM 세션을 시작하고, 첫 번째 시간대 질문을 반환합니다.
     
     main_tasks는 /select_main_tasks로 미리 저장되어 있어야 합니다.
+    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
     """
     try:
+        # owner를 로그인한 사용자 이름으로 강제 설정
+        if not current_user.name:
+            raise HTTPException(
+                status_code=400,
+                detail="사용자 이름이 설정되지 않았습니다."
+            )
+        
+        owner = current_user.name
+        
         # 시간대 생성 (제공되지 않으면 기본값: 09:00~18:00, 60분 간격)
         time_ranges = request.time_ranges
         if not time_ranges:
@@ -95,18 +110,18 @@ async def start_daily_report(request: DailyStartRequest):
         # 저장소에서 main_tasks 불러오기
         store = get_main_tasks_store()
         main_tasks = store.get(
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             target_date=request.target_date
         )
         
         # main_tasks가 없으면 빈 리스트로 설정 (경고 메시지 출력)
         if main_tasks is None:
-            print(f"[WARNING] main_tasks가 저장되지 않음: {request.owner}, {request.target_date}")
+            print(f"[WARNING] main_tasks가 저장되지 않음: {owner}, {request.target_date}")
             main_tasks = []
         
         # FSM 컨텍스트 생성
         context = DailyFSMContext(
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             target_date=request.target_date,
             time_ranges=time_ranges,
             today_main_tasks=main_tasks,
@@ -137,7 +152,7 @@ async def start_daily_report(request: DailyStartRequest):
             session_id=session_id,
             question=result["question"],
             meta={
-                "owner": request.owner,
+                "owner": owner,  # 로그인한 사용자 이름
                 "date": request.target_date.isoformat(),
                 "time_range": current_time_range,
                 "current_index": result["current_index"],
@@ -152,7 +167,8 @@ async def start_daily_report(request: DailyStartRequest):
 @router.post("/answer", response_model=DailyAnswerResponse)
 async def answer_daily_question(
     request: DailyAnswerRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     시간대 질문에 답변
@@ -182,9 +198,18 @@ async def answer_daily_question(
         
         # 완료 여부 확인
         if result["finished"]:
+            # owner를 로그인한 사용자 이름으로 강제 설정
+            if not current_user.name:
+                raise HTTPException(
+                    status_code=400,
+                    detail="사용자 이름이 설정되지 않았습니다."
+                )
+            
+            owner = current_user.name
+            
             # 보고서 생성
             report = build_daily_report(
-                owner=updated_context.owner,
+                owner=owner,  # 로그인한 사용자 이름 사용
                 target_date=updated_context.target_date,
                 main_tasks=updated_context.today_main_tasks,
                 time_tasks=updated_context.time_tasks,
@@ -229,7 +254,7 @@ async def answer_daily_question(
                         }
                     }
                     
-                    from app.domain.daily.schemas import DailyReportUpdate
+                    from app.domain.report.daily.schemas import DailyReportUpdate
                     db_report = DailyReportRepository.update(
                         db,
                         existing_report,
@@ -291,14 +316,10 @@ async def answer_daily_question(
                         vector_store = get_report_vector_store()
                         embedding_pipeline = EmbeddingPipeline(vector_store=vector_store)
                         
-                        texts = [chunk["text"] for chunk in chunks]
-                        embeddings = embedding_pipeline.embed_texts(texts, batch_size=50)
+                        result = embedding_pipeline.process_and_store(chunks, batch_size=50)
                         
-                        # 3. ChromaDB 저장
-                        vector_store.insert_chunks(chunks, embeddings)
-                        
-                        collection = vector_store.get_collection()
-                        print(f"✅ 벡터 DB 저장 완료: {len(chunks)}개 청크 (collection: reports)")
+                        collection = embedding_pipeline.vector_store.get_collection()
+                        print(f"? ?? DB ???: {result['chunks_processed']}? ?? (collection: reports, total={collection.count()})")
                     else:
                         print(f"⚠️  청크가 생성되지 않음 (벡터 DB 저장 건너뜀)")
                 
@@ -378,7 +399,8 @@ class SelectMainTasksResponse(BaseModel):
 @router.post("/select_main_tasks", response_model=SelectMainTasksResponse)
 async def select_main_tasks(
     request: SelectMainTasksRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
 ):
     """
     금일 진행 업무 선택 및 저장
@@ -389,8 +411,24 @@ async def select_main_tasks(
     저장된 업무는:
     1. 메모리에 임시 저장 (FSM 시작 시 사용)
     2. PostgreSQL에 부분 저장 (금일 진행 업무만, status="in_progress")
+    
+    인증된 사용자가 있으면 해당 사용자 이름을 사용하고,
+    없으면 request의 owner를 사용합니다.
     """
     try:
+        # owner 결정: 인증된 사용자가 있으면 해당 사용자 이름 사용, 없으면 request의 owner 사용
+        if current_user and current_user.name:
+            owner = current_user.name
+            print(f"✅ 인증된 사용자 이름 사용: {owner}")
+        elif request.owner:
+            owner = request.owner
+            print(f"ℹ️  Request의 owner 사용: {owner}")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="owner가 필요합니다. (인증되지 않았거나 request에 owner가 없습니다.)"
+            )
+        
         if not request.main_tasks:
             raise HTTPException(
                 status_code=400,
@@ -400,7 +438,7 @@ async def select_main_tasks(
         # 1. 메모리 저장 (FSM용)
         store = get_main_tasks_store()
         store.save(
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             target_date=request.target_date,
             main_tasks=request.main_tasks,
             append=request.append
@@ -410,7 +448,7 @@ async def select_main_tasks(
         try:
             # 기존 보고서 확인
             existing_report = DailyReportRepository.get_by_owner_and_date(
-                db, request.owner, request.target_date
+                db, owner, request.target_date  # 로그인한 사용자 이름 사용
             )
             
             if existing_report:
@@ -428,18 +466,18 @@ async def select_main_tasks(
                 report_json["metadata"] = report_json.get("metadata", {})
                 report_json["metadata"]["status"] = "in_progress"
                 
-                from app.domain.daily.schemas import DailyReportUpdate
+                from app.domain.report.daily.schemas import DailyReportUpdate
                 DailyReportRepository.update(
                     db,
                     existing_report,
                     DailyReportUpdate(report_json=report_json)
                 )
-                print(f"💾 금일 진행 업무 업데이트 완료: {request.owner} - {request.target_date}")
+                print(f"💾 금일 진행 업무 업데이트 완료: {owner} - {request.target_date}")
             else:
                 # 새로운 부분 보고서 생성
                 partial_report = {
                     "report_type": "daily",
-                    "owner": request.owner,
+                    "owner": owner,  # 로그인한 사용자 이름 사용
                     "period_start": request.target_date.isoformat(),
                     "period_end": request.target_date.isoformat(),
                     "tasks": request.main_tasks,
@@ -452,12 +490,12 @@ async def select_main_tasks(
                 DailyReportRepository.create(
                     db,
                     DailyReportCreate(
-                        owner=request.owner,
+                        owner=owner,  # 로그인한 사용자 이름 사용
                         report_date=request.target_date,
                         report_json=partial_report
                     )
                 )
-                print(f"💾 금일 진행 업무 생성 완료: {request.owner} - {request.target_date}")
+                print(f"💾 금일 진행 업무 생성 완료: {owner} - {request.target_date}")
         
         except Exception as db_error:
             print(f"⚠️  PostgreSQL 저장 실패 (메모리 저장은 성공): {str(db_error)}")
@@ -492,14 +530,28 @@ class GetMainTasksResponse(BaseModel):
 
 
 @router.post("/get_main_tasks", response_model=GetMainTasksResponse)
-async def get_main_tasks(request: GetMainTasksRequest):
+async def get_main_tasks(
+    request: GetMainTasksRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     저장된 금일 진행 업무 조회
+    
+    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
     """
     try:
+        # owner를 로그인한 사용자 이름으로 강제 설정
+        if not current_user.name:
+            raise HTTPException(
+                status_code=400,
+                detail="사용자 이름이 설정되지 않았습니다."
+            )
+        
+        owner = current_user.name
+        
         store = get_main_tasks_store()
         main_tasks = store.get(
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             target_date=request.target_date
         )
         
@@ -512,6 +564,8 @@ async def get_main_tasks(request: GetMainTasksRequest):
             count=len(main_tasks)
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -539,7 +593,8 @@ class UpdateMainTasksResponse(BaseModel):
 @router.put("/update_main_tasks", response_model=UpdateMainTasksResponse)
 async def update_main_tasks(
     request: UpdateMainTasksRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     금일 진행 업무 수정
@@ -547,8 +602,19 @@ async def update_main_tasks(
     저장된 금일 진행 업무를 수정합니다.
     - 메모리 (MainTasksStore) 업데이트
     - PostgreSQL 업데이트 (tasks 필드만)
+    
+    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
     """
     try:
+        # owner를 로그인한 사용자 이름으로 강제 설정
+        if not current_user.name:
+            raise HTTPException(
+                status_code=400,
+                detail="사용자 이름이 설정되지 않았습니다."
+            )
+        
+        owner = current_user.name
+        
         if not request.main_tasks:
             raise HTTPException(
                 status_code=400,
@@ -558,7 +624,7 @@ async def update_main_tasks(
         # 1. 메모리 업데이트
         store = get_main_tasks_store()
         store.save(
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             target_date=request.target_date,
             main_tasks=request.main_tasks,
             append=False  # 덮어쓰기
@@ -567,7 +633,7 @@ async def update_main_tasks(
         # 2. PostgreSQL 업데이트
         try:
             existing_report = DailyReportRepository.get_by_owner_and_date(
-                db, request.owner, request.target_date
+                db, owner, request.target_date  # 로그인한 사용자 이름 사용
             )
             
             if existing_report:
@@ -579,18 +645,18 @@ async def update_main_tasks(
                 if "metadata" not in report_json:
                     report_json["metadata"] = {}
                 
-                from app.domain.daily.schemas import DailyReportUpdate
+                from app.domain.report.daily.schemas import DailyReportUpdate
                 DailyReportRepository.update(
                     db,
                     existing_report,
                     DailyReportUpdate(report_json=report_json)
                 )
-                print(f"💾 금일 진행 업무 수정 완료 (DB): {request.owner} - {request.target_date}")
+                print(f"💾 금일 진행 업무 수정 완료 (DB): {owner} - {request.target_date}")
             else:
                 # 보고서가 없으면 새로 생성
                 partial_report = {
                     "report_type": "daily",
-                    "owner": request.owner,
+                    "owner": owner,  # 로그인한 사용자 이름 사용
                     "period_start": request.target_date.isoformat(),
                     "period_end": request.target_date.isoformat(),
                     "tasks": request.main_tasks,
@@ -603,12 +669,12 @@ async def update_main_tasks(
                 DailyReportRepository.create(
                     db,
                     DailyReportCreate(
-                        owner=request.owner,
+                        owner=owner,  # 로그인한 사용자 이름 사용
                         report_date=request.target_date,
                         report_json=partial_report
                     )
                 )
-                print(f"💾 금일 진행 업무 생성 완료 (DB): {request.owner} - {request.target_date}")
+                print(f"💾 금일 진행 업무 생성 완료 (DB): {owner} - {request.target_date}")
         
         except Exception as db_error:
             print(f"⚠️  PostgreSQL 업데이트 실패 (메모리는 성공): {str(db_error)}")
@@ -633,4 +699,3 @@ async def update_main_tasks(
 async def health_check():
     """Health check"""
     return {"status": "ok", "service": "daily"}
-

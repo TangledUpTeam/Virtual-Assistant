@@ -19,6 +19,8 @@ from app.domain.report.weekly.schemas import WeeklyReportCreate, WeeklyReportRes
 from app.domain.report.core.canonical_models import CanonicalReport
 from app.infrastructure.database.session import get_db
 from app.reporting.html_renderer import render_report_html
+from app.domain.auth.dependencies import get_current_user
+from app.domain.user.models import User
 from urllib.parse import quote
 
 
@@ -46,20 +48,42 @@ class WeeklyReportGenerateResponse(BaseModel):
 @router.post("/generate", response_model=WeeklyReportGenerateResponse)
 async def generate_weekly(
     request: WeeklyReportGenerateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     주간 보고서 자동 생성
     
     target_date가 속한 주의 월~금 일일보고서를 집계하여 주간 보고서를 생성하고 DB에 저장합니다.
+    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
     """
     try:
+        # owner를 로그인한 사용자 이름으로 강제 설정
+        if not current_user.name:
+            raise HTTPException(
+                status_code=400,
+                detail="사용자 이름이 설정되지 않았습니다."
+            )
+        
+        owner = current_user.name
+        
         # 1. 주간 보고서 생성
         report = generate_weekly_report(
             db=db,
-            owner=request.owner,
+            owner=owner,  # 로그인한 사용자 이름 사용
             target_date=request.target_date
         )
+        
+        # 보고서의 owner 필드가 올바르게 설정되었는지 확인 (이미 generate_weekly_report 내부에서 설정되지만)
+        # 일관성을 위해 다시 확인
+        if report.owner != owner:
+            # owner를 강제로 업데이트
+            report_dict = report.model_dump(mode='json')
+            report_dict['owner'] = owner
+            if 'weekly' in report_dict and 'header' in report_dict['weekly']:
+                report_dict['weekly']['header']['성명'] = owner
+            # CanonicalReport 객체 재생성은 복잡하므로, 여기서는 dict 수정만 수행
+            # 실제로는 generate_weekly_report 함수 내부에서 owner를 사용하므로 문제없음
         
         # 2. DB에 저장
         report_dict = report.model_dump(mode='json')

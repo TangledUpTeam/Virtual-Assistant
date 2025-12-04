@@ -126,8 +126,8 @@ class YesterdayReportTool:
         # 업무 목록 추출 (요약용) - 새 구조: daily.detail_tasks
         tasks = []
         if report.daily:
-            # summary_tasks 추가
-            tasks.extend(report.daily.summary_tasks or [])
+            # todo_tasks 추가
+            tasks.extend(report.daily.todo_tasks or [])
             # detail_tasks 추가
             for detail_task in report.daily.detail_tasks or []:
                 if detail_task.text:

@@ -274,10 +274,14 @@ async function generateYearlyReport() {
 
 /**
  * 선택한 업무 저장 (금일 진행 업무로 등록)
+ * @param {string} owner - 사용자 이름
+ * @param {string} targetDate - 대상 날짜
+ * @param {Array} tasks - 저장할 업무 목록
+ * @param {boolean} append - 기존 업무에 추가할지 여부 (기본값: false)
  */
-export async function saveSelectedTasks(owner, targetDate, tasks) {
+export async function saveSelectedTasks(owner, targetDate, tasks, append = false) {
   try {
-    console.log('🔄 [API] /daily/select_main_tasks 호출 중...');
+    console.log('🔄 [API] /daily/select_main_tasks 호출 중...', { append, tasksCount: tasks.length });
     
     const response = await fetch(`${API_BASE}/daily/select_main_tasks`, {
       method: 'POST',
@@ -287,7 +291,8 @@ export async function saveSelectedTasks(owner, targetDate, tasks) {
       body: JSON.stringify({
         owner: owner,
         target_date: targetDate,
-        selected_tasks: tasks
+        main_tasks: tasks,
+        append: append
       })
     });
     

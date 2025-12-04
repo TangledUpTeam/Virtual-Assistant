@@ -6,14 +6,20 @@
   
   <!-- CSS -->
   <link rel="stylesheet" href="renderer/styles/report.css" />
-  <link rel="stylesheet" href="renderer/styles/tasks.css" />
   
   <style>
-    html, body {
+    * {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
-      height: 100%;
-      overflow: hidden;
+    }
+    
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      height: 100% !important;
+      width: 100% !important;
+      overflow: hidden !important;
       background: #f5f5f5;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     }
@@ -21,7 +27,7 @@
     /* 드래그 가능한 상단 바 */
     .titlebar {
       -webkit-app-region: drag;
-      background: linear-gradient(135deg, #6B8E23 0%, #556B2F 100%);
+      background: linear-gradient(135deg, #fdbc66 0%, #f8d8ae 100%);
       height: 32px;
       display: flex;
       align-items: center;
@@ -70,6 +76,11 @@
       background: #28ca42;
     }
     
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
     #report-panel {
       position: static !important;
       width: 100% !important;
@@ -83,6 +94,9 @@
       top: auto !important;
       box-shadow: none !important;
       pointer-events: auto !important;
+      overflow: hidden !important;
+      margin: 0 !important;
+      padding: 0 !important;
     }
     
     /* 헤더 숨기기 (타이틀바에 이미 있음) */
@@ -100,11 +114,80 @@
       flex: 1 !important;
       overflow-y: auto !important;
       max-height: none !important;
+      min-height: 0 !important;
+      padding-bottom: 80px !important;
+      margin-bottom: 0 !important;
     }
     
-    /* 입력 영역 */
+    /* 입력 영역 - 완전히 하단 고정 */
     #report-input-area {
-      flex-shrink: 0;
+      flex-shrink: 0 !important;
+      position: fixed !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+      background: white !important;
+      z-index: 10 !important;
+      margin: 0 !important;
+      margin-bottom: 0 !important;
+      padding: 12px !important;
+      padding-bottom: 12px !important;
+      border-top: 1px solid #e0e0e0 !important;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.1) !important;
+    }
+    
+    /* report-panel 여백 제거 */
+    #report-panel {
+      margin-bottom: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    
+    /* 날짜 설정 패널 배경색 통일 */
+    #date-settings-panel {
+      background: rgba(253, 188, 102, 0.1) !important;
+      border-bottom: 1px solid rgba(253, 188, 102, 0.3) !important;
+    }
+    
+    /* 적용 버튼 색상 변경 */
+    #apply-date-btn {
+      background: #fdbc66 !important;
+      color: white !important;
+    }
+    
+    #apply-date-btn:hover {
+      background: #f0a850 !important;
+    }
+    
+    /* 취소 버튼 색상 조정 */
+    #close-date-btn {
+      background: #d4a574 !important;
+      color: white !important;
+    }
+    
+    #close-date-btn:hover {
+      background: #c39463 !important;
+    }
+    
+    /* 전송 버튼 색상 통일 */
+    #report-send-btn {
+      background: #fdbc66 !important;
+      color: white !important;
+    }
+    
+    #report-send-btn:hover {
+      background: #f0a850 !important;
+    }
+    
+    /* 입력창 포커스 색상 */
+    #report-input:focus,
+    #daily-target-date:focus,
+    #weekly-target-date:focus,
+    #monthly-year:focus,
+    #monthly-month:focus {
+      outline: none !important;
+      border-color: #fdbc66 !important;
+      box-shadow: 0 0 0 2px rgba(253, 188, 102, 0.2) !important;
     }
   </style>
 </head>
@@ -127,7 +210,7 @@
     <h2>📝 보고서 & 업무</h2>
     
     <!-- 날짜 설정 패널 -->
-    <div id="date-settings-panel" style="padding: 12px; background: rgba(240, 240, 240, 0.95); border-bottom: 1px solid rgba(0,0,0,0.1); display: none;">
+    <div id="date-settings-panel" style="padding: 12px; display: none;">
       <div style="margin-bottom: 8px; font-size: 13px; font-weight: 600; color: #333;">📅 보고서 기간 설정</div>
       
       <!-- 일일 보고서 날짜 -->
@@ -152,8 +235,8 @@
       </div>
       
       <div style="display: flex; gap: 8px; margin-top: 12px;">
-        <button id="apply-date-btn" style="flex: 1; padding: 8px; background: #6B8E23; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">적용</button>
-        <button id="close-date-btn" style="flex: 1; padding: 8px; background: #999; color: white; border: none; border-radius: 6px; cursor: pointer;">취소</button>
+        <button id="apply-date-btn" style="flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">적용</button>
+        <button id="close-date-btn" style="flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer;">취소</button>
       </div>
     </div>
     
@@ -197,4 +280,3 @@
   </script>
 </body>
 </html>
-

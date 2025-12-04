@@ -3,7 +3,11 @@
  * 팝업 전용 버전
  */
 
+import { addTaskRecommendations, showCustomTaskInput } from './taskUI.js';
+
 const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE_URL = 'http://localhost:8000/api/v1';
+const MULTI_AGENT_SESSION_KEY = 'multi_agent_session_id';
 
 let messages = [];
 let reportPanel = null;
@@ -154,74 +158,452 @@ async function handleSendMessage() {
 
 /**
  * Intent 처리
+ * 멀티에이전트 시스템 사용 (메인 챗봇과 동일)
  */
 async function handleReportIntent(text) {
   const lower = text.toLowerCase().trim();
   
-  // 날짜 설정
+  // 날짜 설정은 직접 처리
   if (lower.includes('날짜') && lower.includes('설정')) {
     showDateSettings();
     return;
   }
   
-  // 업무 플래닝
-  if (lower.includes('플래닝') || lower.includes('추천') || lower.includes('할일')) {
-    await getTodayPlan();
-    return;
-  }
-  
-  // 일일 보고서
-  if (lower.includes('일일') && lower.includes('보고서')) {
+  // 일일 보고서 시작은 직접 처리 (FSM 모드)
+  if (lower.includes('일일') && lower.includes('보고서') && (lower.includes('작성') || lower.includes('시작'))) {
     await startDailyReport();
     return;
   }
   
-  // 주간 보고서
-  if (lower.includes('주간') && lower.includes('보고서')) {
-    await generateWeeklyReport();
+  // 나머지는 멀티에이전트 시스템 사용 (메인 챗봇과 동일)
+  try {
+    console.log(`[ReportPopup] 멀티에이전트로 요청 전송: "${text}"`);
+    
+    const result = await sendMultiAgentMessage(text);
+    console.log(`[ReportPopup] 멀티에이전트 응답:`, result);
+    
+    // 사용된 에이전트에 따라 추가 처리
+    if (result.agent_used === 'report' || result.agent_used === 'report_tool' || result.agent_used === 'planner' || result.agent_used === 'planner_tool') {
+      // 보고서/플래닝 에이전트가 사용된 경우
+      console.log(`[ReportPopup] 보고서/플래닝 에이전트 사용됨: ${result.agent_used}`);
+      
+      // 업무 플래닝인 경우 업무 카드 UI 표시
+      const isPlanningQuery = lower.includes('오늘') || lower.includes('금일') || lower.includes('플래닝') || 
+                              lower.includes('추천') || lower.includes('할일') || lower.includes('뭐해야') ||
+                              lower.includes('뭐해') || lower.includes('해야') || lower.includes('업무');
+      
+      if (isPlanningQuery) {
+        console.log(`[ReportPopup] 업무 플래닝 요청으로 감지, 업무 카드 UI 표시`);
+        // 업무 카드 UI를 표시하기 위해 /plan/today API 호출
+        await loadAndDisplayTaskCards();
     return;
+      }
+    }
+    
+    // 일반 응답 표시
+    addMessage('assistant', result.answer);
+    
+  } catch (error) {
+    console.error('[ReportPopup] 멀티에이전트 오류:', error);
+    addMessage('assistant', `오류가 발생했습니다. 😢\n${error.message || ''}`);
+  }
+}
+
+/**
+ * 업무 카드 UI 로드 및 표시
+ */
+async function loadAndDisplayTaskCards() {
+  const requestId = `load_tasks_${Date.now()}`;
+  console.log(`[${requestId}] 📋 업무 카드 로드 시작`);
+  
+  try {
+    // 인증 불필요: request에 owner를 포함하여 전송
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    const requestBody = {
+      owner: dailyOwner,
+      target_date: new Date().toISOString().split('T')[0]
+    };
+    
+    console.log(`[${requestId}] 📤 API 요청 (인증 불필요):`, {
+      url: `${API_BASE}/plan/today`,
+      method: 'POST',
+      body: requestBody
+    });
+    
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE}/plan/today`,
+      method: 'POST',
+      body: requestBody
+    });
+    
+    const response = await fetch(`${API_BASE}/plan/today`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { detail: errorText || `API 오류: ${response.status}` };
+      }
+      throw new Error(errorData.detail || `API 오류: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log(`[${requestId}] ✅ 업무 데이터 로드 성공:`, {
+      summary: data.summary,
+      tasksCount: data.tasks?.length || 0
+    });
+    
+    // 업무 카드 UI 표시 (taskUI.js 사용 - summary는 addTaskRecommendations에서 표시)
+    if (data.tasks && data.tasks.length > 0) {
+      console.log(`[${requestId}] 📋 업무 카드 UI 표시: ${data.tasks.length}개`);
+      addTaskRecommendations({
+        tasks: data.tasks,
+        summary: data.summary || '오늘의 추천 업무입니다!',
+        owner: data.owner || dailyOwner,
+        target_date: data.target_date || new Date().toISOString().split('T')[0]
+      }, addMessage, messagesContainer);
+    } else {
+      console.warn(`[${requestId}] ⚠️ 추천할 업무가 없습니다.`);
+      addMessage('assistant', '추천할 업무가 없습니다. 직접 작성해주세요! 😊');
+      
+      // 직접 작성하기 버튼 표시
+      const buttonDiv = document.createElement('div');
+      buttonDiv.className = 'message assistant';
+      
+      const button = document.createElement('button');
+      button.textContent = '✏️ 직접 작성하기';
+      button.style.cssText = `
+        background: #fdbc66;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 10px;
+      `;
+      
+      button.addEventListener('click', () => {
+        const targetDate = new Date().toISOString().split('T')[0];
+        showCustomTaskInput(dailyOwner, targetDate, addMessage);
+      });
+      
+      buttonDiv.appendChild(button);
+      messagesContainer.appendChild(buttonDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    console.log(`[${requestId}] ✅ 업무 카드 로드 완료`);
+  } catch (error) {
+    console.error(`[${requestId}] ❌ 업무 카드 로드 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    
+    addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
+  }
+}
+
+/**
+ * 멀티에이전트 메시지 전송 (메인 챗봇과 동일한 로직)
+ */
+async function sendMultiAgentMessage(userMessage) {
+  const requestId = `multi_agent_${Date.now()}`;
+  console.log(`[${requestId}] 🤖 멀티에이전트 메시지 전송:`, userMessage);
+  
+  try {
+    // 세션 ID 가져오기
+    let sessionId = null;
+    try {
+      sessionId = await getOrCreateMultiAgentSession();
+      console.log(`[${requestId}] ✅ 세션 ID:`, sessionId);
+    } catch (error) {
+      console.warn(`[${requestId}] ⚠️ 세션 생성 실패, 세션 없이 진행:`, error);
+    }
+    
+    // 인증 토큰 가져오기 (여러 소스에서 시도)
+    let accessToken = sessionStorage.getItem('access_token') || getCookie('access_token');
+    
+    // IPC를 통해 메인 창의 쿠키에서 토큰 가져오기 시도
+    if (!accessToken && window.require) {
+      try {
+        const { ipcRenderer } = window.require('electron');
+        const mainCookies = await ipcRenderer.invoke('get-main-cookies');
+        console.log(`[${requestId}] 🍪 메인 창 쿠키 가져옴:`, Object.keys(mainCookies));
+        
+        if (mainCookies.access_token) {
+          accessToken = mainCookies.access_token;
+          // sessionStorage에 저장 (다음 요청을 위해)
+          sessionStorage.setItem('access_token', accessToken);
+          console.log(`[${requestId}] ✅ 메인 창에서 토큰 가져와서 sessionStorage에 저장`);
+        }
+      } catch (error) {
+        console.warn(`[${requestId}] ⚠️ IPC로 쿠키 가져오기 실패:`, error);
+      }
+    }
+    
+    console.log(`[${requestId}] 🔑 토큰 확인:`, accessToken ? `${accessToken.substring(0, 20)}...` : '없음');
+    
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+      console.log(`[${requestId}] ✅ Authorization 헤더 추가됨`);
+    } else {
+      console.warn(`[${requestId}] ⚠️ 토큰이 없습니다.`);
+    }
+    
+    // 쿠키에서 user ID 가져오기
+    let userId = null;
+    try {
+      const userCookie = document.cookie.split('; ').find(row => row.startsWith('user='));
+      if (userCookie) {
+        const userJson = decodeURIComponent(userCookie.split('=')[1]);
+        const userData = JSON.parse(userJson);
+        userId = userData.id;
+        console.log(`[${requestId}] 👤 User ID:`, userId);
+      }
+    } catch (error) {
+      console.warn(`[${requestId}] ⚠️ user 쿠키 파싱 실패:`, error);
+    }
+    
+    const requestBody = {
+      query: userMessage
+    };
+    
+    if (sessionId) {
+      requestBody.session_id = sessionId;
+    }
+    
+    if (userId) {
+      requestBody.user_id = userId;
+    }
+    
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE_URL}/multi-agent/query`,
+      method: 'POST',
+      headers: { ...headers, 'Authorization': accessToken ? 'Bearer ***' : '없음' },
+      body: requestBody
+    });
+    
+    const response = await fetch(`${API_BASE_URL}/multi-agent/query`, {
+      method: 'POST',
+      headers: headers,
+      credentials: 'include',
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      throw new Error(`Multi-Agent API 호출 실패: ${response.status} ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    console.log(`[${requestId}] ✅ 멀티에이전트 응답:`, result);
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`[${requestId}] ❌ 멀티에이전트 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    throw error;
+  }
+}
+
+/**
+ * 멀티에이전트 세션 생성
+ */
+async function getOrCreateMultiAgentSession() {
+  let sessionId = localStorage.getItem(MULTI_AGENT_SESSION_KEY);
+  
+  if (sessionId) {
+    console.log('✅ 기존 멀티에이전트 세션 사용:', sessionId);
+    return sessionId;
   }
   
-  // 월간 보고서
-  if (lower.includes('월간') && lower.includes('보고서')) {
-    await generateMonthlyReport();
-    return;
+  try {
+    const response = await fetch(`${API_BASE_URL}/multi-agent/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({})
+    });
+    
+    if (!response.ok) {
+      throw new Error(`세션 생성 실패: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    sessionId = data.session_id;
+    localStorage.setItem(MULTI_AGENT_SESSION_KEY, sessionId);
+    console.log('✅ 멀티에이전트 세션 생성:', sessionId);
+    return sessionId;
+  } catch (error) {
+    console.error('❌ 멀티에이전트 세션 생성 오류:', error);
+    // 세션 없이도 진행 가능
+    return null;
   }
-  
-  // RAG 챗봇
-  await handleRAGChat(text);
 }
 
 /**
  * 업무 플래닝
  */
 async function getTodayPlan() {
+  const requestId = `plan_${Date.now()}`;
+  console.log(`[${requestId}] 📋 업무 플래닝 요청 시작`);
+  
   try {
     addMessage('assistant', '📋 오늘의 업무 플래닝을 생성 중입니다...');
     
-    const response = await fetch(`${API_BASE}/plan/today`, {
+    // 인증 불필요: request에 owner를 포함하여 전송
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    const requestBody = {
+      owner: dailyOwner,
+      target_date: new Date().toISOString().split('T')[0]
+    };
+    
+    console.log(`[${requestId}] 📤 API 요청 (인증 불필요):`, {
+      url: `${API_BASE}/plan/today`,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        owner: dailyOwner,
-        target_date: new Date().toISOString().split('T')[0]
-      })
+      body: requestBody
     });
     
-    if (!response.ok) throw new Error(`API 오류: ${response.status}`);
+    const response = await fetch(`${API_BASE}/plan/today`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { detail: errorText || `API 오류: ${response.status}` };
+      }
+      
+      console.error(`[${requestId}] ❌ 파싱된 오류 데이터:`, errorData);
+      throw new Error(errorData.detail || `API 오류: ${response.status} ${response.statusText}`);
+    }
     
     const data = await response.json();
+    console.log(`[${requestId}] ✅ 성공 응답:`, {
+      summary: data.summary,
+      tasksCount: data.tasks?.length || 0,
+      owner: data.owner,
+      target_date: data.target_date
+    });
+    
+    // 마지막 메시지 제거 (생성 중...)
+    if (messagesContainer.lastChild) {
+      messagesContainer.removeChild(messagesContainer.lastChild);
+      messages.pop();
+    }
     
     // 요약 메시지
     addMessage('assistant', data.summary || '오늘의 업무 플래닝입니다!');
     
-    // 업무 카드 표시
+    // 업무 카드 표시 (addTaskRecommendations 사용 - 직접 작성 기능 포함)
     if (data.tasks && data.tasks.length > 0) {
-      displayTaskCards(data.tasks, data.owner, data.target_date);
+      console.log(`[${requestId}] 📋 업무 카드 표시: ${data.tasks.length}개`);
+      // addTaskRecommendations를 사용하여 직접 작성 기능 포함
+      addTaskRecommendations({
+        tasks: data.tasks,
+        summary: data.summary || '오늘의 추천 업무입니다!',
+        owner: data.owner || dailyOwner,
+        target_date: data.target_date || new Date().toISOString().split('T')[0]
+      }, addMessage, messagesContainer);
+    } else {
+      console.warn(`[${requestId}] ⚠️ 추천할 업무가 없습니다.`);
+      addMessage('assistant', '추천할 업무가 없습니다. 직접 작성해주세요! 😊');
+      
+      // 직접 작성하기 버튼 표시
+      const buttonDiv = document.createElement('div');
+      buttonDiv.className = 'message assistant';
+      
+      const button = document.createElement('button');
+      button.textContent = '✏️ 직접 작성하기';
+      button.style.cssText = `
+        background: #fdbc66;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-top: 10px;
+      `;
+      button.addEventListener('click', () => {
+        const targetDate = data.target_date || new Date().toISOString().split('T')[0];
+        showCustomTaskInput(data.owner || dailyOwner, targetDate, addMessage);
+      });
+      buttonDiv.appendChild(button);
+      messagesContainer.appendChild(buttonDiv);
     }
+    
+    console.log(`[${requestId}] ✅ 업무 플래닝 완료`);
   } catch (error) {
-    console.error('업무 플래닝 오류:', error);
-    addMessage('assistant', '업무 플래닝 생성 중 오류가 발생했습니다. 😢');
+    console.error(`[${requestId}] ❌ 업무 플래닝 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    
+    // 마지막 메시지 제거 (생성 중...)
+    if (messagesContainer.lastChild) {
+      messagesContainer.removeChild(messagesContainer.lastChild);
+      messages.pop();
+    }
+    
+    const errorMessage = error.message || '알 수 없는 오류가 발생했습니다.';
+    console.error(`[${requestId}] 💬 사용자에게 표시할 오류 메시지:`, errorMessage);
+    addMessage('assistant', `업무 플래닝 생성 중 오류가 발생했습니다. 😢\n${errorMessage}`);
   }
 }
 
@@ -292,27 +674,67 @@ function toggleTaskSelection(index, btn) {
 }
 
 async function handleSaveTasks() {
-  if (!currentRecommendation) return;
+  if (!currentRecommendation) {
+    console.error('[handleSaveTasks] ❌ currentRecommendation이 없습니다.');
+    return;
+  }
+  
+  const requestId = `save_tasks_${Date.now()}`;
+  console.log(`[${requestId}] 💾 업무 저장 시작`);
   
   const selected = Array.from(selectedTasks).map(i => currentRecommendation.tasks[i]);
+  console.log(`[${requestId}] 📋 선택된 업무:`, selected);
   
   try {
-    const response = await fetch(`${API_BASE}/daily/select_main_tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const requestBody = {
         owner: currentRecommendation.owner,
         target_date: currentRecommendation.target_date,
         selected_tasks: selected
-      })
+    };
+    
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE}/daily/select_main_tasks`,
+      method: 'POST',
+      body: requestBody
     });
     
-    if (!response.ok) throw new Error('저장 실패');
+    const response = await fetch(`${API_BASE}/daily/select_main_tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { detail: errorText || '저장 실패' };
+      }
+      throw new Error(errorData.detail || '저장 실패');
+    }
+    
+    const data = await response.json();
+    console.log(`[${requestId}] ✅ 저장 성공:`, data);
     
     addMessage('assistant', `✅ ${selected.length}개 업무가 금일 계획으로 저장되었습니다!`);
     selectedTasks.clear();
   } catch (error) {
-    addMessage('assistant', '업무 저장 중 오류가 발생했습니다. 😢');
+    console.error(`[${requestId}] ❌ 업무 저장 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    addMessage('assistant', `업무 저장 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
 
@@ -320,31 +742,69 @@ async function handleSaveTasks() {
  * 일일 보고서 시작
  */
 async function startDailyReport() {
+  const requestId = `daily_start_${Date.now()}`;
+  console.log(`[${requestId}] 📝 일일 보고서 시작 요청`);
+  
   try {
     const targetDate = customDates.daily || new Date().toISOString().split('T')[0];
+    console.log(`[${requestId}] 📅 대상 날짜:`, targetDate);
+    
+    const requestBody = { owner: dailyOwner, target_date: targetDate };
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE}/daily/start`,
+      method: 'POST',
+      body: requestBody
+    });
     
     const response = await fetch(`${API_BASE}/daily/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: dailyOwner, target_date: targetDate })
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
     });
     
     if (!response.ok) {
-      const error = await response.json();
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      
+      let error;
+      try {
+        error = JSON.parse(errorText);
+      } catch (e) {
+        error = { detail: errorText || 'API 오류' };
+      }
+      
       if (error.detail && error.detail.includes('금일 업무 계획')) {
+        console.warn(`[${requestId}] ⚠️ 금일 업무 계획이 없습니다.`);
         addMessage('assistant', '⚠️ 금일 업무 계획이 없습니다. 먼저 "오늘 업무 플래닝"을 해주세요!');
         return;
       }
-      throw new Error('API 오류');
+      throw new Error(error.detail || 'API 오류');
     }
     
     const result = await response.json();
+    console.log(`[${requestId}] ✅ 일일 보고서 시작 성공:`, {
+      session_id: result.session_id,
+      question: result.question?.substring(0, 50) + '...'
+    });
+    
     chatMode = 'daily_fsm';
     dailySessionId = result.session_id;
     reportInput.placeholder = '업무 내용을 입력하세요...';
     addMessage('assistant', result.question);
   } catch (error) {
-    addMessage('assistant', '일일 보고서 시작 중 오류가 발생했습니다. 😢');
+    console.error(`[${requestId}] ❌ 일일 보고서 시작 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    addMessage('assistant', `일일 보고서 시작 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
 
@@ -352,16 +812,44 @@ async function startDailyReport() {
  * 일일 보고서 답변
  */
 async function handleDailyAnswer(answer) {
+  const requestId = `daily_answer_${Date.now()}`;
+  console.log(`[${requestId}] 💬 일일 보고서 답변 처리:`, {
+    session_id: dailySessionId,
+    answer_length: answer.length
+  });
+  
   try {
+    const requestBody = { session_id: dailySessionId, answer };
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE}/daily/answer`,
+      method: 'POST',
+      body: { ...requestBody, answer: answer.substring(0, 50) + '...' }
+    });
+    
     const response = await fetch(`${API_BASE}/daily/answer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: dailySessionId, answer })
+      body: JSON.stringify(requestBody)
     });
     
-    if (!response.ok) throw new Error('API 오류');
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      throw new Error(errorText || 'API 오류');
+    }
     
     const result = await response.json();
+    console.log(`[${requestId}] ✅ 답변 처리 성공:`, {
+      status: result.status,
+      has_message: !!result.message,
+      has_report_data: !!result.report_data
+    });
     
     if (result.status === 'finished') {
       addMessage('assistant', result.message || '일일 보고서가 완료되었습니다! 🙌');
@@ -383,7 +871,13 @@ async function handleDailyAnswer(answer) {
       addMessage('assistant', result.question);
     }
   } catch (error) {
-    addMessage('assistant', '답변 처리 중 오류가 발생했습니다. 😢');
+    console.error(`[${requestId}] ❌ 답변 처리 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    addMessage('assistant', `답변 처리 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
 
@@ -391,20 +885,52 @@ async function handleDailyAnswer(answer) {
  * 주간 보고서 생성
  */
 async function generateWeeklyReport() {
+  const requestId = `weekly_${Date.now()}`;
+  console.log(`[${requestId}] 📊 주간 보고서 생성 요청`);
+  
   try {
     addMessage('assistant', '📊 주간 보고서를 생성 중입니다...');
     
     const targetDate = customDates.weekly || new Date().toISOString().split('T')[0];
+    console.log(`[${requestId}] 📅 대상 날짜:`, targetDate);
+    
+    const requestBody = { owner: dailyOwner, target_date: targetDate };
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE}/weekly/generate`,
+      method: 'POST',
+      body: requestBody
+    });
     
     const response = await fetch(`${API_BASE}/weekly/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: dailyOwner, target_date: targetDate })
+      body: JSON.stringify(requestBody)
     });
     
-    if (!response.ok) throw new Error('API 오류');
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      throw new Error(errorText || 'API 오류');
+    }
     
     const data = await response.json();
+    console.log(`[${requestId}] ✅ 주간 보고서 생성 성공:`, {
+      message: data.message,
+      has_period: !!data.period,
+      has_report_data: !!data.report_data
+    });
+    
+    // 마지막 메시지 제거
+    if (messagesContainer.lastChild) {
+      messagesContainer.removeChild(messagesContainer.lastChild);
+      messages.pop();
+    }
     
     addMessage('assistant', {
       type: 'weekly_report',
@@ -413,7 +939,20 @@ async function generateWeeklyReport() {
       report_data: data.report_data
     });
   } catch (error) {
-    addMessage('assistant', '주간 보고서 생성 중 오류가 발생했습니다. 😢');
+    console.error(`[${requestId}] ❌ 주간 보고서 생성 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    
+    // 마지막 메시지 제거
+    if (messagesContainer.lastChild) {
+      messagesContainer.removeChild(messagesContainer.lastChild);
+      messages.pop();
+    }
+    
+    addMessage('assistant', `주간 보고서 생성 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
 
@@ -421,22 +960,54 @@ async function generateWeeklyReport() {
  * 월간 보고서 생성
  */
 async function generateMonthlyReport() {
+  const requestId = `monthly_${Date.now()}`;
+  console.log(`[${requestId}] 📈 월간 보고서 생성 요청`);
+  
   try {
     addMessage('assistant', '📈 월간 보고서를 생성 중입니다...');
     
     const now = new Date();
     const year = customDates.monthly.year || now.getFullYear();
     const month = customDates.monthly.month || (now.getMonth() + 1);
+    console.log(`[${requestId}] 📅 대상 기간: ${year}년 ${month}월`);
+    
+    const requestBody = { owner: dailyOwner, year, month };
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE}/monthly/generate`,
+      method: 'POST',
+      body: requestBody
+    });
     
     const response = await fetch(`${API_BASE}/monthly/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: dailyOwner, year, month })
+      body: JSON.stringify(requestBody)
     });
     
-    if (!response.ok) throw new Error('API 오류');
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      throw new Error(errorText || 'API 오류');
+    }
     
     const data = await response.json();
+    console.log(`[${requestId}] ✅ 월간 보고서 생성 성공:`, {
+      message: data.message,
+      has_period: !!data.period,
+      has_report_data: !!data.report_data
+    });
+    
+    // 마지막 메시지 제거
+    if (messagesContainer.lastChild) {
+      messagesContainer.removeChild(messagesContainer.lastChild);
+      messages.pop();
+    }
     
     addMessage('assistant', {
       type: 'monthly_report',
@@ -445,7 +1016,20 @@ async function generateMonthlyReport() {
       report_data: data.report_data
     });
   } catch (error) {
-    addMessage('assistant', '월간 보고서 생성 중 오류가 발생했습니다. 😢');
+    console.error(`[${requestId}] ❌ 월간 보고서 생성 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    
+    // 마지막 메시지 제거
+    if (messagesContainer.lastChild) {
+      messagesContainer.removeChild(messagesContainer.lastChild);
+      messages.pop();
+    }
+    
+    addMessage('assistant', `월간 보고서 생성 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
 
@@ -453,18 +1037,72 @@ async function generateMonthlyReport() {
  * RAG 챗봇
  */
 async function handleRAGChat(query) {
+  const requestId = `rag_chat_${Date.now()}`;
+  console.log(`[${requestId}] 🔍 RAG 챗봇 요청:`, query);
+  
   try {
     addMessage('assistant', '🔍 일일보고서를 검색 중입니다...');
     
-    const response = await fetch(`${API_BASE}/report-chat/chat`, {
+    // 인증 토큰 가져오기 (sessionStorage 또는 쿠키)
+    const accessToken = sessionStorage.getItem('access_token') || getCookie('access_token');
+    console.log(`[${requestId}] 🔑 토큰 확인:`, accessToken ? `${accessToken.substring(0, 20)}...` : '없음');
+    
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    // 토큰이 있으면 Authorization 헤더에 추가
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+      console.log(`[${requestId}] ✅ Authorization 헤더 추가됨`);
+    } else {
+      console.warn(`[${requestId}] ⚠️ 토큰이 없습니다. 인증이 필요할 수 있습니다.`);
+    }
+    
+    const requestBody = { owner: dailyOwner, query };
+    console.log(`[${requestId}] 📤 API 요청:`, {
+      url: `${API_BASE}/report-chat/chat`,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: dailyOwner, query })
+      headers: { ...headers, 'Authorization': accessToken ? 'Bearer ***' : '없음' },
+      body: requestBody
     });
     
-    if (!response.ok) throw new Error('API 오류');
+    const response = await fetch(`${API_BASE}/report-chat/chat`, {
+      method: 'POST',
+      headers: headers,
+      credentials: 'include', // 쿠키도 함께 전송
+      body: JSON.stringify(requestBody)
+    });
+    
+    console.log(`[${requestId}] 📥 API 응답:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { detail: errorText || `API 오류: ${response.status}` };
+      }
+      
+      console.error(`[${requestId}] ❌ 파싱된 오류 데이터:`, errorData);
+      throw new Error(errorData.detail || `API 오류: ${response.status} ${response.statusText}`);
+    }
     
     const data = await response.json();
+    console.log(`[${requestId}] ✅ 검색 성공:`, {
+      answer_length: data.answer?.length || 0,
+      has_sources: !!data.sources,
+      sources_count: data.sources?.length || 0,
+      has_results: data.has_results
+    });
     
     // 마지막 메시지 제거 (검색 중...)
     if (messagesContainer.lastChild) {
@@ -473,9 +1111,37 @@ async function handleRAGChat(query) {
     }
     
     addMessage('assistant', data.answer);
+    console.log(`[${requestId}] ✅ RAG 챗봇 완료`);
   } catch (error) {
-    addMessage('assistant', '검색 중 오류가 발생했습니다. 😢');
+    console.error(`[${requestId}] ❌ 검색 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    
+    // 마지막 메시지 제거 (검색 중...)
+    if (messagesContainer.lastChild) {
+      messagesContainer.removeChild(messagesContainer.lastChild);
+      messages.pop();
+    }
+    
+    const errorMessage = error.message || '알 수 없는 오류가 발생했습니다.';
+    console.error(`[${requestId}] 💬 사용자에게 표시할 오류 메시지:`, errorMessage);
+    addMessage('assistant', `검색 중 오류가 발생했습니다. 😢\n${errorMessage}`);
   }
+}
+
+/**
+ * 쿠키에서 값 가져오기
+ */
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) {
+    return decodeURIComponent(parts.pop().split(';').shift());
+  }
+  return null;
 }
 
 /**

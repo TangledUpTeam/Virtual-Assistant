@@ -22,7 +22,7 @@ load_dotenv()
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.infrastructure.vector_store import get_unified_collection
+from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.search.retriever import UnifiedRetriever
 from app.domain.report.planner.tools import YesterdayReportTool
 from app.domain.report.planner.schemas import TodayPlanRequest
@@ -45,7 +45,7 @@ def test_yesterday_report_tool():
     print_separator("Step 1: 전날 보고서 검색")
     
     # 초기화
-    collection = get_unified_collection()
+    collection = get_report_vector_store().get_collection()
     retriever = UnifiedRetriever(collection)
     tool = YesterdayReportTool(retriever)
     
@@ -90,7 +90,7 @@ def test_today_plan_generation():
     print_separator("Step 2: 오늘 일정 생성")
     
     # 초기화
-    collection = get_unified_collection()
+    collection = get_report_vector_store().get_collection()
     retriever = UnifiedRetriever(collection)
     tool = YesterdayReportTool(retriever)
     llm_client = get_llm(model="gpt-4o-mini", temperature=0.7)
