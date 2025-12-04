@@ -45,10 +45,12 @@ import json
 import chromadb
 import sys
 import uuid
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 # 분리된 모듈 임포트
@@ -83,6 +85,8 @@ class RAGTherapySystem:
         if not api_key:
             raise ValueError("OPENAI_API_KEY가 환경 변수에 설정되지 않았습니다.")
         self.openai_client = OpenAI(api_key=api_key)
+        # 비동기 클라이언트 초기화 (병렬 API 호출용)
+        self.async_openai_client = AsyncOpenAI(api_key=api_key)
         
         # 컬렉션 로드
         try:
@@ -236,7 +240,8 @@ class RAGTherapySystem:
         self.search_engine = SearchEngine(
             openai_client=self.openai_client,
             collection=self.collection,
-            counseling_keywords=self.counseling_keywords
+            counseling_keywords=self.counseling_keywords,
+            async_openai_client=self.async_openai_client
         )
         
         self.response_generator = ResponseGenerator(
@@ -310,8 +315,19 @@ class RAGTherapySystem:
         # 1. 입력 분류
         input_type = self.response_generator.classify_input(user_input)
         
-        # 2. 영어로 번역 (Vector DB 검색용)
-        english_input = self.search_engine.translate_to_english(user_input)
+        # 2. 병렬 API 호출: 번역과 원문 임베딩 생성을 동시에 실행
+        async def parallel_translate_and_embed():
+            """번역과 원문 임베딩 생성을 병렬로 실행"""
+            # 번역 작업과 원문 임베딩 생성을 동시에 시작
+            translate_task = self.search_engine.translate_to_english_async(user_input)
+            embed_task = self.search_engine.create_query_embedding_async(user_input)
+            
+            # 두 작업 모두 완료 대기
+            english_input, _ = await asyncio.gather(translate_task, embed_task)
+            return english_input
+        
+        # 비동기 함수 실행
+        english_input = asyncio.run(parallel_translate_and_embed())
         
         # 3. Threshold 고정 (0.7)
         threshold = 0.7

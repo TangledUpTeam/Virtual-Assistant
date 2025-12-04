@@ -6,14 +6,16 @@
 """
 
 import re
+import asyncio
 from typing import List, Dict, Any
 from openai import OpenAI
+from openai import AsyncOpenAI
 
 
 class SearchEngine:
     """검색 및 유사도 계산 클래스"""
     
-    def __init__(self, openai_client: OpenAI, collection, counseling_keywords: List[str]):
+    def __init__(self, openai_client: OpenAI, collection, counseling_keywords: List[str], async_openai_client: AsyncOpenAI = None):
         """
         초기화
         
@@ -21,8 +23,10 @@ class SearchEngine:
             openai_client: OpenAI 클라이언트
             collection: ChromaDB 컬렉션
             counseling_keywords: 상담 키워드 리스트
+            async_openai_client: AsyncOpenAI 클라이언트 (병렬 처리용)
         """
         self.openai_client = openai_client
+        self.async_openai_client = async_openai_client
         self.collection = collection
         self.counseling_keywords = counseling_keywords
     
@@ -30,6 +34,27 @@ class SearchEngine:
         """사용자의 입력값을 영어로 번역하는 함수"""
         try:
             response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a translator. Translate the following text to English. Only output the translation, nothing else."},
+                    {"role": "user", "content": text}
+                ],
+                temperature=0.3,
+                max_tokens=500
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[경고] 번역 실패: {e}")
+            return text  # 번역 실패 시 원문 반환
+    
+    async def translate_to_english_async(self, text: str) -> str:
+        """사용자의 입력값을 영어로 번역하는 비동기 함수"""
+        if not self.async_openai_client:
+            # AsyncOpenAI 클라이언트가 없으면 동기 메서드 사용
+            return self.translate_to_english(text)
+        
+        try:
+            response = await self.async_openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a translator. Translate the following text to English. Only output the translation, nothing else."},
@@ -54,6 +79,55 @@ class SearchEngine:
         except Exception as e:
             print(f"[오류] 임베딩 생성 실패: {e}")
             raise
+    
+    async def create_query_embedding_async(self, query_text: str) -> List[float]:
+        """사용자의 질문을 임베딩 벡터로 변환하는 비동기 함수"""
+        if not self.async_openai_client:
+            # AsyncOpenAI 클라이언트가 없으면 동기 메서드 사용
+            return self.create_query_embedding(query_text)
+        
+        try:
+            response = await self.async_openai_client.embeddings.create(
+                model="text-embedding-3-large",
+                input=query_text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            print(f"[오류] 임베딩 생성 실패: {e}")
+            raise
+    
+    async def retrieve_chunks_async(self, user_input: str, n_results: int = 5, use_reranker: bool = True) -> List[Dict[str, Any]]:
+        """
+        Vector DB에서 관련 청크 검색 (비동기 버전)
+        """
+        # 질문을 임베딩으로 변환 (비동기)
+        query_embedding = await self.create_query_embedding_async(user_input)
+        
+        # 유사도 검색 (ChromaDB는 동기식이므로 동기 호출)
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results
+        )
+        
+        # 결과 포맷팅
+        retrieved_chunks = []
+        if results['ids'] and results['ids'][0]:
+            for i in range(len(results['ids'][0])):
+                chunk = {
+                    'id': results['ids'][0][i],
+                    'text': results['documents'][0][i],
+                    'metadata': results['metadatas'][0][i],
+                    'distance': results['distances'][0][i] if 'distances' in results else None
+                }
+                retrieved_chunks.append(chunk)
+        
+        # 조건부 Re-ranker: 최고 유사도가 0.6 이상이면 생략
+        if use_reranker and retrieved_chunks:
+            max_similarity = self._get_max_similarity(retrieved_chunks)
+            if max_similarity < 0.6:
+                retrieved_chunks = self.rerank_chunks(user_input, retrieved_chunks)
+        
+        return retrieved_chunks
     
     def _distance_to_similarity(self, distance: float) -> float:
         """
@@ -303,6 +377,11 @@ class SearchEngine:
         
         # Step 3-5: 품질이 낮으면 반복 검색
         while quality_info['needs_improvement'] and iteration < max_iterations - 1:
+            # 조기 종료 조건 강화: 품질 점수가 0.7 이상이면 조기 종료
+            if quality_info['quality_score'] >= 0.7:
+                print(f"[정보] 조기 종료: 품질 점수 {quality_info['quality_score']:.4f} ≥ 0.7 (반복 {iteration+1}회)")
+                break
+            
             iteration += 1
             print(f"[정보] 검색 품질 개선 시도 {iteration}/{max_iterations-1}")
             
@@ -332,9 +411,13 @@ class SearchEngine:
                 print(f"[정보] 검색 품질 목표 달성 (반복 {iteration+1}회)")
                 break
         
-        # Re-ranker 적용 (최종 결과에만)
-        if all_chunks:
+        # 조건부 Re-ranker: 최고 유사도가 0.6 이상이면 생략
+        max_similarity = self._get_max_similarity(all_chunks)
+        if all_chunks and max_similarity < 0.6:
+            print(f"[정보] Re-ranker 적용 (최고 유사도: {max_similarity:.4f} < 0.6)")
             all_chunks = self.rerank_chunks(user_input, all_chunks)
+        else:
+            print(f"[정보] Re-ranker 생략 (최고 유사도: {max_similarity:.4f} ≥ 0.6)")
         
         # 상위 n_results개만 반환
         final_chunks = all_chunks[:n_results]
@@ -423,9 +506,11 @@ class SearchEngine:
                 }
                 retrieved_chunks.append(chunk)
         
-        # Re-ranker 적용
+        # 조건부 Re-ranker: 최고 유사도가 0.6 이상이면 생략
         if use_reranker and retrieved_chunks:
-            retrieved_chunks = self.rerank_chunks(user_input, retrieved_chunks)
+            max_similarity = self._get_max_similarity(retrieved_chunks)
+            if max_similarity < 0.6:
+                retrieved_chunks = self.rerank_chunks(user_input, retrieved_chunks)
         
         return retrieved_chunks
     
