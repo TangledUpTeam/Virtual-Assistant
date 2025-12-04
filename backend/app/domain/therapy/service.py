@@ -51,7 +51,7 @@ class TherapyService:
     
     # 상담 응답 생성
     # 사용자의 입력을 받아 응답 생성 -> RAG 심리 상담 시스템의 chat 함수 호출
-    def chat(self, user_input: str, enable_scoring: bool = True) -> Dict[str, Any]:
+    async def chat(self, user_input: str, enable_scoring: bool = True) -> Dict[str, Any]:
 
         # 상담 시스템 사용 가능 여부가 불가능하면 return 반환
         if not self.is_available():
@@ -65,7 +65,7 @@ class TherapyService:
         
         try:
             # RAG 시스템으로 상담 진행
-            response = self._rag_system.chat(user_input)
+            response = await self._rag_system.chat(user_input)
             return response
         except Exception as e:
             print(f"상담 처리 중 오류: {e}")

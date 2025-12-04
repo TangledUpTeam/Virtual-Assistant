@@ -45,7 +45,7 @@ class TherapyAgent(BaseAgent):
                 enable_scoring = context["enable_scoring"]
             
             # TherapyService를 통해 상담 진행
-            response = self.therapy_service.chat(
+            response = await self.therapy_service.chat(
                 user_input=query,
                 enable_scoring=enable_scoring
             )
