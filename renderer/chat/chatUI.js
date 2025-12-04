@@ -245,7 +245,10 @@ async function handleSendMessage() {
   try {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
     const result = await sendMultiAgentMessage(text);
-    addMessage('assistant', result.answer, result.agent_used);
+    
+    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
+    addMessage('assistant', result.answer, isMarkdown);
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
@@ -306,16 +309,12 @@ async function handleSimpleResponse(text) {
 /**
  * 메시지 추가
  */
-function addMessage(role, text, agentUsed = null) {
+function addMessage(role, text, isMarkdown = false) {
   // 메시지 객체에 에이전트 정보 포함
   const messageObj = { 
     role, 
     content: text
   };
-  
-  if (agentUsed) {
-    messageObj.agent_used = agentUsed;
-  }
   
   messages.push(messageObj);
 
@@ -324,7 +323,13 @@ function addMessage(role, text, agentUsed = null) {
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = text;
+  
+  // 마크다운 렌더링 (HR RAG 등)
+  if (isMarkdown && role === 'assistant' && typeof marked !== 'undefined') {
+    bubble.innerHTML = marked.parse(text);
+  } else {
+    bubble.textContent = text;
+  }
 
   messageDiv.appendChild(bubble);
   messagesContainer.appendChild(messageDiv);

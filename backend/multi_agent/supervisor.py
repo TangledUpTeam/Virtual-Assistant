@@ -7,6 +7,7 @@ Supervisor Agent
 
 import time
 import os
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -16,6 +17,7 @@ from langgraph.prebuilt import create_react_agent
 from .config import multi_agent_config
 from .tools.agent_tools import get_all_agent_tools
 from .schemas import MultiAgentRequest, MultiAgentResponse
+from .context import session_context, user_context, reset_context
 
 # SuperViser Agent 클래스
 # Tool Calling 패턴으로 에이전트 호출
@@ -164,12 +166,14 @@ class SupervisorAgent:
 **에이전트 선택 가이드 (최우선 규칙):**
 
 **🔴 절대 우선순위 (이 규칙이 가장 중요합니다!):**
-1. **"노션", "notion", "페이지"** + **"만들어", "생성", "적어", "저장", "기록", "올려", "정리", "넣어"** → **무조건 notion_tool**
+1. **"노션", "notion", "페이지"** 단어가 포함되면 → **무조건 notion_tool** (검색, 생성, 조회, 질문 등 모든 경우 포함)
    - 예: "안녕이라는 페이지 만들어줘" → notion_tool
    - 예: "제목은 X, 내용은 Y로 적어줘" → notion_tool
    - 예: "상담 내용 노션에 저장해줘" → notion_tool
    - 예: "방금 답변해준 내용 노션에 정리해서 넣어줘" → notion_tool
    - 예: "제휴사 목록 페이지 만들어서 정리해줘" → notion_tool
+   - 예: "노션에 있는 AI직업종류 내용 알려줘" → notion_tool
+   - 예: "페이지 찾아줘" → notion_tool
 
 2. **"브레인스토밍"** 단어가 명시적으로 포함 → **무조건 brainstorming_tool**
 
@@ -209,9 +213,14 @@ class SupervisorAgent:
         start_time = time.time()
         
         try:
-            # Context를 agent_tools에 설정 (Notion Agent가 사용할 수 있도록)
-            from .tools.agent_tools import set_context
-            set_context(request.context or {}, request.user_id or "default_user")
+            # Context 설정 (ContextVars 사용)
+            session_context.set(request.session_id)
+            
+            # 사용자 컨텍스트 구성
+            current_user_context = request.context or {}
+            if request.user_id:
+                current_user_context["user_id"] = request.user_id
+            user_context.set(current_user_context)
             
             # LangGraph Agent 실행
             result = await self.agent_executor.ainvoke({
@@ -265,17 +274,29 @@ class SupervisorAgent:
             if request.session_id:
                 try:
                     from app.domain.chatbot.session_manager import SessionManager
+                    from app.domain.chatbot.memory_manager import MemoryManager
+                    
                     session_manager = SessionManager()
+                    memory_manager = MemoryManager()
+                    
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
                     # 사용자 질문 저장
                     session_manager.add_message(request.session_id, "user", request.query)
+                    memory_manager.append_message(request.session_id, {
+                        "role": "user",
+                        "content": request.query,
+                        "timestamp": timestamp
+                    })
                     
                     # AI 답변 저장
                     session_manager.add_message(request.session_id, "assistant", answer)
-                    
-                    # 사용된 에이전트 정보도 메타데이터로 저장하고 싶지만, 
-                    # 현재 SessionManager는 role/content만 저장함.
-                    # 추후 확장을 위해 일단 기본 메시지만 저장.
+                    memory_manager.append_message(request.session_id, {
+                        "role": "assistant",
+                        "content": answer,
+                        "timestamp": timestamp,
+                        "agent_used": agent_used
+                    })
                     
                 except Exception as e:
                     print(f"[ERROR] 세션 저장 실패: {e}")
@@ -302,6 +323,10 @@ class SupervisorAgent:
                 processing_time=processing_time,
                 session_id=request.session_id
             )
+            
+        finally:
+            # 컨텍스트 초기화
+            reset_context()
     
     # 사용 가능한 에이전트 목록 반환
     def get_available_agents(self) -> List[Dict[str, Any]]:

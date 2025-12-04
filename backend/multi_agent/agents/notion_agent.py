@@ -40,7 +40,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 # -------------------------------------------------------------------------
 class NotionAction(BaseModel):
     """Notion 작업 분석 결과"""
-    intent: str = Field(description="작업 의도 (search, create, get, unknown)")
+    intent: str = Field(description="작업 의도 (search, create, get, answer, unknown)")
     title: Optional[str] = Field(default=None, description="생성할 페이지 제목. 없으면 문맥에 맞춰 생성.")
     content: Optional[str] = Field(default=None, description="생성할 페이지 내용. 대화 내용 저장이면 'CONTEXT_SUMMARY' 또는 'PREVIOUS_AI_RESPONSE' 등 특수 토큰 사용.")
     parent_page_name: Optional[str] = Field(default=None, description="페이지를 생성할 부모 페이지(폴더) 이름 (예: 개인, 회의록)")
@@ -99,6 +99,11 @@ class NotionAgent(BaseAgent):
                 # ID가 없으면 검색어(또는 쿼리)로 찾아서 조회
                 target = action.page_id or action.search_query or query
                 return await self._get_page_content(target, user_id)
+
+            elif action.intent == "answer":
+                # 페이지 내용을 참고하여 답변
+                target = action.page_id or action.search_query or query
+                return await self._answer_from_page(target, query, user_id)
             
             else:
                 return {
@@ -121,7 +126,7 @@ class NotionAgent(BaseAgent):
         # 대화 맥락이 있으면 프롬프트에 포함 (최근 3개만)
         context_str = ""
         if context and "conversation_history" in context:
-            recent_history = context["conversation_history"][-3:]
+            recent_history = context["conversation_history"][-10:]
             formatted_history = []
             for msg in recent_history:
                 role = msg.get("role", "unknown")
@@ -141,14 +146,28 @@ class NotionAgent(BaseAgent):
    - title: 페이지 제목. 명시되지 않았으면 내용이나 문맥을 바탕으로 아주 짧고 명확하게 생성. (예: "안녕" -> "안녕")
    - content: 페이지 내용.
       * 사용자가 직접 말한 내용이면 그대로 추출. (예: "안녕이라고 적어" -> "안녕")
-      * "저장해줘", "정리해줘", "올려줘", "방금 말한거" 처럼 **이전 대화나 답변을 지칭하는 경우** 반드시 `"PREVIOUS_AI_RESPONSE"` 라고 출력.
+      * "방금 거", "이거", "마지막 답변" 처럼 **바로 직전 답변**을 지칭할 때만 `"PREVIOUS_AI_RESPONSE"` 라고 출력.
+      * "아까 그 내용", "첫 번째 답변", "RAG가 말한거" 처럼 **특정 시점이나 내용을 지칭하는 경우**, 제공된 [참고 대화 이력]에서 해당 내용을 직접 찾아 그 텍스트를 그대로 복사해서 넣으세요.
       * "대화 내용 전부 저장해줘" 같은 요청이면 `"CONTEXT_SUMMARY"` 라고 출력.
    - parent_page_name: 저장할 위치(부모 페이지) 이름. ("개인 페이지에", "회의록 폴더에" 등). 없으면 null.
 
 3. **search 의도일 경우**:
-   - search_query: 검색할 핵심 키워드
+   - 사용자가 "어디 있어?", "찾아줘", "검색해줘" 같이 **위치나 존재 여부**를 물을 때.
+   - search_query: 검색할 핵심 키워드.
+      * "내 노션에 있는", "노션에서", "페이지", "문서", "자료" 같은 수식어는 **반드시 제거**하고, **가장 핵심적인 페이지 제목**만 추출하세요.
+      * 예시: "내 노션에 있는 AI 직업종류 어디 있어?" -> "AI 직업종류"
+      * 예시: "회의록 페이지 찾아줘" -> "회의록"
 
 4. **get 의도일 경우**:
+   - 사용자가 "내용 보여줘", "읽어줘", "무슨 내용이야?" 같이 **구체적인 내용 확인**을 원할 때.
+   - page_id: 페이지 ID가 있다면 추출 (없으면 null)
+   - search_query: ID가 없을 경우 검색할 핵심 키워드 (위의 search_query 추출 규칙과 동일하게 적용)
+
+5. **answer 의도일 경우**:
+   - 사용자가 "노션 참고해서 ~알려줘", "이 페이지 읽고 요약해줘", "~에 대해 설명해줘" 같이 **페이지 내용을 읽고 지능적인 답변**을 요구할 때.
+   - search_query: 참고할 페이지의 핵심 키워드.
+      * "노션에 있는", "페이지 참고해서" 같은 말은 제거하고 **페이지 제목**만 남기세요.
+      * 예시: "노션에 있는 AI 직업종류 내용 알려줘" -> "AI 직업종류"
    - page_id: 페이지 ID가 있다면 추출 (없으면 null)
 
 사용자의 요청을 꼼꼼히 분석하여 정확한 JSON 형식으로 반환하세요."""
@@ -325,6 +344,68 @@ class NotionAgent(BaseAgent):
                 "agent_used": self.name
             }
         return {"success": False, "answer": f"내용을 가져오는데 실패했습니다: {content_res['error']}", "agent_used": self.name}
+
+    async def _answer_from_page(self, target: str, query: str, user_id: str) -> Dict[str, Any]:
+        """페이지 내용을 참고하여 답변 생성"""
+        
+        # 1. 페이지 내용 가져오기 (기존 로직 재사용)
+        # target이 ID인지 검색어인지 모르므로 _get_page_content 내부 로직 일부 차용
+        page_id = None
+        
+        # ID 형식이면 바로 시도 (간단한 체크)
+        if len(target) > 20 and "-" in target: 
+             page_id = target
+        
+        # 아니면 검색
+        if not page_id:
+            search_res = await self._search_pages(target, user_id)
+            if search_res["success"] and search_res.get("data", {}).get("pages"):
+                page_id = search_res["data"]["pages"][0]["id"]
+        
+        if not page_id:
+            return {"success": False, "answer": f"참고할 페이지 '{target}'를 찾을 수 없습니다.", "agent_used": self.name}
+
+        # 내용 조회
+        content_res = await notion_tool.get_page_content(user_id, page_id)
+        if not content_res["success"]:
+            return {"success": False, "answer": f"페이지 내용을 읽어오는데 실패했습니다: {content_res['error']}", "agent_used": self.name}
+            
+        page_title = content_res['data']['title']
+        page_content = content_res['data']['markdown']
+        
+        # 2. LLM을 사용하여 답변 생성
+        system_prompt = f"""당신은 Notion 페이지 내용을 기반으로 사용자의 질문에 답변하는 AI입니다.
+        
+참고 페이지: {page_title}
+
+[페이지 내용 시작]
+{page_content}
+[페이지 내용 끝]
+
+지침:
+1. 오직 위 [페이지 내용]에 있는 정보만 사용하여 답변하세요.
+2. 페이지 내용에 없는 정보라면 "문서에 해당 내용이 없습니다"라고 솔직하게 말하세요.
+3. 답변은 명확하고 친절하게 작성하세요.
+4. 마크다운 형식을 사용하여 가독성을 높이세요.
+"""
+        
+        try:
+            messages = [
+                ("system", system_prompt),
+                ("user", query)
+            ]
+            
+            response = await self.llm.ainvoke(messages)
+            answer = response.content
+            
+            return {
+                "success": True,
+                "answer": f"📘 **{page_title}** 내용을 참고한 답변입니다:\n\n{answer}",
+                "agent_used": self.name
+            }
+            
+        except Exception as e:
+            return {"success": False, "answer": f"답변 생성 중 오류가 발생했습니다: {str(e)}", "agent_used": self.name}
 
     def _generate_title_from_content(self, content: str) -> str:
         """내용에서 적절한 제목 생성 (첫 줄 사용)"""

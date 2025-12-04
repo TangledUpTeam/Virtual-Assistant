@@ -2,17 +2,19 @@
 from typing import List, Dict, Any
 
 
-def blocks_to_markdown(blocks: List[Dict[str, Any]]) -> str:
+def blocks_to_markdown(blocks: List[Dict[str, Any]], depth: int = 0) -> str:
     """
-    Notion 블록을 마크다운으로 변환
+    Notion 블록을 마크다운으로 변환 (재귀적 처리)
     
     Args:
         blocks: Notion 블록 리스트
+        depth: 들여쓰기 깊이 (0부터 시작)
     
     Returns:
         마크다운 문자열
     """
     markdown_lines = []
+    indent = "  " * depth
     
     for block in blocks:
         block_type = block.get("type")
@@ -20,55 +22,60 @@ def blocks_to_markdown(blocks: List[Dict[str, Any]]) -> str:
         if block_type == "paragraph":
             text = _extract_rich_text(block.get("paragraph", {}).get("rich_text", []))
             if text:
-                markdown_lines.append(text)
+                markdown_lines.append(f"{indent}{text}")
                 markdown_lines.append("")  # 단락 사이 공백
         
         elif block_type == "heading_1":
             text = _extract_rich_text(block.get("heading_1", {}).get("rich_text", []))
             if text:
-                markdown_lines.append(f"# {text}")
+                markdown_lines.append(f"{indent}# {text}")
                 markdown_lines.append("")
         
         elif block_type == "heading_2":
             text = _extract_rich_text(block.get("heading_2", {}).get("rich_text", []))
             if text:
-                markdown_lines.append(f"## {text}")
+                markdown_lines.append(f"{indent}## {text}")
                 markdown_lines.append("")
         
         elif block_type == "heading_3":
             text = _extract_rich_text(block.get("heading_3", {}).get("rich_text", []))
             if text:
-                markdown_lines.append(f"### {text}")
+                markdown_lines.append(f"{indent}### {text}")
                 markdown_lines.append("")
         
         elif block_type == "bulleted_list_item":
             text = _extract_rich_text(block.get("bulleted_list_item", {}).get("rich_text", []))
             if text:
-                markdown_lines.append(f"- {text}")
+                markdown_lines.append(f"{indent}- {text}")
         
         elif block_type == "numbered_list_item":
             text = _extract_rich_text(block.get("numbered_list_item", {}).get("rich_text", []))
             if text:
-                markdown_lines.append(f"1. {text}")
+                markdown_lines.append(f"{indent}1. {text}")
         
         elif block_type == "code":
             code_data = block.get("code", {})
             text = _extract_rich_text(code_data.get("rich_text", []))
             language = code_data.get("language", "")
             if text:
-                markdown_lines.append(f"```{language}")
-                markdown_lines.append(text)
-                markdown_lines.append("```")
+                markdown_lines.append(f"{indent}```{language}")
+                # 코드 블록 내용은 들여쓰기 하지 않거나, 필요시 추가 처리 (여기선 원본 유지)
+                # 코드 블록 내부까지 들여쓰면 파싱 문제가 생길 수 있으나, 
+                # Notion 구조상 리스트 내 코드블록은 들여쓰기가 맞음.
+                # 다만 여러 줄일 경우 각 줄마다 indent를 붙여야 함.
+                for line in text.split('\n'):
+                    markdown_lines.append(f"{indent}{line}")
+                markdown_lines.append(f"{indent}```")
                 markdown_lines.append("")
         
         elif block_type == "quote":
             text = _extract_rich_text(block.get("quote", {}).get("rich_text", []))
             if text:
-                markdown_lines.append(f"> {text}")
+                markdown_lines.append(f"{indent}> {text}")
                 markdown_lines.append("")
         
         elif block_type == "divider":
-            markdown_lines.append("---")
+            markdown_lines.append(f"{indent}---")
             markdown_lines.append("")
         
         elif block_type == "to_do":
@@ -77,7 +84,17 @@ def blocks_to_markdown(blocks: List[Dict[str, Any]]) -> str:
             checked = to_do_data.get("checked", False)
             checkbox = "[x]" if checked else "[ ]"
             if text:
-                markdown_lines.append(f"- {checkbox} {text}")
+                markdown_lines.append(f"{indent}- {checkbox} {text}")
+
+        elif block_type == "toggle":
+            text = _extract_rich_text(block.get("toggle", {}).get("rich_text", []))
+            if text:
+                markdown_lines.append(f"{indent}- ▶ {text}")
+        
+        # 자식 블록이 있으면 재귀적으로 처리
+        if block.get("children"):
+            child_markdown = blocks_to_markdown(block["children"], depth + 1)
+            markdown_lines.append(child_markdown)
     
     return "\n".join(markdown_lines)
 

@@ -417,71 +417,72 @@ class RAGRetriever:
             )
             
             # 실시간 평가 수행 (터미널 출력용)
-            try:
-                print("\n" + "="*50)
-                print("🔍 실시간 RAG 답변 평가 수행 중...")
-                # Ground Truth 조회 (평가용으로만 사용)
-                ground_truth = self.evaluator.lookup_ground_truth(request.query)
+            # 실시간 평가 수행 (터미널 출력용) - 비활성화 (속도 개선 및 토큰 절약)
+            # try:
+            #     print("\n" + "="*50)
+            #     print("🔍 실시간 RAG 답변 평가 수행 중...")
+            #     # Ground Truth 조회 (평가용으로만 사용)
+            #     ground_truth = self.evaluator.lookup_ground_truth(request.query)
                 
-                eval_result = self.evaluator.evaluate_single(
-                    question=request.query,
-                    answer=answer,
-                    context="\n".join([chunk.text for chunk in retrieved_chunks]),
-                    ground_truth=ground_truth
-                )
-                print(f"  - 정확성 (Faithfulness): {eval_result.get('faithfulness_score')}점")
-                print(f"  - 완전성 (Completeness): {eval_result.get('completeness_score')}점")
-                print(f"  - 연관성 (Answer Relevancy): {eval_result.get('answer_relevancy_score')}점")
-                print(f"  - 정밀도 (Context Precision): {eval_result.get('context_precision_score')}점")
-                print(f"  - 일치도 (Answer Correctness): {eval_result.get('answer_correctness_score')}점")
+            #     eval_result = self.evaluator.evaluate_single(
+            #         question=request.query,
+            #         answer=answer,
+            #         context="\n".join([chunk.text for chunk in retrieved_chunks]),
+            #         ground_truth=ground_truth
+            #     )
+            #     print(f"  - 정확성 (Faithfulness): {eval_result.get('faithfulness_score')}점")
+            #     print(f"  - 완전성 (Completeness): {eval_result.get('completeness_score')}점")
+            #     print(f"  - 연관성 (Answer Relevancy): {eval_result.get('answer_relevancy_score')}점")
+            #     print(f"  - 정밀도 (Context Precision): {eval_result.get('context_precision_score')}점")
+            #     print(f"  - 일치도 (Answer Correctness): {eval_result.get('answer_correctness_score')}점")
                 
-                # 결과 JSON 저장
-                try:
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            #     # 결과 JSON 저장
+            #     try:
+            #         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                     
-                    # 절대 경로 계산: backend/data/HR_RAG/HR_RAG_result
-                    current_dir = os.path.dirname(os.path.abspath(__file__))
-                    # backend/app/domain/rag/HR -> ... -> backend
-                    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
-                    result_dir = os.path.join(backend_dir, "data", "HR_RAG", "HR_RAG_result")
+            #         # 절대 경로 계산: backend/data/HR_RAG/HR_RAG_result
+            #         current_dir = os.path.dirname(os.path.abspath(__file__))
+            #         # backend/app/domain/rag/HR -> ... -> backend
+            #         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
+            #         result_dir = os.path.join(backend_dir, "data", "HR_RAG", "HR_RAG_result")
                     
-                    os.makedirs(result_dir, exist_ok=True)
+            #         os.makedirs(result_dir, exist_ok=True)
                     
-                    result_file = os.path.join(result_dir, f"evaluation_{timestamp}.json")
+            #         result_file = os.path.join(result_dir, f"evaluation_{timestamp}.json")
                     
-                    # 저장할 데이터 구성
-                    save_data = {
-                        "timestamp": timestamp,
-                        "query": request.query,
-                        "answer": answer,
-                        "retrieved_chunks": [
-                            {
-                                "filename": chunk.metadata.get("filename", "Unknown"),
-                                "page": chunk.metadata.get("page_number", "?"),
-                                "score": chunk.score,
-                                "text": chunk.text
-                            } for chunk in retrieved_chunks
-                        ],
-                        "ground_truth": ground_truth,
-                        "evaluation": eval_result
-                    }
+            #         # 저장할 데이터 구성
+            #         save_data = {
+            #             "timestamp": timestamp,
+            #             "query": request.query,
+            #             "answer": answer,
+            #             "retrieved_chunks": [
+            #                 {
+            #                     "filename": chunk.metadata.get("filename", "Unknown"),
+            #                     "page": chunk.metadata.get("page_number", "?"),
+            #                     "score": chunk.score,
+            #                     "text": chunk.text
+            #                 } for chunk in retrieved_chunks
+            #             ],
+            #             "ground_truth": ground_truth,
+            #             "evaluation": eval_result
+            #         }
                     
-                    with open(result_file, 'w', encoding='utf-8') as f:
-                        json.dump(save_data, f, ensure_ascii=False, indent=4)
+            #         with open(result_file, 'w', encoding='utf-8') as f:
+            #             json.dump(save_data, f, ensure_ascii=False, indent=4)
                         
-                    logger.info(f"평가 결과 저장 완료: {result_file}")
-                    print(f"  - 결과 파일 저장: {result_file}")
+            #         logger.info(f"평가 결과 저장 완료: {result_file}")
+            #         print(f"  - 결과 파일 저장: {result_file}")
                     
-                except Exception as save_e:
-                    logger.error(f"평가 결과 저장 실패: {save_e}")
-                    print(f"  - 결과 파일 저장 실패: {save_e}")
+            #     except Exception as save_e:
+            #         logger.error(f"평가 결과 저장 실패: {save_e}")
+            #         print(f"  - 결과 파일 저장 실패: {save_e}")
 
-                print("="*50 + "\n")
+            #     print("="*50 + "\n")
                     
-            except Exception as eval_e:
-                logger.warning(f"실시간 평가 중 오류 발생: {eval_e}")
-                print(f"❌ 실시간 평가 중 오류 발생: {eval_e}")
-                print("="*50 + "\n")
+            # except Exception as eval_e:
+            #     logger.warning(f"실시간 평가 중 오류 발생: {eval_e}")
+            #     print(f"❌ 실시간 평가 중 오류 발생: {eval_e}")
+            #     print("="*50 + "\n")
             
             # LangSmith 메타데이터 로깅
             from langsmith import traceable
