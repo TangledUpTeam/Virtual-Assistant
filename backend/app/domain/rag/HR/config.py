@@ -20,9 +20,16 @@ class RAGConfig:
         self.ensure_directories()
     
     # ========================================
-    # 기존 설정 재사용 (core/config.py)
+    # 경로 설정 (절대 경로로 고정하여 오류 방지)
     # ========================================
     
+    @property
+    def BASE_DIR(self) -> Path:
+        """backend 폴더의 절대 경로를 반환합니다."""
+        # 현재 파일 위치: backend/app/domain/rag/HR/config.py
+        # .parents[4] -> backend 폴더
+        return Path(__file__).resolve().parents[4]
+
     @property
     def OPENAI_API_KEY(self) -> str:
         """OpenAI API Key (기존 설정 사용)"""
@@ -50,28 +57,30 @@ class RAGConfig:
     
     @property
     def CHROMA_PERSIST_DIRECTORY(self) -> str:
-        """ChromaDB 저장 경로 (기존 설정 사용)"""
-        return self._settings.CHROMA_PERSIST_DIRECTORY
+        """ChromaDB 저장 경로 (절대 경로 고정)"""
+        # 실행 위치에 상관없이 항상 backend/chroma_db를 바라보게 함
+        return str(self.BASE_DIR / "chroma_db")
     
     @property
     def CHROMA_COLLECTION_NAME(self) -> str:
         """ChromaDB 컬렉션명 (RAG 전용)"""
-        return "rag_documents"
+        # 기존 로그와 일치시키기 위해 이름 변경
+        return "hr_documents"
     
     @property
     def UPLOAD_DIR(self) -> Path:
-        """업로드 디렉토리 (기존 설정 사용)"""
-        return Path(self._settings.UPLOAD_DIR)
+        """업로드 디렉토리 (절대 경로)"""
+        return self.BASE_DIR / "internal_docs" / "uploads"
     
     @property
     def DATA_DIR(self) -> Path:
-        """데이터 디렉토리"""
-        return Path("./internal_docs")
+        """데이터 디렉토리 (절대 경로)"""
+        return self.BASE_DIR / "internal_docs"
     
     @property
     def PROCESSED_DIR(self) -> Path:
-        """처리된 파일 디렉토리"""
-        return Path("./internal_docs/processed")
+        """처리된 파일 디렉토리 (절대 경로)"""
+        return self.BASE_DIR / "internal_docs" / "processed"
     
     # ========================================
     # RAG 전용 설정
@@ -84,11 +93,22 @@ class RAGConfig:
     # 번역용 모델 (GPT-4o-mini)
     TRANSLATION_MODEL: str = "gpt-4o-mini"
     
-    # 청크 설정
-    RAG_CHUNK_SIZE: int = 400
-    RAG_CHUNK_OVERLAP: int = 50
-    RAG_MIN_CHUNK_SIZE: int = 300
-    RAG_MAX_CHUNK_SIZE: int = 500
+    # 청크 설정 - 텍스트용
+    RAG_TEXT_CHUNK_SIZE: int = 400
+    RAG_TEXT_CHUNK_OVERLAP: int = 50
+    RAG_TEXT_MIN_CHUNK_SIZE: int = 300
+    RAG_TEXT_MAX_CHUNK_SIZE: int = 500
+    
+    # 청크 설정 - 표/그래프/이미지용
+    RAG_VISUAL_CHUNK_SIZE: int = 750
+    RAG_VISUAL_CHUNK_OVERLAP: int = 100
+    RAG_VISUAL_MIN_CHUNK_SIZE: int = 600
+    RAG_VISUAL_MAX_CHUNK_SIZE: int = 900
+    
+    # 하이브리드 검색 설정 (벡터 + BM25)
+    USE_HYBRID_SEARCH: bool = True
+    VECTOR_WEIGHT: float = 0.7  # 벡터 검색 가중치 (70%)
+    BM25_WEIGHT: float = 0.3    # BM25 검색 가중치 (30%)
     
     # 검색 설정
     RAG_TOP_K: int = 3
@@ -132,4 +152,3 @@ class RAGConfig:
 
 # 싱글톤 인스턴스
 rag_config = RAGConfig()
-
