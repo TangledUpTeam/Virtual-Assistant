@@ -248,41 +248,37 @@ async function handleSendMessage() {
 
     // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
     const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
-    addMessage('assistant', result.answer, isMarkdown);
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
+    }
 
-      // 브레인스토밍 에이전트가 사용되었으면
-      if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
+    // 브레인스토밍 에이전트인 경우 (특수 처리)
+    if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
+      // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
+      if (result.answer.includes('SUGGESTION:')) {
+        const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
+        addMessage('assistant', cleanMessage, isMarkdown);
 
-        // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
-        if (result.answer.includes('SUGGESTION:')) {
-          const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
-          // 깨끗한 메시지 표시
-          addMessage('assistant', cleanMessage);
-          // 버튼 추가
-          addConfirmationButton('브레인스토밍 시작하기', () => {
-            openBrainstormingPopup();
-            addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
-          });
-        }
-        // 2. 그 외 (RAG 답변 등) - 자동 실행하지 않고 버튼 표시
-        else {
-          addMessage('assistant', result.answer);
-          addConfirmationButton('브레인스토밍 도구 열기', () => {
-            openBrainstormingPopup();
-            addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
-          });
-        }
-      } else {
-        // 다른 에이전트는 그대로 표시
-        addMessage('assistant', result.answer);
+        addConfirmationButton('브레인스토밍 시작하기', () => {
+          openBrainstormingPopup();
+          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+        });
       }
-    } else {
-      // agent_used가 없으면 그대로 표시
-      addMessage('assistant', result.answer);
+      // 2. 그 외 (일반 답변 + 도구 열기 버튼)
+      else {
+        addMessage('assistant', result.answer, isMarkdown);
+
+        addConfirmationButton('브레인스토밍 도구 열기', () => {
+          openBrainstormingPopup();
+          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+        });
+      }
+    }
+    // 그 외 일반 에이전트
+    else {
+      addMessage('assistant', result.answer, isMarkdown);
     }
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
