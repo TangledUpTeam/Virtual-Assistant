@@ -12,11 +12,23 @@ import json
 import sys
 import shutil
 import gc
+import logging
+import warnings
 from pathlib import Path
 from typing import List, Dict, Any
 import chromadb
 from chromadb.config import Settings
-from tqdm import tqdm
+
+# ChromaDB의 경고 메시지 억제 (Add of existing embedding ID 등)
+logging.getLogger("chromadb").setLevel(logging.ERROR)
+# ChromaDB 내부 모듈들의 로깅도 억제
+logging.getLogger("chromadb.db").setLevel(logging.ERROR)
+logging.getLogger("chromadb.segment").setLevel(logging.ERROR)
+# warnings 모듈로도 경고 억제
+warnings.filterwarnings("ignore", category=UserWarning, module="chromadb")
+# stderr 출력 억제를 위한 설정
+import io
+from contextlib import redirect_stderr
 
 # Vector DB 매니저
 class VectorDBManager:
@@ -74,7 +86,6 @@ class VectorDBManager:
         try:
             # 기존 컬렉션이 있는지 확인
             collection = self.client.get_collection(name=collection_name)
-            print(f"기존 컬렉션이 존재합니다.")
             return collection
             
         except Exception:
@@ -119,7 +130,8 @@ class VectorDBManager:
                         existing_ids = set(existing_data['ids'])
                             
                 except Exception as e:
-                    print(f"기존 ID 확인 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
+                    # 기존 ID 확인 실패 시 조용히 넘어감 (ChromaDB 버전 차이로 인한 오류일 수 있음)
+                    pass
             
             # 데이터 준비
             ids = []
@@ -153,22 +165,30 @@ class VectorDBManager:
             successful_batches = 0
             failed_batches = 0
             
-            for i in tqdm(range(0, total_items, batch_size), desc="저장 진행률"):
+            for i in range(0, total_items, batch_size):
                 end_idx = min(i + batch_size, total_items)
                 
                 try:
-                    # 컬렉션에 데이터 추가
-                    collection.add(
-                        ids=ids[i:end_idx],
-                        embeddings=embeddings[i:end_idx],
-                        documents=documents[i:end_idx],
-                        metadatas=metadatas[i:end_idx]
-                    )
+                    # 컬렉션에 데이터 추가 (ChromaDB 경고 메시지 억제)
+                    # stderr를 임시로 리다이렉트하여 "Add of existing embedding ID" 메시지 억제
+                    with redirect_stderr(io.StringIO()):
+                        collection.add(
+                            ids=ids[i:end_idx],
+                            embeddings=embeddings[i:end_idx],
+                            documents=documents[i:end_idx],
+                            metadatas=metadatas[i:end_idx]
+                        )
                     successful_batches += 1
                     
                     # 배치 처리 후 메모리 해제를 위한 힌트 (실제 해제는 루프 종료 후)
                     
                 except Exception as e:
+                    # ChromaDB의 중복 에러는 무시 (이미 존재하는 경우)
+                    error_msg = str(e).lower()
+                    if "existing" in error_msg or "duplicate" in error_msg or "already exists" in error_msg:
+                        # 중복 에러는 조용히 건너뛰기
+                        successful_batches += 1
+                        continue
                     print(f"\n배치 저장 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
                     failed_batches += 1
             
@@ -239,7 +259,7 @@ def main():
         total_saved = 0
         file_stats = []
         
-        for emb_file in tqdm(embedding_files, desc="파일 처리"):
+        for emb_file in embedding_files:
             try:
                 # 파일별로 데이터 로드
                 data = db_manager.load_embedding_file(emb_file)

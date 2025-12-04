@@ -46,12 +46,22 @@ import chromadb
 import sys
 import uuid
 import asyncio
+import logging
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
+
+# ChromaDB의 경고 메시지 억제 (Add of existing embedding ID 등)
+logging.getLogger("chromadb").setLevel(logging.ERROR)
+logging.getLogger("chromadb.db").setLevel(logging.ERROR)
+logging.getLogger("chromadb.segment").setLevel(logging.ERROR)
+# warnings 모듈로도 경고 억제
+warnings.filterwarnings("ignore", category=UserWarning, module="chromadb")
 
 # 분리된 모듈 임포트
 from .persona_manager import PersonaManager
@@ -74,8 +84,15 @@ class RAGTherapySystem:
         if not self.db_path.exists():
             raise FileNotFoundError(f"Vector DB 경로가 존재하지 않습니다") # 나중에 삭제 예정
         
-        # ChromaDB 클라이언트 초기화
-        self.client = chromadb.PersistentClient(path=str(self.db_path))
+        # ChromaDB 클라이언트 초기화 (경고 억제 설정)
+        from chromadb.config import Settings
+        self.client = chromadb.PersistentClient(
+            path=str(self.db_path),
+            settings=Settings(
+                anonymized_telemetry=False,
+                allow_reset=False
+            )
+        )
         
         # 컬렉션 이름 (save_to_vectordb.py와 동일)
         self.collection_name = "vector_adler"
@@ -101,7 +118,7 @@ class RAGTherapySystem:
             '힘들어', '상담', '짜증', '우울', '불안', '스트레스',
             '고민', '걱정', '슬프', '외로', '화나', '답답',
             '아들러', 'adler', 'counseling', 'therapy', 'help',
-            'depressed', 'anxious', '심리',
+            'depressed', 'anxious', '심리', '슬퍼',
             
             # 부정적 감정 키워드
             '절망', '포기', '무기력', '자책', '후회', '미안',
@@ -249,15 +266,18 @@ class RAGTherapySystem:
             counseling_keywords=self.counseling_keywords
         )
         
+        # 백그라운드 작업용 스레드 풀 (Self-learning 저장용)
+        self.executor = ThreadPoolExecutor(max_workers=1)
+        
         # ========================================
     
     # ============================================================
     # 상담 관련 기능
     # ============================================================
     
-    # Self-learning: Q&A를 Vector DB에 저장
+    # Self-learning: Q&A를 Vector DB에 저장 (비동기)
     # 자가학습 RAG
-    def _save_qa_to_vectordb(self, user_query: str, llm_response: str):
+    async def _save_qa_to_vectordb_async(self, user_query: str, llm_response: str):
 
         try:
             import uuid
@@ -273,32 +293,46 @@ class RAGTherapySystem:
             # JSON 문자열로 변환
             qa_text = json.dumps(qa_document, ensure_ascii=False, indent=2)
             
-            # 임베딩 생성
-            embedding = self.search_engine.create_query_embedding(user_query)
+            # 임베딩 생성 (비동기)
+            embedding = await self.search_engine.create_query_embedding_async(user_query)
             
             # 고유 ID 생성
             doc_id = f"self_learning_{uuid.uuid4().hex[:12]}"
             
-            # Vector DB에 저장
-            self.collection.add(
-                ids=[doc_id],
-                embeddings=[embedding],
-                documents=[qa_text],
-                metadatas=[{
-                    "source": "self_learning",
-                    "type": "qa_pair",
-                    "timestamp": qa_document["timestamp"]
-                }]
-            )
+            # 중복 체크: 이미 존재하는 ID인지 확인
+            try:
+                existing_docs = self.collection.get(ids=[doc_id], include=[])
+                if existing_docs and existing_docs.get('ids') and len(existing_docs['ids']) > 0:
+                    # 이미 존재하면 저장하지 않음
+                    return
+            except Exception:
+                # ID가 없으면 정상적으로 진행
+                pass
             
-            print(f"[정보] Self-learning: Q&A가 Vector DB에 저장되었습니다 (ID: {doc_id})")
+            # Vector DB에 저장 (중복 체크 후)
+            try:
+                self.collection.add(
+                    ids=[doc_id],
+                    embeddings=[embedding],
+                    documents=[qa_text],
+                    metadatas=[{
+                        "source": "self_learning",
+                        "type": "qa_pair",
+                        "timestamp": qa_document["timestamp"]
+                    }]
+                )
+            except Exception as add_error:
+                # ChromaDB의 중복 에러는 무시 (이미 존재하는 경우)
+                if "existing" in str(add_error).lower() or "duplicate" in str(add_error).lower():
+                    return
+                raise
             
         except Exception as e:
-            print(f"[경고] Self-learning 저장 실패: {e}")
+            print(f"[경고] Self-learning 저장 실패: {e}") # 예외처리 print문은 나중에 삭제 예정
             # 저장 실패해도 답변은 계속 진행
     
     # 상담 함수(사용자 입력 -> 답변 생성)
-    def chat(self, user_input: str) -> Dict[str, Any]:
+    async def chat(self, user_input: str) -> Dict[str, Any]:
 
         # 종료 키워드 확인 (exit, 고마워, 끝)
         user_input_lower = user_input.strip().lower()
@@ -315,31 +349,14 @@ class RAGTherapySystem:
         # 1. 입력 분류
         input_type = self.response_generator.classify_input(user_input)
         
-        # 2. 병렬 API 호출: 번역과 원문 임베딩 생성을 동시에 실행
-        async def parallel_translate_and_embed():
-            """번역과 원문 임베딩 생성을 병렬로 실행"""
-            # 번역 작업과 원문 임베딩 생성을 동시에 시작
-            translate_task = self.search_engine.translate_to_english_async(user_input)
-            embed_task = self.search_engine.create_query_embedding_async(user_input)
-            
-            # 두 작업 모두 완료 대기
-            english_input, _ = await asyncio.gather(translate_task, embed_task)
-            return english_input
-        
-        # 비동기 함수 실행
-        english_input = asyncio.run(parallel_translate_and_embed())
-        
-        # 3. Threshold 고정 (0.7)
+        # 2. Threshold 고정 (0.7)
         threshold = 0.7
-        print(f"[정보] Threshold 설정: {threshold}")
         
-        # 4. Multi-step 반복 검색 시스템 사용 (쿼리 확장 1회로 제한)
-        search_result = self.search_engine._iterative_search_with_query_expansion(english_input, max_iterations=2, n_results=5)
+        # 3. Multi-step 반복 검색 시스템 사용 (비동기 함수 직접 호출)
+        search_result = await self.search_engine._iterative_search_with_query_expansion_async(user_input, max_iterations=1, n_results=5)
         retrieved_chunks = search_result['chunks']
         quality_info = search_result['quality_info']
         iterations_used = search_result['iterations_used']
-        
-        print(f"[정보] 검색 완료: {iterations_used}회 반복, 품질 점수 {quality_info['quality_score']:.4f}")
         
         # 5. 최고 유사도 계산 (감정 가중치 적용된 값 사용)
         max_similarity = 0.0
@@ -351,12 +368,9 @@ class RAGTherapySystem:
                 similarity = self.search_engine.get_distance_to_similarity(chunk['distance'])
                 max_similarity = max(max_similarity, similarity)
         
-        print(f"[정보] 최고 유사도: {max_similarity:.4f} (Threshold: {threshold})")
-        
         # 6. Threshold 분기
         if max_similarity >= threshold:
             # Case A: 유사도 ≥ threshold -> RAG 없이 LLM 단독 답변
-            print(f"[정보] Threshold 분기: LLM 단독 모드 (유사도 {max_similarity:.4f} ≥ {threshold})")
             response = self.response_generator._generate_llm_only_response(
                 user_input, 
                 self.adler_persona, 
@@ -367,7 +381,6 @@ class RAGTherapySystem:
             response['search_iterations'] = iterations_used
         else:
             # Case B: 유사도 < threshold -> RAG + Self-learning
-            print(f"[정보] Threshold 분기: RAG + Self-learning 모드 (유사도 {max_similarity:.4f} < {threshold})")
             
             # 6-1. RAG 기반 답변 생성
             response = self.response_generator.generate_response_with_persona(
@@ -376,16 +389,17 @@ class RAGTherapySystem:
                 self.adler_persona,
                 self.chat_history,
                 mode=input_type,
-                distance_to_similarity_func=self.search_engine.get_distance_to_similarity,
-                summarize_chunk_func=self.summarize_chunk if hasattr(self, 'summarize_chunk') else None
+                distance_to_similarity_func=self.search_engine.get_distance_to_similarity
             )
             response['similarity_score'] = max_similarity
             response['search_iterations'] = iterations_used
             response['search_quality'] = quality_info['quality_score']
             
             # 6-2. Self-learning: Multi-step으로 개선된 후에도 threshold를 넘지 못하면 저장
+            # 백그라운드 태스크로 실행 (답변 반환을 기다리지 않음)
             if max_similarity < 0.7:
-                self._save_qa_to_vectordb(user_input, response["answer"])
+                # 비동기로 실행 (답변 반환을 기다리지 않음)
+                asyncio.create_task(self._save_qa_to_vectordb_async(user_input, response["answer"]))
         
         # ========================================
         # 스코어링 관련 코드 (주석처리됨 - 필요시 주석 해제)
@@ -436,17 +450,12 @@ class RAGTherapySystem:
     #     except Exception as e:
     #         print(f"[경고] 청크 요약 실패: {e}")
     #         return chunk_text[:100] + "..."
-    
-    # summarize_chunk는 response_generator에서 사용하므로 간단한 버전 제공
-    def summarize_chunk(self, chunk_text: str) -> str:
-        """청크를 간단히 요약 (스코어링 비활성화 시 사용)"""
-        return chunk_text[:100] + "..."
 
 # ============================================================
 # 메인 함수 (테스트용)
 # ============================================================
 
-def main():
+async def main():
 
     # 경로 설정 (sourcecode/rag 기준)
     base_dir = Path(__file__).parent.parent.parent
@@ -466,7 +475,7 @@ def main():
             
             # 상담 진행
             # response = rag_system.chat(user_input, enable_scoring=True)  # 스코어링 주석처리됨
-            response = rag_system.chat(user_input)
+            response = await rag_system.chat(user_input)
             
             # 종료 확인
             if not response['continue_conversation']:
@@ -482,4 +491,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
+

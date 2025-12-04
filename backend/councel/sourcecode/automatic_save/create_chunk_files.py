@@ -74,6 +74,10 @@ class ChunkCreator:
         
         # 탭 패턴
         self.pattern_tabs = re.compile(r'\t+')
+        
+        # 표/그래프 특수문자 제거용 translator (성능 최적화)
+        table_chars = ['│', '─', '┼', '├', '┤', '┬', '┴', '┌', '┐', '└', '┘', '║', '═', '╔', '╗', '╚', '╝', '╠', '╣', '╦', '╩', '╬']
+        self.table_chars_translator = str.maketrans('', '', ''.join(table_chars))
 
     # 텍스트의 토큰 수 계산   
     def count_tokens(self, text: str) -> int:
@@ -119,10 +123,8 @@ class ChunkCreator:
         text = self.pattern_page_num3.sub('', text)  # 하이픈으로 끝나는 단어 복원
         text = self.pattern_page_num4.sub('', text)  # 대괄호에 둘러싸인 숫자 제거
         
-        # 2. 표/그래프 특수문자 제거
-        table_chars = ['│', '─', '┼', '├', '┤', '┬', '┴', '┌', '┐', '└', '┘', '║', '═', '╔', '╗', '╚', '╝', '╠', '╣', '╦', '╩', '╬']
-        for char in table_chars:
-            text = text.replace(char, '')
+        # 2. 표/그래프 특수문자 제거 (성능 최적화: str.maketrans/translate 사용)
+        text = text.translate(self.table_chars_translator)
         
         # 3. 참고문헌 섹션 제거 (컴파일된 패턴 사용)
         text = self.pattern_ref1.sub('', text)
