@@ -1,5 +1,0 @@
-Sources: 1 PDFs
-Pages: 50
-Modes: {"text": 50}
-Output(latest): C:\dev\himedia\Virtual-Assistant\backend\app\domain\rag\Insurance\scripts\extracted_pages.json
-Output(run): C:\dev\himedia\Virtual-Assistant\backend\app\domain\rag\Insurance\scripts\runs\20251204-155229\extracted_pages.json
