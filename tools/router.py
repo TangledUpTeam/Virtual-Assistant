@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
-from . import drive_tool, gmail_tool, slack_tool, notion_tool
+from . import drive_tool, gmail_tool, notion_tool
 
 tools_router = APIRouter()
 
@@ -23,15 +23,7 @@ class SendEmailRequest(BaseModel):
     subject: str
     body: str
 
-class SendDMRequest(BaseModel):
-    user_id: str
-    to_user: str
-    text: str
 
-class SendChannelMessageRequest(BaseModel):
-    user_id: str
-    channel_id: str
-    text: str
 
 class CreatePageRequest(BaseModel):
     user_id: str
@@ -42,6 +34,21 @@ class AddDatabaseItemRequest(BaseModel):
     user_id: str
     database_id: str
     properties_dict: Dict[str, Any]
+
+class GetPageContentRequest(BaseModel):
+    user_id: str
+    page_id: str
+
+class SearchPagesRequest(BaseModel):
+    user_id: str
+    query: str
+    page_size: int = 10
+
+class CreatePageFromMarkdownRequest(BaseModel):
+    user_id: str
+    parent_id: str
+    title: str
+    markdown: str
 
 # Google Drive Endpoints
 @tools_router.post("/drive/create-folder")
@@ -57,14 +64,7 @@ async def api_search_files(request: SearchFilesRequest):
 async def api_send_email(request: SendEmailRequest):
     return await gmail_tool.send_email(request.user_id, request.to, request.subject, request.body)
 
-# Slack Endpoints
-@tools_router.post("/slack/send-dm")
-async def api_send_dm(request: SendDMRequest):
-    return await slack_tool.send_dm(request.user_id, request.to_user, request.text)
 
-@tools_router.post("/slack/send-channel-message")
-async def api_send_channel_message(request: SendChannelMessageRequest):
-    return await slack_tool.send_channel_message(request.user_id, request.channel_id, request.text)
 
 # Notion Endpoints
 @tools_router.post("/notion/create-page")
@@ -75,8 +75,23 @@ async def api_create_page(request: CreatePageRequest):
 async def api_add_database_item(request: AddDatabaseItemRequest):
     return await notion_tool.add_database_item(request.user_id, request.database_id, request.properties_dict)
 
+@tools_router.post("/notion/get-page-content")
+async def api_get_page_content(request: GetPageContentRequest):
+    """Notion 페이지 내용을 마크다운으로 가져오기"""
+    return await notion_tool.get_page_content(request.user_id, request.page_id)
+
+@tools_router.post("/notion/search-pages")
+async def api_search_pages(request: SearchPagesRequest):
+    """Notion 페이지 검색"""
+    return await notion_tool.search_pages(request.user_id, request.query, request.page_size)
+
+@tools_router.post("/notion/create-page-from-markdown")
+async def api_create_page_from_markdown(request: CreatePageFromMarkdownRequest):
+    """마크다운으로 Notion 페이지 생성"""
+    return await notion_tool.create_page_from_markdown(request.user_id, request.parent_id, request.title, request.markdown)
+
 # Health Check
 @tools_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "services": ["google_drive", "gmail", "slack", "notion"], "version": "1.0.0"}
+    return {"status": "healthy", "services": ["google_drive", "gmail", "notion"], "version": "1.0.0"}
 

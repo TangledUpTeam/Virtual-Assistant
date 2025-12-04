@@ -2,6 +2,7 @@
 답변 생성 모듈
 생성날짜: 2025.12.01
 설명: LLM 기반 답변 생성 기능
+시간복잡도: O(k)
 """
 
 from typing import List, Dict, Any

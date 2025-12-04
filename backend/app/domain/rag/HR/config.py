@@ -112,7 +112,7 @@ class RAGConfig:
     @property
     def LANGSMITH_TRACING(self) -> bool:
         """LangSmith 추적 활성화 여부"""
-        return self._settings.LANGSMITH_TRACING.lower() == "true"
+        return str(self._settings.LANGSMITH_TRACING).lower() == "true"
     
     # PDF 처리 설정
     MAX_IMAGE_SIZE: tuple = (1024, 1024)

@@ -8,6 +8,9 @@
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const MULTI_AGENT_SESSION_KEY = 'multi_agent_session_id';
 
+// HR 키워드 (HR 팝업 제안용)
+const HR_KEYWORDS = ['연차', '휴가', '근로', '급여', '복지', '규정', '인사', 'hr', 'HR'];
+
 // 토큰 저장
 let accessToken = null;
 
@@ -26,38 +29,39 @@ export function setAccessToken(token) {
  */
 async function getOrCreateMultiAgentSession() {
   let sessionId = localStorage.getItem(MULTI_AGENT_SESSION_KEY);
-  
+
   if (!sessionId) {
     try {
       const headers = {
         'Content-Type': 'application/json',
       };
-      
+
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/multi-agent/session`, {
         method: 'POST',
         headers: headers,
-        credentials: 'include'
+        credentials: 'include',
+        body: JSON.stringify({})
       });
-      
+
       if (!response.ok) {
         throw new Error('Multi-Agent 세션 생성 실패');
       }
-      
+
       const data = await response.json();
       sessionId = data.session_id;
       localStorage.setItem(MULTI_AGENT_SESSION_KEY, sessionId);
-      
+
       console.log('✅ Multi-Agent 세션 생성:', sessionId);
     } catch (error) {
       console.error('❌ Multi-Agent 세션 생성 오류:', error);
       throw error;
     }
   }
-  
+
   return sessionId;
 }
 
@@ -69,19 +73,19 @@ async function getOrCreateMultiAgentSession() {
  */
 export async function callChatModule(userText) {
   console.log('📨 사용자 메시지:', userText);
-  
+
   try {
     // Multi-Agent 세션 ID 가져오기
     const sessionId = await getOrCreateMultiAgentSession();
-    
+
     const headers = {
       'Content-Type': 'application/json',
     };
-    
+
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
-    
+
     // Multi-Agent API 호출 (Supervisor가 자동 라우팅)
     const response = await fetch(`${API_BASE_URL}/multi-agent/query`, {
       method: 'POST',
@@ -92,17 +96,17 @@ export async function callChatModule(userText) {
         session_id: sessionId
       })
     });
-    
+
     if (!response.ok) {
       throw new Error(`Multi-Agent API 호출 실패: ${response.status}`);
     }
-    
+
     const result = await response.json();
     console.log('🤖 Multi-Agent 응답:', result);
-    
+
     // 사용된 에이전트에 따라 응답 타입 결정
     const agentUsed = result.agent_used || 'unknown';
-    
+
     // therapy_tool이 사용된 경우
     if (agentUsed === 'therapy_tool') {
       return {
@@ -112,21 +116,32 @@ export async function callChatModule(userText) {
         agent_used: agentUsed
       };
     }
-    
+
     // planner_tool이 사용되고 task_recommendations 형식인 경우
     // (planner_tool의 응답 형식에 따라 조정 필요)
     if (agentUsed === 'planner_tool' && result.answer.includes('추천')) {
       // planner_tool이 task_recommendations 형식으로 응답하는지 확인 필요
       // 일단 일반 텍스트로 처리
     }
-    
+
+    // HR 키워드 감지 시 HR 팝업 제안
+    if (HR_KEYWORDS.some(keyword => message.toLowerCase().includes(keyword))) {
+      // HR 팝업 열기 제안 추가
+      return {
+        type: 'text',
+        data: result.answer + '\n\n💡 더 자세한 HR 정보는 HR 도우미 팝업을 사용해보세요! (명령어: /hr)',
+        agent_used: agentUsed,
+        suggest_hr: true
+      };
+    }
+
     // 일반 텍스트 응답
     return {
       type: 'text',
       data: result.answer,
       agent_used: agentUsed
     };
-    
+
   } catch (error) {
     console.error('❌ Multi-Agent API 오류:', error);
     return {
