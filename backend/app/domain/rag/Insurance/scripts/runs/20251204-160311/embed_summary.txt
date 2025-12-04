@@ -1,0 +1,6 @@
+Chunks: 60
+Collection: insurance_documents
+Total docs in collection: 63
+Chroma dir: C:\dev\himedia\Virtual-Assistant\backend\app\domain\rag\Insurance\chroma_db
+Embed+Upsert duration: 3.21s
+Input chunks: C:\dev\himedia\Virtual-Assistant\backend\app\domain\rag\Insurance\scripts\chunks.json

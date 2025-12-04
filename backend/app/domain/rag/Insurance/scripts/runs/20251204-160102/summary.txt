@@ -1,0 +1,7 @@
+처리된 페이지: 44/50
+빈 페이지: 6
+생성된 청크: 60개
+청킹 소요 시간: 0.13s
+입력: C:\dev\himedia\Virtual-Assistant\backend\app\domain\rag\Insurance\scripts\extracted_pages.json
+출력(latest): C:\dev\himedia\Virtual-Assistant\backend\app\domain\rag\Insurance\scripts\chunks.json
+출력(run): C:\dev\himedia\Virtual-Assistant\backend\app\domain\rag\Insurance\scripts\runs\20251204-160102\chunks.json

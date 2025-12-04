@@ -1,0 +1,1 @@
+Failed: 'PDFExtractor' object has no attribute 'extract'

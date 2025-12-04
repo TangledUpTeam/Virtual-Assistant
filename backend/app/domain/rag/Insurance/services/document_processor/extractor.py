@@ -24,6 +24,7 @@ DPI_FOR_VISION = 120
 DPI_FOR_ANALYSIS = 50
 MIN_IMAGE_VARIANCE = 200  # 낮춤: 도표/차트가 있는 페이지 포함하기 위해
 MIN_IMAGE_AREA_RATIO = 0.10  # 사용 안 함 (bbox 계산 신뢰도 낮음)
+VISION_TEXT_THRESHOLD = 300  # 텍스트 길이가 이 값보다 짧으면 Vision 사용 고려
 
 # OCR 실패 지표
 OCR_FAILURE_INDICATORS = [
@@ -385,8 +386,8 @@ class PDFExtractor:
             text_length = len(analysis.raw_text.strip())
             variance = analysis.variance or 0.0
             
-            # 텍스트가 적거나(<300자) variance가 매우 높으면(>1500) Vision 처리
-            run_vision = (text_length < 300 or variance > 1500)
+            # 텍스트가 적거나(<VISION_TEXT_THRESHOLD) variance가 매우 높으면(>1500) Vision 처리
+            run_vision = (text_length < VISION_TEXT_THRESHOLD or variance > 1500)
             
             if run_vision:
                 mode = "vision"

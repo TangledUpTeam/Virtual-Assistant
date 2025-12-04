@@ -1,0 +1,1 @@
+Failed: Failed to add documents: object of type 'OpenAIEmbeddingProvider' has no len() in add. | Details: {'num_documents': 60}
