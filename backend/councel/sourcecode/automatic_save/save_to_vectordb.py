@@ -102,16 +102,23 @@ class VectorDBManager:
             # 컬렉션 생성 또는 기존 컬렉션 가져오기
             collection = self.create_or_get_collection(collection_name)
             
-            # 기존 데이터가 있고 skip_existing이 True면 건너뛰기
+            # 기존 데이터 개수 확인
             existing_count = collection.count()
 
-            # 기존 ID 목록 가져오기 (중복 방지)
+            # 기존 ID 목록 가져오기 (중복 방지) - 스트리밍 방식으로 ID만 조회
+            # 메모리 최적화: include=["ids"]로 ID만 로드 (embeddings, documents, metadatas 제외)
             existing_ids = set()
             if existing_count > 0:
                 try:
-                    # 모든 기존 ID 가져오기
-                    existing_data = collection.get()
-                    existing_ids = set(existing_data['ids'])
+                    # ID만 가져오기 (메모리 최적화: include=["ids"]로 ID만 로드)
+                    # ChromaDB는 offset을 지원하지 않으므로 전체 ID를 한 번에 가져오되,
+                    # ID만 로드하므로 메모리 사용량이 크게 감소함
+                    existing_data = collection.get(
+                        include=["ids"]  # ID만 가져오기 (메모리 최적화)
+                    )
+                    if existing_data and existing_data.get('ids'):
+                        existing_ids = set(existing_data['ids'])
+                            
                 except Exception as e:
                     print(f"기존 ID 확인 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
             
@@ -141,7 +148,7 @@ class VectorDBManager:
             if not ids:
                 return 0
             
-            # 배치로 저장
+            # 배치로 저장 (스트리밍 방식)
             total_items = len(ids)
             
             successful_batches = 0
@@ -160,9 +167,15 @@ class VectorDBManager:
                     )
                     successful_batches += 1
                     
+                    # 배치 처리 후 메모리 해제를 위한 힌트 (실제 해제는 루프 종료 후)
+                    
                 except Exception as e:
                     print(f"\n배치 저장 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
                     failed_batches += 1
+            
+            # 메모리 해제를 위한 정리
+            del ids, embeddings, documents, metadatas
+            gc.collect()
             
             return total_items
         
@@ -223,20 +236,41 @@ def main():
         # Vector DB 매니저 초기화
         db_manager = VectorDBManager(str(vector_db_dir))
         
-        # 모든 임베딩 파일의 데이터를 하나로 합치기
-        all_data = []
+        # 스트리밍 처리: 파일별로 순차 처리하고 각 파일 처리 후 메모리 해제
+        total_saved = 0
         file_stats = []
         
-        for emb_file in embedding_files:
-            
+        for emb_file in tqdm(embedding_files, desc="파일 처리"):
             try:
+                # 파일별로 데이터 로드
                 data = db_manager.load_embedding_file(emb_file)
-                all_data.extend(data)
+                
+                if not data:
+                    file_stats.append({
+                        'file': emb_file.name,
+                        'count': 0,
+                        'status': '경고: 데이터 없음'
+                    })
+                    continue
+                
+                # 즉시 Vector DB에 저장 (스트리밍 처리)
+                saved_count = db_manager.save_to_collection(
+                    collection_name=collection_name,
+                    data=data,
+                    batch_size=1000
+                )
+                
+                total_saved += saved_count
                 file_stats.append({
                     'file': emb_file.name,
                     'count': len(data),
+                    'saved': saved_count,
                     'status': '성공'
                 })
+                
+                # 메모리 해제
+                del data
+                gc.collect()
                 
             except Exception as e:
                 file_stats.append({
@@ -244,20 +278,11 @@ def main():
                     'count': 0,
                     'status': f'실패: {e}'
                 })
-                print(f"로드 실패: {e}")
+                print(f"로드 실패: {emb_file.name} - {e}")
         
-        # 로드 결과 요약
-        
-        if not all_data:
-            print("오류: 로드된 데이터가 없습니다.")
-            sys.exit(1)
-        
-        # Vector DB에 저장
-        total_saved = db_manager.save_to_collection(
-            collection_name=collection_name,
-            data=all_data,
-            batch_size=1000
-        )
+        # 처리 결과 확인
+        if total_saved == 0:
+            print("경고: 저장된 데이터가 없습니다.")
         
         # 검증
         # verification = db_manager.verify_collection(collection_name)
