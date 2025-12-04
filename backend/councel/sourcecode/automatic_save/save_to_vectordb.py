@@ -11,7 +11,6 @@ import os
 import json
 import sys
 import shutil
-import time
 import gc
 from pathlib import Path
 from typing import List, Dict, Any
@@ -283,25 +282,6 @@ def main():
         # 처리 결과 확인
         if total_saved == 0:
             print("경고: 저장된 데이터가 없습니다.")
-        
-        # 검증
-        # verification = db_manager.verify_collection(collection_name)
-        
-        # print(f"\n컬렉션 정보:")
-        # print(f"  - 이름: {verification['name']}")
-        # print(f"  - 저장된 항목 수: {verification['count']}개")
-        # print(f"  - 메타데이터: {verification['metadata']}")
-        # if 'sample_id' in verification:
-        #     print(f"  - 샘플 ID: {verification['sample_id']}")
-        
-        # # 최종 결과
-        # print(f"\n{'='*60}")
-        # print("전체 작업 완료!")
-        # print(f"{'='*60}")
-        # print(f"총 삽입된 벡터 개수: {total_saved}개")
-        # print(f"컬렉션 이름: {collection_name}")
-        # print(f"DB 저장 위치: {vector_db_dir}")
-        # print(f"{'='*60}")
         
     except KeyboardInterrupt:
         print("\n\n작업이 사용자에 의해 중단되었습니다.")
