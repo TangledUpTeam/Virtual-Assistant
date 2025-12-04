@@ -245,7 +245,6 @@ async function handleSendMessage() {
   try {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
     const result = await sendMultiAgentMessage(text);
-    addMessage('assistant', result.answer);
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
@@ -257,7 +256,9 @@ async function handleSendMessage() {
         // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
         if (result.answer.includes('SUGGESTION:')) {
           const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
-          // 메시지는 이미 addMessage로 출력되었으므로 버튼만 추가
+          // 깨끗한 메시지 표시
+          addMessage('assistant', cleanMessage);
+          // 버튼 추가
           addConfirmationButton('브레인스토밍 시작하기', () => {
             openBrainstormingPopup();
             addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
@@ -265,12 +266,19 @@ async function handleSendMessage() {
         }
         // 2. 그 외 (RAG 답변 등) - 자동 실행하지 않고 버튼 표시
         else {
+          addMessage('assistant', result.answer);
           addConfirmationButton('브레인스토밍 도구 열기', () => {
             openBrainstormingPopup();
             addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
           });
         }
+      } else {
+        // 다른 에이전트는 그대로 표시
+        addMessage('assistant', result.answer);
       }
+    } else {
+      // agent_used가 없으면 그대로 표시
+      addMessage('assistant', result.answer);
     }
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
