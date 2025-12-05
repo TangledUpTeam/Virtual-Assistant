@@ -4,7 +4,6 @@
  * Multi-Agent 시스템 지원 추가
  */
 
-import { isHRQuestion, queryHRDocument } from './hrService.js';
 
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const SESSION_KEY = 'chatbot_session_id';

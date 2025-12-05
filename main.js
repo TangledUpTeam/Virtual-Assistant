@@ -259,70 +259,6 @@ ipcMain.on('va:request-quit', () => {
 // 브레인스토밍 팝업 열기
 let brainstormingWin = null;
 
-// HR 팝업 열기
-let hrWin = null;
-
-function openHRPopup() {
-  console.log('📚 HR 팝업 생성');
-
-  // 이미 팝업이 열려있으면 포커스만
-  if (hrWin && !hrWin.isDestroyed()) {
-    hrWin.focus();
-    return;
-  }
-
-  // HR 팝업 창 생성
-  const hrWindowOptions = {
-    width: 700,
-    height: 732, // 700 + 32 (타이틀바)
-    center: true,
-    resizable: true,
-    frame: false, // 툴바 제거
-    backgroundColor: '#f5f5f5',
-    webPreferences: {
-      contextIsolation: false,
-      nodeIntegration: true
-    },
-    modal: false,
-    alwaysOnTop: true, // 항상 위에 표시
-    titleBarStyle: 'customButtonsOnHover', // macOS 버튼 완전 숨김
-    trafficLightPosition: { x: -100, y: -100 } // 버튼을 화면 밖으로
-  };
-  
-  // characterWin이 있으면 부모로 설정
-  if (characterWin && !characterWin.isDestroyed()) {
-    hrWindowOptions.parent = characterWin;
-  }
-  
-  hrWin = new BrowserWindow(hrWindowOptions);
-
-  // HR 전용 페이지 로드
-  hrWin.loadFile('hr-popup.html');
-
-  // 개발자 도구 (F12)
-  hrWin.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
-      if (hrWin.webContents.isDevToolsOpened()) {
-        hrWin.webContents.closeDevTools();
-      } else {
-        hrWin.webContents.openDevTools({ mode: 'detach' });
-      }
-    }
-  });
-
-  // 팝업 로드 완료
-  hrWin.webContents.on('did-finish-load', () => {
-    console.log('📚 HR 팝업 로드 완료');
-  });
-
-  // 팝업 종료 시
-  hrWin.on('closed', () => {
-    console.log('📚 HR 팝업 닫힘');
-    hrWin = null;
-  });
-
-  console.log('✅ HR 팝업 생성 완료');
-}
 
 function openBrainstormingPopup() {
   console.log('🧠 브레인스토밍 팝업 생성');
@@ -447,30 +383,6 @@ ipcMain.on('close-brainstorming-window', () => {
   }
 });
 
-// IPC: 챗봇에서 HR 팝업 열기
-ipcMain.on('open-hr-popup', (event) => {
-  console.log('💼 HR 팝업 생성 요청 (챗봇)');
-  openHRPopup();
-});
-
-// HR 창 최대화 토글
-ipcMain.on('toggle-hr-maximize', () => {
-  if (hrWin && !hrWin.isDestroyed()) {
-    if (hrWin.isMaximized()) {
-      hrWin.unmaximize();
-    } else {
-      hrWin.maximize();
-    }
-  }
-});
-
-// HR 창 닫기 (렌더러에서 요청)
-ipcMain.on('close-hr-window', () => {
-  console.log('💼 HR 창 닫기 요청');
-  if (hrWin && !hrWin.isDestroyed()) {
-    hrWin.close();
-  }
-});
 
 // Notion OAuth 창 열기
 let notionOAuthWin = null;
@@ -562,24 +474,6 @@ ipcMain.on('open-notion-oauth', async (event, authUrl) => {
   });
 });
 
-// HR 창 최대화 토글
-ipcMain.on('toggle-hr-maximize', () => {
-  if (hrWin && !hrWin.isDestroyed()) {
-    if (hrWin.isMaximized()) {
-      hrWin.unmaximize();
-    } else {
-      hrWin.maximize();
-    }
-  }
-});
-
-// HR 창 닫기 (렌더러에서 요청)
-ipcMain.on('close-hr-window', () => {
-  console.log('📚 HR 창 닫기 요청');
-  if (hrWin && !hrWin.isDestroyed()) {
-    hrWin.close();
-  }
-});
 
 // 백엔드 서버가 준비될 때까지 대기하는 함수
 async function waitForBackend(maxRetries = 30) {

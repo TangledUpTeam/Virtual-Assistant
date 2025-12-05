@@ -14,6 +14,16 @@ class GoogleOAuthClient:
     TOKEN_URL = "https://oauth2.googleapis.com/token"
     USER_INFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
     
+    # 필요한 모든 권한을 여기에 하드코딩
+    SCOPES = [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
     def __init__(self):
         self.client_id = settings.GOOGLE_CLIENT_ID
         self.client_secret = settings.GOOGLE_CLIENT_SECRET
@@ -26,22 +36,24 @@ class GoogleOAuthClient:
         Returns:
             Google 로그인 페이지 URL
         """
-        # 1. AsyncOAuth2Client 인스턴스를 먼저 생성해야 합니다.
+        # 하드코딩된 스코프 사용
+        scope_str = " ".join(self.SCOPES)
+        
+        # 1. AsyncOAuth2Client 인스턴스 생성
         client = AsyncOAuth2Client(
             client_id=self.client_id,
             client_secret=self.client_secret,
             redirect_uri=self.redirect_uri,
-            scope="openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive"
+            scope=scope_str
         )
         
-        # 2. 생성된 client 객체를 사용하여 URL을 만듭니다.
-        # access_type='offline'로 Refresh Token 받기
-        # prompt='select_account'로 계정 선택 화면만 표시
+        # 2. URL 생성
+        # prompt='consent'로 권한 재동의 강제
         url, _ = client.create_authorization_url(
             self.AUTHORIZE_URL,
             state=state or secrets.token_urlsafe(16),
             access_type="offline",  
-            prompt="select_account",
+            prompt="consent",
             include_granted_scopes="true" 
         )
         
