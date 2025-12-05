@@ -13,7 +13,7 @@ COUNCEL_DIR = Path(__file__).parent.parent.parent.parent / "councel"
 sys.path.insert(0, str(COUNCEL_DIR))
 
 # RAG 심리 상담 시스템 메인코드 임포트
-from sourcecode.persona.rag_therapy import RAGTherapySystem
+from sourcecode.rag_therapy import RAGTherapySystem
 
 # 심리 상담 서비스 클래스(싱글톤 인스턴스)
 class TherapyService:

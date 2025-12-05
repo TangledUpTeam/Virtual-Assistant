@@ -28,7 +28,7 @@ OpenAI API를 사용한 임베딩 및 답변 생성
 # ============================================================
 # TherapyLogger 임포트 (직접 실행 시와 모듈 import 시 모두 지원)
 # try:
-#     from .therapy_logger import TherapyLogger
+#     from .persona.therapy_logger import TherapyLogger
 # except ImportError:
 #     # 직접 실행 시 상대 import가 실패하면 절대 import 시도
 #     import sys
@@ -37,7 +37,7 @@ OpenAI API를 사용한 임베딩 및 답변 생성
 #     current_dir = Path(__file__).parent
 #     if str(current_dir) not in sys.path:
 #         sys.path.insert(0, str(current_dir))
-#     from therapy_logger import TherapyLogger
+#     from persona.therapy_logger import TherapyLogger
 # ============================================================
 
 import os
@@ -64,9 +64,9 @@ logging.getLogger("chromadb.segment").setLevel(logging.ERROR)
 warnings.filterwarnings("ignore", category=UserWarning, module="chromadb")
 
 # 분리된 모듈 임포트
-from .persona_manager import PersonaManager
-from .search_engine import SearchEngine
-from .response_generator import ResponseGenerator
+from .persona.persona_manager import PersonaManager
+from .persona.search_engine import SearchEngine
+from .persona.response_generator import ResponseGenerator
 
 # .env 파일 로드
 load_dotenv()
@@ -232,7 +232,7 @@ class RAGTherapySystem:
         # 스코어링 관련 코드 (주석처리됨 - 필요시 주석 해제)
         # ========================================
         # 로거 초기화 (스코어링 로그 저장용)
-        # base_dir = Path(__file__).parent.parent.parent  # backend/councel/
+        # base_dir = Path(__file__).parent.parent  # backend/councel/
         # test_dir = base_dir / "test"  # backend/councel/test/
         # log_file_prefix = "scoring_log_v7"  # 로그 파일명 (필요시 변경)
         # 
@@ -244,7 +244,7 @@ class RAGTherapySystem:
         # ========================================
         
         # 기본 디렉토리 경로
-        base_dir = Path(__file__).parent.parent.parent  # backend/councel/
+        base_dir = Path(__file__).parent.parent  # backend/councel/
         
         # 분리된 모듈 초기화
         self.persona_manager = PersonaManager(
@@ -457,8 +457,8 @@ class RAGTherapySystem:
 
 async def main():
 
-    # 경로 설정 (sourcecode/rag 기준)
-    base_dir = Path(__file__).parent.parent.parent
+    # 경로 설정 (sourcecode 기준)
+    base_dir = Path(__file__).parent.parent
     vector_db_dir = base_dir / "vector_db"
     
     try:

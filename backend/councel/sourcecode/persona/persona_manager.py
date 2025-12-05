@@ -39,7 +39,6 @@ class PersonaManager:
             self.adler_persona = cached_persona
             self._persona_ready = True
             self._rag_persona_ready = True
-            print("[정보] 캐시된 RAG 페르소나 로드 완료")
         else:
             # 기본 페르소나로 빠르게 시작
             self.adler_persona = self._get_default_persona()
