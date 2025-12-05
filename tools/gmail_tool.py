@@ -46,19 +46,36 @@ def _create_message(to: str, subject: str, body: str, attachment_path: Optional[
 
 async def send_email(user_id: str, to: str, subject: str, body: str, attachment_path: Optional[str] = None) -> Dict[str, Any]:
     """Gmail로 이메일 전송"""
+    print(f"\n📧 [Gmail Tool] 이메일 전송 시작")
+    print(f"   - User ID: {user_id}")
+    print(f"   - To: {to}")
+    print(f"   - Subject: {subject}")
+    
     try:
         token_data = await load_token(user_id, "google")
         if not token_data:
+            print(f"❌ [Gmail Tool] Google 토큰 로드 실패")
             return {"success": False, "data": None, "error": "Google 토큰을 찾을 수 없습니다."}
+        
+        print(f"✅ [Gmail Tool] Google 토큰 로드 성공")
         
         creds = _get_credentials(token_data)
         service = build('gmail', 'v1', credentials=creds)
         
         message = _create_message(to, subject, body, attachment_path)
+        
+        print(f"🚀 [Gmail Tool] Gmail API 전송 요청 중...")
         result = service.users().messages().send(userId='me', body=message).execute()
         
+        print(f"✅ [Gmail Tool] 이메일 전송 성공! (ID: {result.get('id')})")
         return {"success": True, "data": {"message_id": result.get('id'), "thread_id": result.get('threadId'), "to": to, "subject": subject}, "error": None}
     except Exception as e:
+        import traceback
+        print(f"\n🔥 [Gmail Tool] 이메일 전송 중 치명적 오류 발생!")
+        print(f"   - Error Type: {type(e).__name__}")
+        print(f"   - Error Message: {str(e)}")
+        print(f"   - Traceback:")
+        traceback.print_exc()
         return {"success": False, "data": None, "error": f"이메일 전송 중 오류: {str(e)}"}
 
 async def list_messages(user_id: str, query: str = "is:unread", max_results: int = 20, label_ids: Optional[List[str]] = None) -> Dict[str, Any]:
