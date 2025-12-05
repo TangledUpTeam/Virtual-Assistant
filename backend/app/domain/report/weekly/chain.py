@@ -11,7 +11,7 @@ import json
 from app.domain.report.core.canonical_models import CanonicalReport, CanonicalWeekly
 from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.search.retriever import UnifiedRetriever
-from app.llm.client import get_llm
+from app.llm.client import LLMClient
 from app.core.config import settings
 from app.domain.report.core.rag_prompts import WEEKLY_REPORT_RAG_PROMPT
 
@@ -42,37 +42,32 @@ def generate_weekly_report(
     """
     # 1. 해당 주의 월~금 날짜 계산
     monday, friday = get_week_range(target_date)
-    
-    # ISO week number 계산
     iso_calendar = monday.isocalendar()
     week_str = f"{iso_calendar[0]}-W{iso_calendar[1]:02d}"
     
-    # 2. 벡터DB에서 주간 데이터 검색 (새로운 4청크 구조)
-    import os
+    # 2. 벡터DB에서 주간 데이터 검색 (날짜 범위 기반)
     vector_store = get_report_vector_store()
     collection = vector_store.get_collection()
-    embedding_model_type = os.getenv("REPORT_EMBEDDING_MODEL_TYPE", "hf")
     retriever = UnifiedRetriever(
         collection=collection,
         openai_api_key=settings.OPENAI_API_KEY,
-        embedding_model_type=embedding_model_type
     )
     
-    print(f"[DEBUG] 주간 보고서 데이터 검색: owner={owner}, week={week_str}")
+    print(f"[DEBUG] 주간 보고서 데이터 검색: owner={owner}, range={monday}~{friday}")
     
-    # week 필터로 모든 일일보고서 청크 검색 (5일 × 4청크 = 20개)
+    # 날짜 범위로 모든 일일보고서 청크 검색 (5일 × 4청크 = 20개 기대)
     all_chunks = retriever.search_daily(
         query=f"{owner} 주간 업무",
         owner=owner,
-        week=week_str,
-        n_results=20,  # 정확히 20개
+        date_range=(monday, friday),
+        top_k=20,  # 충분히 20개
         chunk_types=None  # 모든 청크 타입
     )
     
     print(f"[INFO] 벡터DB 검색 완료: {len(all_chunks)}개 청크 발견")
     
     if len(all_chunks) == 0:
-        raise ValueError(f"해당 주({week_str})에 일일보고서 데이터를 찾을 수 없습니다.")
+        raise ValueError(f"해당 주({monday}~{friday})에 일일보고서 데이터를 찾을 수 없습니다.")
     
     # 3. 검색 결과를 프롬프트 형식으로 변환
     search_results = []
@@ -83,7 +78,7 @@ def generate_weekly_report(
         })
     
     # 4. LLM 프롬프트 구성
-    llm_client = get_llm()
+    llm_client = LLMClient(model="gpt-4o", temperature=0.7, max_tokens=2000)
     
     user_prompt = f"""다음은 ChromaDB에서 검색된 일일보고서 청크 데이터입니다:
 
@@ -92,7 +87,7 @@ def generate_weekly_report(
 위 데이터를 기반으로 주간보고서를 생성해주세요.
 
 **중요**: 
-- week = "{week_str}"인 모든 청크를 분석하여 주간보고서를 작성하세요.
+- 월~금 날짜 범위({monday.isoformat()} ~ {friday.isoformat()})의 모든 청크를 분석하여 주간보고서를 작성하세요.
 - 해당 주의 날짜 범위: {monday.isoformat()} (월요일) ~ {friday.isoformat()} (금요일)
 - weekday_tasks 필드는 반드시 다음 5개 날짜를 모두 포함해야 합니다:
   * "{monday.isoformat()}" (월요일)

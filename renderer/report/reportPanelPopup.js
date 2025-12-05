@@ -4,6 +4,7 @@
  */
 
 import { addTaskRecommendations, showCustomTaskInput } from './taskUI.js';
+import { getOwnerFromCookie } from './taskService.js';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 const API_BASE_URL = 'http://localhost:8000/api/v1';
@@ -19,7 +20,9 @@ let isInitialized = false;
 // FSM 상태
 let chatMode = 'normal'; // 'normal' 또는 'daily_fsm'
 let dailySessionId = null;
-let dailyOwner = '김보험';
+// Initialize global owner from cookie if available
+window.currentOwner = window.currentOwner || getOwnerFromCookie() || null;
+let dailyOwner = window.currentOwner || '';
 
 // 업무 플래닝 선택 상태
 let selectedTasks = new Set();
@@ -33,6 +36,26 @@ let customDates = {
   weekly: null,
   monthly: { year: null, month: null }
 };
+
+function getAccessToken() {
+  return sessionStorage.getItem('access_token') || getCookie('access_token');
+}
+
+function buildRequestContext() {
+  const headers = { 'Content-Type': 'application/json' };
+  const accessToken = getAccessToken();
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const owner = window.currentOwner || getOwnerFromCookie() || '';
+  if (owner) {
+    window.currentOwner = owner;
+    dailyOwner = owner;
+  }
+  return { headers, owner };
+}
 
 /**
  * 보고서 패널 초기화
@@ -217,21 +240,14 @@ async function loadAndDisplayTaskCards() {
   console.log(`[${requestId}] 📋 업무 카드 로드 시작`);
   
   try {
-    // 인증 불필요: request에 owner를 포함하여 전송
-    const headers = {
-      'Content-Type': 'application/json'
-    };
+    const { headers, owner } = buildRequestContext();
     
     const requestBody = {
-      owner: dailyOwner,
       target_date: new Date().toISOString().split('T')[0]
     };
-    
-    console.log(`[${requestId}] 📤 API 요청 (인증 불필요):`, {
-      url: `${API_BASE}/plan/today`,
-      method: 'POST',
-      body: requestBody
-    });
+    if (owner) {
+      requestBody.owner = owner;
+    }
     
     console.log(`[${requestId}] 📤 API 요청:`, {
       url: `${API_BASE}/plan/today`,
@@ -272,11 +288,13 @@ async function loadAndDisplayTaskCards() {
     // 업무 카드 UI 표시 (taskUI.js 사용 - summary는 addTaskRecommendations에서 표시)
     if (data.tasks && data.tasks.length > 0) {
       console.log(`[${requestId}] 📋 업무 카드 UI 표시: ${data.tasks.length}개`);
+      const effectiveOwner = data.owner || owner || dailyOwner;
       addTaskRecommendations({
         tasks: data.tasks,
         summary: data.summary || '오늘의 추천 업무입니다!',
-        owner: data.owner || dailyOwner,
-        target_date: data.target_date || new Date().toISOString().split('T')[0]
+        owner: effectiveOwner,
+        target_date: data.target_date || requestBody.target_date,
+        task_sources: data.task_sources || []
       }, addMessage, messagesContainer);
     } else {
       console.warn(`[${requestId}] ⚠️ 추천할 업무가 없습니다.`);
@@ -302,7 +320,8 @@ async function loadAndDisplayTaskCards() {
       
       button.addEventListener('click', () => {
         const targetDate = new Date().toISOString().split('T')[0];
-        showCustomTaskInput(dailyOwner, targetDate, addMessage);
+        const effectiveOwner = owner || dailyOwner || '';
+        showCustomTaskInput(effectiveOwner, targetDate, addMessage);
       });
       
       buttonDiv.appendChild(button);
@@ -487,17 +506,16 @@ async function getTodayPlan() {
   try {
     addMessage('assistant', '📋 오늘의 업무 플래닝을 생성 중입니다...');
     
-    // 인증 불필요: request에 owner를 포함하여 전송
-    const headers = {
-      'Content-Type': 'application/json'
-    };
+    const { headers, owner } = buildRequestContext();
     
     const requestBody = {
-      owner: dailyOwner,
       target_date: new Date().toISOString().split('T')[0]
     };
+    if (owner) {
+      requestBody.owner = owner;
+    }
     
-    console.log(`[${requestId}] 📤 API 요청 (인증 불필요):`, {
+    console.log(`[${requestId}] 📤 API 요청:`, {
       url: `${API_BASE}/plan/today`,
       method: 'POST',
       body: requestBody
@@ -552,11 +570,13 @@ async function getTodayPlan() {
     if (data.tasks && data.tasks.length > 0) {
       console.log(`[${requestId}] 📋 업무 카드 표시: ${data.tasks.length}개`);
       // addTaskRecommendations를 사용하여 직접 작성 기능 포함
+      const effectiveOwner = data.owner || owner || dailyOwner;
       addTaskRecommendations({
         tasks: data.tasks,
         summary: data.summary || '오늘의 추천 업무입니다!',
-        owner: data.owner || dailyOwner,
-        target_date: data.target_date || new Date().toISOString().split('T')[0]
+        owner: effectiveOwner,
+        target_date: data.target_date || requestBody.target_date,
+        task_sources: data.task_sources || []
       }, addMessage, messagesContainer);
     } else {
       console.warn(`[${requestId}] ⚠️ 추천할 업무가 없습니다.`);
@@ -749,7 +769,11 @@ async function startDailyReport() {
     const targetDate = customDates.daily || new Date().toISOString().split('T')[0];
     console.log(`[${requestId}] 📅 대상 날짜:`, targetDate);
     
-    const requestBody = { owner: dailyOwner, target_date: targetDate };
+    const { headers, owner } = buildRequestContext();
+    const requestBody = { target_date: targetDate };
+    if (owner) {
+      requestBody.owner = owner;
+    }
     console.log(`[${requestId}] 📤 API 요청:`, {
       url: `${API_BASE}/daily/start`,
       method: 'POST',
@@ -758,7 +782,7 @@ async function startDailyReport() {
     
     const response = await fetch(`${API_BASE}/daily/start`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(requestBody)
     });
     
@@ -894,7 +918,11 @@ async function generateWeeklyReport() {
     const targetDate = customDates.weekly || new Date().toISOString().split('T')[0];
     console.log(`[${requestId}] 📅 대상 날짜:`, targetDate);
     
-    const requestBody = { owner: dailyOwner, target_date: targetDate };
+    const { headers, owner } = buildRequestContext();
+    const requestBody = { target_date: targetDate };
+    if (owner) {
+      requestBody.owner = owner;
+    }
     console.log(`[${requestId}] 📤 API 요청:`, {
       url: `${API_BASE}/weekly/generate`,
       method: 'POST',
@@ -903,7 +931,7 @@ async function generateWeeklyReport() {
     
     const response = await fetch(`${API_BASE}/weekly/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(requestBody)
     });
     
@@ -971,7 +999,11 @@ async function generateMonthlyReport() {
     const month = customDates.monthly.month || (now.getMonth() + 1);
     console.log(`[${requestId}] 📅 대상 기간: ${year}년 ${month}월`);
     
-    const requestBody = { owner: dailyOwner, year, month };
+    const { headers, owner } = buildRequestContext();
+    const requestBody = { year, month };
+    if (owner) {
+      requestBody.owner = owner;
+    }
     console.log(`[${requestId}] 📤 API 요청:`, {
       url: `${API_BASE}/monthly/generate`,
       method: 'POST',
@@ -980,7 +1012,7 @@ async function generateMonthlyReport() {
     
     const response = await fetch(`${API_BASE}/monthly/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(requestBody)
     });
     
@@ -1043,23 +1075,13 @@ async function handleRAGChat(query) {
   try {
     addMessage('assistant', '🔍 일일보고서를 검색 중입니다...');
     
-    // 인증 토큰 가져오기 (sessionStorage 또는 쿠키)
-    const accessToken = sessionStorage.getItem('access_token') || getCookie('access_token');
-    console.log(`[${requestId}] 🔑 토큰 확인:`, accessToken ? `${accessToken.substring(0, 20)}...` : '없음');
+    const { headers, owner } = buildRequestContext();
+    console.log(`[${requestId}] 🔑 토큰 확인:`, headers.Authorization ? '있음' : '없음');
     
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-    
-    // 토큰이 있으면 Authorization 헤더에 추가
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-      console.log(`[${requestId}] ✅ Authorization 헤더 추가됨`);
-    } else {
-      console.warn(`[${requestId}] ⚠️ 토큰이 없습니다. 인증이 필요할 수 있습니다.`);
+    const requestBody = { query };
+    if (owner) {
+      requestBody.owner = owner;
     }
-    
-    const requestBody = { owner: dailyOwner, query };
     console.log(`[${requestId}] 📤 API 요청:`, {
       url: `${API_BASE}/report-chat/chat`,
       method: 'POST',

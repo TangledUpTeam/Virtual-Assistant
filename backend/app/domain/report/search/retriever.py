@@ -31,10 +31,13 @@ class UnifiedRetriever:
         self,
         collection: Collection,
         openai_api_key: Optional[str] = None,
-        embedding_model_type: Optional[str] = None,
     ) -> None:
         self.collection = collection
-        self.embedding_service = get_embedding_service(api_key=openai_api_key, model_type=embedding_model_type)
+        self.embedding_service = get_embedding_service(
+            api_key=openai_api_key,
+            model="text-embedding-3-large",
+            dimension=3072,
+        )
 
     def _build_date_list(self, start: date, end: date) -> List[str]:
         dates = []
@@ -94,8 +97,10 @@ class UnifiedRetriever:
         single_date: Optional[str] = None,
         period_start: Optional[str] = None,
         period_end: Optional[str] = None,
+        date_range: Optional[tuple[date, date]] = None,
         week: Optional[int] = None,
         n_results: int = 5,
+        top_k: Optional[int] = None,
         chunk_types: Optional[List[str]] = None,
         report_ids: Optional[List[str]] = None,
     ) -> List[UnifiedSearchResult]:
@@ -110,13 +115,22 @@ class UnifiedRetriever:
             conditions.append({"owner": owner})
 
         if week is not None:
-            conditions.append({"week": int(week)})
+            try:
+                week_int = int(week)
+                conditions.append({"week": week_int})
+            except (TypeError, ValueError):
+                # Ignore invalid week formats to avoid crashing upstream callers.
+                pass
 
         if report_ids:
             conditions.append({"report_id": {"$in": report_ids}})
 
         if single_date:
             conditions.append({"date": single_date})
+        elif date_range:
+            start, end = date_range
+            date_list = self._build_date_list(start, end)
+            conditions.append({"date": {"$in": date_list}})
         elif period_start and period_end:
             try:
                 start = date.fromisoformat(period_start)
@@ -127,7 +141,7 @@ class UnifiedRetriever:
                 pass
 
         where = {"$and": conditions} if len(conditions) > 1 else conditions[0]
-        return self._execute(query, where, n_results)
+        return self._execute(query, where, top_k or n_results)
 
     def search_all(self, query: str, n_results: int = 10) -> List[UnifiedSearchResult]:
         return self._execute(query, {"report_type": "daily"}, n_results)

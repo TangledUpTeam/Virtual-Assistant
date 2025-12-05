@@ -34,19 +34,28 @@ def parse_date(date_str: str) -> date | None:
     return None
 
 
+def _resolve_owner(owner_override: str | None) -> str:
+    """
+    Owner는 호출 컨텍스트에서만 전달된다. 원본 문서에는 더 이상 성명/owner가 포함되지 않는다.
+    """
+    if owner_override is None or not str(owner_override).strip():
+        raise ValueError("owner_override is required; source documents do not provide owner/name.")
+    return str(owner_override).strip()
+
+
 def convert_daily_to_canonical(raw: DailyReportSchema, owner_override: str | None = None) -> CanonicalReport:
     """
     일일 보고서 Raw → Canonical 변환
     
     Args:
         raw: DailyReportSchema 객체
-        owner_override: owner 필드를 강제로 설정할 값 (None이면 raw.상단정보.성명 사용)
+        owner_override: owner 필드를 강제로 설정할 값 (문서에서 읽지 않음)
         
     Returns:
         CanonicalReport 객체
     """
-    # owner 결정: owner_override가 있으면 우선 사용, 없으면 raw에서 추출
-    owner = owner_override or raw.상단정보.성명
+    # owner 결정: 호출자가 반드시 제공
+    owner = _resolve_owner(owner_override)
     
     # 헤더 정보
     header = {
@@ -126,7 +135,7 @@ def convert_daily_to_canonical(raw: DailyReportSchema, owner_override: str | Non
     return CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="daily",
-        owner=owner,  # owner_override 또는 raw.상단정보.성명
+        owner=owner,
         period_start=report_date,
         period_end=report_date,
         daily=canonical_daily
@@ -139,13 +148,13 @@ def convert_weekly_to_canonical(raw: WeeklyReportSchema, owner_override: str | N
     
     Args:
         raw: WeeklyReportSchema 객체
-        owner_override: owner 필드를 강제로 설정할 값 (None이면 raw.상단정보.성명 사용)
+        owner_override: owner 필드를 강제로 설정할 값 (문서에서 읽지 않음)
         
     Returns:
         CanonicalReport 객체
     """
-    # owner 결정: owner_override가 있으면 우선 사용, 없으면 raw에서 추출
-    owner = owner_override or raw.상단정보.성명
+    # owner 결정: 호출자가 반드시 제공
+    owner = _resolve_owner(owner_override)
     
     # 헤더 정보
     header = {
@@ -197,7 +206,7 @@ def convert_weekly_to_canonical(raw: WeeklyReportSchema, owner_override: str | N
     return CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="weekly",
-        owner=owner,  # owner_override 또는 raw.상단정보.성명
+        owner=owner,
         period_start=report_date,
         period_end=report_date,
         weekly=canonical_weekly
@@ -210,13 +219,13 @@ def convert_monthly_to_canonical(raw: MonthlyReportSchema, owner_override: str |
     
     Args:
         raw: MonthlyReportSchema 객체
-        owner_override: owner 필드를 강제로 설정할 값 (None이면 raw.상단정보.성명 사용)
+        owner_override: owner 필드를 강제로 설정할 값 (문서에서 읽지 않음)
         
     Returns:
         CanonicalReport 객체
     """
-    # owner 결정: owner_override가 있으면 우선 사용, 없으면 raw에서 추출
-    owner = owner_override or raw.상단정보.성명
+    # owner 결정: 호출자가 반드시 제공
+    owner = _resolve_owner(owner_override)
     
     # 헤더 정보
     header = {
@@ -253,7 +262,7 @@ def convert_monthly_to_canonical(raw: MonthlyReportSchema, owner_override: str |
     return CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="monthly",
-        owner=owner,  # owner_override 또는 raw.상단정보.성명
+        owner=owner,
         period_start=report_date,
         period_end=report_date,
         monthly=canonical_monthly

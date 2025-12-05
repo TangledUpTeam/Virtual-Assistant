@@ -12,6 +12,27 @@
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
+export function getOwnerFromCookie() {
+  try {
+    const raw = getCookie('user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const name = parsed?.name || parsed?.username || parsed?.id || null;
+    if (name) {
+      window.currentOwner = name;
+    }
+    return name;
+  } catch (error) {
+    console.warn('Failed to parse user cookie for owner:', error);
+    return null;
+  }
+}
+
+// Initialize global owner once on module load
+if (typeof window !== 'undefined') {
+  window.currentOwner = window.currentOwner || getOwnerFromCookie() || null;
+}
+
 /**
  * Intent Router: 사용자 발화를 분석하여 적절한 기능으로 라우팅
  */
@@ -116,14 +137,18 @@ export async function getTodayPlan() {
   try {
     console.log('🔄 [API] /plan/today 호출 중...');
     
+    const { headers, owner } = buildRequestContext();
+    const requestBody = {
+      target_date: new Date().toISOString().split('T')[0]
+    };
+    if (owner) {
+      requestBody.owner = owner;
+    }
+    
     const response = await fetch(`${API_BASE}/plan/today`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        owner: 'junkyeong'
-      })
+      headers,
+      body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
@@ -136,10 +161,11 @@ export async function getTodayPlan() {
     return {
       type: 'task_recommendations',
       data: {
-        tasks: data.recommended_tasks || [],
+        tasks: data.tasks || [],
         summary: data.summary || '오늘의 추천 업무입니다!',
-        owner: data.owner || 'junkyeong',
-        target_date: data.target_date || new Date().toISOString().split('T')[0]
+        owner: data.owner || owner || '',
+        target_date: data.target_date || requestBody.target_date,
+        task_sources: data.task_sources || []
       }
     };
   } catch (error) {
@@ -156,17 +182,20 @@ export async function getTodayPlan() {
  */
 async function generateWeeklyReport() {
   try {
-    console.log('🔄 [API] /weekly_report/generate 호출 중...');
+    console.log('🔄 [API] /weekly/generate 호출 중...');
     
-    const response = await fetch(`${API_BASE}/weekly_report/generate`, {
+    const { headers, owner } = buildRequestContext();
+    const body = {
+      target_date: getMonday(new Date())
+    };
+    if (owner) {
+      body.owner = owner;
+    }
+    
+    const response = await fetch(`${API_BASE}/weekly/generate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        owner: 'junkyeong',
-        start_date: getMonday(new Date())
-      })
+      headers,
+      body: JSON.stringify(body)
     });
     
     if (!response.ok) {
@@ -178,7 +207,7 @@ async function generateWeeklyReport() {
     
     return {
       type: 'text',
-      data: `📊 주간 보고서가 생성되었습니다!\n\n기간: ${data.start_date} ~ ${data.end_date}\n완료 업무: ${data.total_tasks || 0}개`
+      data: `📊 주간 보고서가 생성되었습니다!\n\n기간: ${data?.period?.start || body.target_date} ~ ${data?.period?.end || ''}`
     };
   } catch (error) {
     console.error('❌ [API] 주간 보고서 생성 실패:', error);
@@ -194,22 +223,22 @@ async function generateWeeklyReport() {
  */
 async function generateMonthlyReport() {
   try {
-    console.log('🔄 [API] /monthly_report/generate 호출 중...');
+    console.log('🔄 [API] /monthly/generate 호출 중...');
     
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
     
-    const response = await fetch(`${API_BASE}/monthly_report/generate`, {
+    const { headers, owner } = buildRequestContext();
+    const body = { year, month };
+    if (owner) {
+      body.owner = owner;
+    }
+    
+    const response = await fetch(`${API_BASE}/monthly/generate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        owner: 'junkyeong',
-        year: year,
-        month: month
-      })
+      headers,
+      body: JSON.stringify(body)
     });
     
     if (!response.ok) {
@@ -221,7 +250,7 @@ async function generateMonthlyReport() {
     
     return {
       type: 'text',
-      data: `📈 월간 보고서가 생성되었습니다!\n\n기간: ${year}년 ${month}월\n완료 업무: ${data.total_tasks || 0}개`
+      data: `📈 월간 보고서가 생성되었습니다!\n\n기간: ${data?.period?.start || `${year}년 ${month}월`} ~ ${data?.period?.end || ''}`
     };
   } catch (error) {
     console.error('❌ [API] 월간 보고서 생성 실패:', error);
@@ -241,15 +270,16 @@ async function generateYearlyReport() {
     
     const year = new Date().getFullYear();
     
+    const { headers, owner } = buildRequestContext();
+    const body = { year };
+    if (owner) {
+      body.owner = owner;
+    }
+    
     const response = await fetch(`${API_BASE}/performance_report/generate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        owner: 'junkyeong',
-        year: year
-      })
+      headers,
+      body: JSON.stringify(body)
     });
     
     if (!response.ok) {
@@ -289,7 +319,7 @@ export async function saveSelectedTasks(owner, targetDate, tasks, append = false
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        owner: owner,
+        owner: owner || window.currentOwner || getOwnerFromCookie(),
         target_date: targetDate,
         main_tasks: tasks,
         append: append
@@ -330,7 +360,7 @@ export async function updateMainTasks(owner, targetDate, tasks) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        owner: owner,
+        owner: owner || window.currentOwner || getOwnerFromCookie(),
         target_date: targetDate,
         main_tasks: tasks
       })
@@ -366,4 +396,35 @@ function getMonday(date) {
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const monday = new Date(d.setDate(diff));
   return monday.toISOString().split('T')[0];
+}
+
+/**
+ * 공통 요청 컨텍스트(헤더, owner) 생성
+ */
+function buildRequestContext() {
+  const headers = { 'Content-Type': 'application/json' };
+  const accessToken = getAccessToken();
+
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  const owner = window.currentOwner || getOwnerFromCookie();
+  if (owner) {
+    window.currentOwner = owner;
+  }
+  return { headers, owner };
+}
+
+function getAccessToken() {
+  return sessionStorage.getItem('access_token') || getCookie('access_token');
+}
+
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) {
+    return decodeURIComponent(parts.pop().split(';').shift());
+  }
+  return null;
 }

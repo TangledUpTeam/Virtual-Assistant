@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 import re
 from datetime import date, datetime
 from typing import Any, Dict, List
@@ -94,12 +95,13 @@ def validate_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
 
 def _base_metadata(canonical: CanonicalReport, report_date: date) -> Dict[str, Any]:
     iso_week = report_date.isocalendar().week
+    report_id = canonical.report_id or str(uuid.uuid4())
     return {
         "owner": canonical.owner,
         "report_type": "daily",
         "date": report_date.isoformat(),
         "doc_id": f"daily_{report_date.isoformat()}_{_slugify_owner(canonical.owner)}",
-        "report_id": canonical.report_id,
+        "report_id": report_id,
         "week": int(iso_week),
         "month": int(report_date.month),
     }

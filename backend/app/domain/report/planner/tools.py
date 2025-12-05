@@ -109,8 +109,10 @@ class YesterdayReportTool:
                     "owner": owner
                 }
         
-        # CanonicalReport로 변환
-        report_json = daily_report.report_json
+        # CanonicalReport로 변환 (report_id/owner 보정)
+        report_json = daily_report.report_json or {}
+        report_json.setdefault("report_id", None)
+        report_json["owner"] = owner
         report = CanonicalReport(**report_json)
         
         # 미종결 업무 추출 (새 구조: daily.pending)

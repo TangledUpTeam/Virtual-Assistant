@@ -32,7 +32,7 @@ class ReportBaseAgent(ABC):
         # LLM 클라이언트
         if llm_client is None:
             self.llm = LLMClient(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 temperature=0.7,
                 max_tokens=2000
             )

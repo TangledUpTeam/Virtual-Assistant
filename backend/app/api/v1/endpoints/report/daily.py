@@ -30,6 +30,7 @@ from app.reporting.html_renderer import render_report_html
 from app.domain.report.core.chunker import chunk_canonical_report
 from app.domain.report.core.embedding_pipeline import EmbeddingPipeline
 from app.infrastructure.vector_store_report import get_report_vector_store
+from app.domain.report.common.schemas import ReportMeta, ReportPeriod, ReportEnvelope
 from app.domain.auth.dependencies import get_current_user, get_current_user_optional
 from app.domain.user.models import User
 from urllib.parse import quote
@@ -76,6 +77,7 @@ class DailyAnswerResponse(BaseModel):
     type: Optional[str] = Field(None, description="daily_report")
     period: Optional[Dict[str, Any]] = Field(None, description="기간 정보")
     report_data: Optional[Dict[str, Any]] = Field(None, description="보고서 데이터 (html_url 포함)")
+    envelope: Optional[ReportEnvelope] = Field(None, description="통합 보고서 래퍼 (신규)")
 
 
 @router.post("/start", response_model=DailyStartResponse)
@@ -285,6 +287,7 @@ async def answer_daily_question(
                 html_path = None
                 html_url = None
                 html_filename = None
+                html_error_detail = None
                 try:
                     html_path = render_report_html(
                         report_type="daily",
@@ -296,7 +299,18 @@ async def answer_daily_question(
                     html_url = f"/static/reports/{quote(html_filename)}"
                     print(f"📄 일일 보고서 HTML 생성 완료: {html_path}")
                 except Exception as html_error:
-                    print(f"⚠️  HTML 생성 실패 (보고서는 저장됨): {str(html_error)}")
+                    html_error_detail = str(html_error)
+                    print(f"⚠️  HTML 생성 실패 (보고서는 저장됨): {html_error_detail}")
+
+                if html_error_detail:
+                    raise HTTPException(
+                        status_code=500,
+                        detail={
+                            "success": False,
+                            "message": "HTML generation failed",
+                            "error": html_error_detail
+                        }
+                    )
                 
                 # 🔥 벡터 DB 자동 저장 (신규 청킹 방식)
                 try:
@@ -351,7 +365,17 @@ async def answer_daily_question(
                 report_data={
                     "url": html_url,
                     "file_name": html_filename
-                } if html_url else None
+                } if html_url else None,
+                envelope=ReportEnvelope(
+                    meta=ReportMeta(
+                        owner=report.owner,
+                        period=ReportPeriod(start=str(report.period_start), end=str(report.period_end)),
+                        report_type="daily",
+                        report_id=str(report.report_id) if getattr(report, "report_id", None) else None,
+                    ),
+                    data=report.model_dump(mode="json"),
+                    html={"url": html_url, "file_name": html_filename} if html_url else None,
+                )
             )
         else:
             # 다음 질문 반환

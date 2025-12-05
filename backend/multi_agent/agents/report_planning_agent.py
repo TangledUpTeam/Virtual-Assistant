@@ -17,7 +17,6 @@ from app.domain.report.planner.schemas import TodayPlanRequest
 from app.domain.report.search.retriever import UnifiedRetriever
 from app.infrastructure.vector_store_report import get_report_vector_store
 from app.llm.client import LLMClient
-import os
 
 
 class ReportPlanningAgent(ReportBaseAgent):
@@ -47,10 +46,9 @@ class ReportPlanningAgent(ReportBaseAgent):
         try:
             vector_store = get_report_vector_store()
             collection = vector_store.get_collection()
-            embedding_model_type = os.getenv("REPORT_EMBEDDING_MODEL_TYPE", "hf")
             self.vector_retriever = UnifiedRetriever(
                 collection=collection,
-                embedding_model_type=embedding_model_type
+                openai_api_key=None,
             )
         except Exception as e:
             print(f"[WARNING] VectorDB 초기화 실패 (업무 플래닝은 계속 가능): {e}")
@@ -141,6 +139,7 @@ class ReportPlanningAgent(ReportBaseAgent):
             "summary": response.summary,
             "source_date": str(response.source_date) if response.source_date else None,
             "owner": response.owner,
-            "target_date": str(target_date)
+            "target_date": str(response.target_date or target_date),
+            "task_sources": [source.model_dump() for source in response.task_sources] if response.task_sources else []
         }
 

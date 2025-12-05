@@ -10,6 +10,8 @@ from datetime import date
 
 from app.domain.auth.dependencies import get_current_user
 from app.domain.user.models import User
+from app.domain.report.search.intent_router import IntentRouter
+from app.domain.report.common.schemas import RAGSourceRef, ReportPeriod
 
 router = APIRouter(prefix="/report-chat", tags=["report-chat"])
 
@@ -23,20 +25,10 @@ class ChatRequest(BaseModel):
     reference_date: Optional[str] = None  # YYYY-MM-DD 형식, "이번 주" 같은 상대적 날짜 계산 기준
 
 
-class SourceInfo(BaseModel):
-    """근거 문서 정보"""
-    date: str
-    time_slot: Optional[str] = None
-    chunk_type: str
-    category: Optional[str] = None
-    text_preview: str
-    score: float
-
-
 class ChatResponse(BaseModel):
     """챗봇 응답"""
     answer: str
-    sources: List[SourceInfo]
+    sources: List[RAGSourceRef]
     has_results: bool
 
 
@@ -76,19 +68,23 @@ async def chat_with_reports(
         
         from multi_agent.agents.report_tools import get_report_rag_agent
         
-        # 날짜 범위 파싱
-        date_range = None
+        intent_router = IntentRouter()
+
+        # 기준 날짜 파싱 (상대적 날짜 계산용, 기본=오늘)
+        reference_date = date.fromisoformat(request.reference_date) if request.reference_date else date.today()
+
+        # 날짜 범위 파싱 (요청값 우선, 없으면 인텐트 기반)
+        date_range: Dict[str, date] | None = None
         if request.date_start or request.date_end:
             date_range = {}
             if request.date_start:
                 date_range["start"] = date.fromisoformat(request.date_start)
             if request.date_end:
                 date_range["end"] = date.fromisoformat(request.date_end)
-        
-        # 기준 날짜 파싱 (상대적 날짜 계산용)
-        reference_date = None
-        if request.reference_date:
-            reference_date = date.fromisoformat(request.reference_date)
+        else:
+            intent = intent_router.route(request.query, reference_date=reference_date)
+            if intent.filters.get("date_range"):
+                date_range = intent.filters["date_range"]
         
         # ReportRAGAgent 사용
         rag_agent = get_report_rag_agent()
@@ -101,7 +97,7 @@ async def chat_with_reports(
         
         # SourceInfo 변환
         sources = [
-            SourceInfo(**source) for source in result["sources"]
+            RAGSourceRef(**source) for source in result["sources"]
         ]
         
         return ChatResponse(

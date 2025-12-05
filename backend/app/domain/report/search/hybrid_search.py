@@ -48,9 +48,9 @@ class QueryAnalyzer:
 class HybridSearcher:
     """Simple hybrid search that applies metadata filters then vector search."""
 
-    def __init__(self, collection: Collection, embedding_model_type: Optional[str] = None) -> None:
+    def __init__(self, collection: Collection) -> None:
         self.collection = collection
-        self.embedding_service = get_embedding_service(model_type=embedding_model_type)
+        self.embedding_service = get_embedding_service(model="text-embedding-3-large", dimension=3072)
 
     def _build_date_list(self, start: date, end: date) -> List[str]:
         dates = []

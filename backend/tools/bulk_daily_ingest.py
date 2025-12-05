@@ -84,26 +84,30 @@ def parse_date(date_str: str) -> date:
         raise ValueError(f"날짜 형식 오류: {date_str}. YYYY-MM-DD 형식이어야 합니다. ({e})")
 
 
-def convert_to_canonical_report(raw_json: Dict[str, Any]) -> CanonicalReport:
+def convert_to_canonical_report(raw_json: Dict[str, Any], owner: str) -> CanonicalReport:
     """
     Raw JSON을 CanonicalReport로 변환
     
     Args:
         raw_json: 원본 JSON 딕셔너리
+        owner: 호출 컨텍스트에서 전달된 owner (문서에서 읽지 않음)
         
     Returns:
         CanonicalReport 객체
     """
+    owner = (owner or "").strip()
+    if not owner:
+        raise ValueError("owner is required for ingestion (cannot be read from document).")
+
     # 1. 기본 정보 추출
     작성일자 = raw_json["상단정보"]["작성일자"]
-    성명 = raw_json["상단정보"]["성명"]
     
     period_date = parse_date(작성일자)
     
     # 2. 헤더 정보
     header = {
         "작성일자": 작성일자,
-        "성명": 성명
+        "성명": owner
     }
     
     # 3. todo_tasks (금일_진행_업무)
@@ -365,7 +369,7 @@ def preview_files(year: Optional[int] = None, month: Optional[int] = None):
     print("=" * 70)
 
 
-def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] = None):
+def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] = None, owner: Optional[str] = None):
     """
     메인 함수: 일일보고서를 DB에 저장
     
@@ -383,6 +387,10 @@ def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] =
             filter_msg.append(f"{month}월")
         print(f"필터: {' '.join(filter_msg)}")
     print("=" * 70)
+
+    owner = (owner or os.getenv("REPORT_OWNER") or "").strip()
+    if not owner:
+        raise ValueError("owner is required (set --owner or REPORT_OWNER env).")
     
     # 1. 기본 경로 설정
     base_dir = backend_dir / "Data" / "mock_reports" / "daily"
@@ -425,7 +433,7 @@ def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] =
             for idx, json_obj in enumerate(json_objects, 1):
                 try:
                     # CanonicalReport 변환
-                    canonical_report = convert_to_canonical_report(json_obj)
+                    canonical_report = convert_to_canonical_report(json_obj, owner=owner)
                     
                     # DB 저장 (UPSERT)
                     report_dict = canonical_report.model_dump(mode='json')
@@ -464,14 +472,6 @@ def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] =
         print(f"   ├─ 업데이트: {updated_count}개")
         print(f"   └─ 에러: {error_count}개")
         
-        # 6. DB 확인
-        print(f"\n🔍 DB 확인:")
-        from app.domain.report.daily.models import DailyReport
-        kim_reports = db.query(DailyReport).filter(
-            DailyReport.owner == "김보험"
-        ).count()
-        print(f"   └─ '김보험'의 일일보고서: {kim_reports}개")
-        
     except Exception as e:
         print(f"\n❌ 예상치 못한 에러: {e}")
         import traceback
@@ -501,6 +501,11 @@ if __name__ == "__main__":
         type=int,
         help="필터링할 월 (예: 11)"
     )
+    parser.add_argument(
+        "--owner",
+        type=str,
+        help="ingestion 시 사용할 owner (미지정 시 REPORT_OWNER 환경변수 사용)"
+    )
     
     args = parser.parse_args()
     
@@ -509,5 +514,5 @@ if __name__ == "__main__":
         preview_files(year=args.year, month=args.month)
     else:
         # 실제 저장 모드
-        bulk_ingest_daily_reports(year=args.year, month=args.month)
+        bulk_ingest_daily_reports(year=args.year, month=args.month, owner=args.owner)
 

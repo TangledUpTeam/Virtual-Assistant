@@ -21,6 +21,9 @@ from app.domain.report.core.canonical_models import (
 )
 from app.core.config import settings
 
+EMBEDDING_MODEL = "text-embedding-3-large"
+EMBEDDING_DIM = 3072
+
 
 @lru_cache(maxsize=1000)
 def get_embedding(text: str) -> np.ndarray:
@@ -36,14 +39,14 @@ def get_embedding(text: str) -> np.ndarray:
     try:
         client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
         response = client.embeddings.create(
-            model="text-embedding-3-small",  # 빠르고 비용 효율적
+            model=EMBEDDING_MODEL,
             input=text.strip()
         )
         return np.array(response.data[0].embedding)
     except Exception as e:
         print(f"[ERROR] 임베딩 생성 실패: {e}")
         # 실패시 빈 벡터 반환
-        return np.zeros(1536)
+        return np.zeros(EMBEDDING_DIM)
 
 
 def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:

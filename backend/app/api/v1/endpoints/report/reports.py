@@ -64,6 +64,8 @@ async def parse_report(
         
         # owner_override 결정: 로그인한 사용자가 있으면 사용자 이름 사용
         owner_override = current_user.name if current_user and current_user.name else None
+        if not owner_override:
+            raise HTTPException(status_code=401, detail="Authenticated user required to determine owner.")
         
         # Raw JSON → Canonical JSON 변환
         canonical_report = service.normalize_report(report_type, raw_json, owner_override=owner_override)

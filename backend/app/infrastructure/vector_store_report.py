@@ -28,7 +28,11 @@ class ReportVectorStore:
             except Exception:
                 self._collection = self.client.create_collection(
                     name=COLLECTION_NAME,
-                    metadata={"description": "Daily report collection"},
+                    metadata={
+                        "description": "Daily report collection",
+                        "embedding_model": "text-embedding-3-large",
+                        "embedding_dim": 3072,
+                    },
                 )
         return self._collection
 

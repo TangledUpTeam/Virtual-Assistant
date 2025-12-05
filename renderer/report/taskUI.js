@@ -25,12 +25,14 @@ const MAX_CUSTOM_TASKS = 3; // 최대 직접 작성 가능한 업무 수
 export function addTaskRecommendations(data, addMessage, messagesContainer) {
   console.log('🔥 [TaskUI] addTaskRecommendations 호출:', data);
   
-  const { tasks, summary, owner, target_date } = data;
+  const { tasks, summary, owner, target_date, task_sources } = data;
+  const safeOwner = owner || '';
+  const safeTargetDate = target_date || new Date().toISOString().split('T')[0];
   
   // 이전 상태 초기화 (Intent 고착 방지)
   resetTaskState();
   
-  currentRecommendation = { owner, target_date, tasks };
+  currentRecommendation = { owner: safeOwner, target_date: safeTargetDate, tasks };
   
   // 1) 요약은 일반 bubble 메시지로 표시
   addMessage('assistant', summary || '오늘의 추천 업무입니다!');
@@ -75,7 +77,7 @@ export function addTaskRecommendations(data, addMessage, messagesContainer) {
   });
   customTaskButton.addEventListener('click', () => {
     console.log('🔥 [TaskUI] 직접 작성하기 버튼 클릭');
-    showCustomTaskInput(owner, target_date, addMessage);
+    showCustomTaskInput(safeOwner, safeTargetDate, addMessage);
   });
   container.appendChild(customTaskButton);
   
@@ -84,7 +86,7 @@ export function addTaskRecommendations(data, addMessage, messagesContainer) {
   cardsContainer.className = 'task-cards';
   
   tasks.forEach((task, index) => {
-    const card = createTaskCard(task, index, container);
+    const card = createTaskCard(task, index, container, task_sources);
     cardsContainer.appendChild(card);
   });
   
@@ -115,7 +117,7 @@ export function addTaskRecommendations(data, addMessage, messagesContainer) {
 /**
  * 업무 카드 생성
  */
-function createTaskCard(task, index, container) {
+function createTaskCard(task, index, container, task_sources) {
   const card = document.createElement('div');
   card.className = 'task-card';
   card.dataset.index = index;
@@ -143,10 +145,33 @@ function createTaskCard(task, index, container) {
     <span class="task-time">⏰ ${task.expected_time}</span>
   `;
   
+  // 데이터 출처 표시 추가
+  const sourceInfo = document.createElement('div');
+  sourceInfo.className = 'task-source';
+  sourceInfo.style.cssText = `
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid #eee;
+  `;
+  
+  if (task_sources && task_sources.length > 0) {
+    const source = task_sources.find(s => s.task_index === index);
+    if (source) {
+      sourceInfo.textContent = `📌 ${source.source_description}`;
+    } else {
+      sourceInfo.textContent = '📌 맞춤형 추천 업무(ChromaDB 접근)';
+    }
+  } else {
+    sourceInfo.textContent = '📌 맞춤형 추천 업무(ChromaDB 접근)';
+  }
+  
   card.appendChild(priorityBadge);
   card.appendChild(title);
   card.appendChild(description);
   card.appendChild(meta);
+  card.appendChild(sourceInfo);
   
   // 카드 클릭 이벤트 (이벤트 전파 방지)
   card.style.cursor = 'pointer';

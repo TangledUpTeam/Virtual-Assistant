@@ -43,7 +43,7 @@ def test_main_tasks_flow():
         collection = get_report_vector_store().get_collection()
         retriever = UnifiedRetriever(collection)
         retriever_tool = YesterdayReportTool(retriever)
-        llm_client = get_llm(model="gpt-4o-mini", temperature=0.7)
+        llm_client = get_llm(model="gpt-4o", temperature=0.7, max_tokens=2000)
         
         generator = TodayPlanGenerator(retriever_tool, llm_client)
         

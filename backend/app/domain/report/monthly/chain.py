@@ -14,7 +14,7 @@ from app.domain.report.weekly.repository import WeeklyReportRepository
 from app.domain.report.daily.repository import DailyReportRepository
 from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.search.retriever import UnifiedRetriever
-from app.llm.client import get_llm
+from app.llm.client import LLMClient
 from app.core.config import settings
 from app.domain.report.core.rag_prompts import MONTHLY_REPORT_RAG_PROMPT
 
@@ -68,14 +68,11 @@ def generate_monthly_report(
     print(f"[INFO] 주간보고서 {len(weekly_reports)}개 발견: {first_day}~{last_day}")
     
     # 3. 벡터DB에서 해당 월의 일일보고서 청크 검색
-    import os
     vector_store = get_report_vector_store()
     collection = vector_store.get_collection()
-    embedding_model_type = os.getenv("REPORT_EMBEDDING_MODEL_TYPE", "hf")
     retriever = UnifiedRetriever(
         collection=collection,
         openai_api_key=settings.OPENAI_API_KEY,
-        embedding_model_type=embedding_model_type
     )
     
     # 해당 월의 모든 일일보고서 청크 검색
@@ -105,7 +102,7 @@ def generate_monthly_report(
         })
     
     # 6. LLM 프롬프트 구성
-    llm_client = get_llm()
+    llm_client = LLMClient(model="gpt-4o", temperature=0.7, max_tokens=2000)
     
     user_prompt = f"""다음은 해당 월({month_str})의 데이터입니다:
 

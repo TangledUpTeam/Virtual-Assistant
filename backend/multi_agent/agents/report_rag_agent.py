@@ -13,9 +13,9 @@ from datetime import date
 from multi_agent.agents.report_base import ReportBaseAgent
 from app.domain.report.core.rag_chain import ReportRAGChain
 from app.domain.report.search.retriever import UnifiedRetriever
+from app.domain.report.search.intent_router import IntentRouter
 from app.infrastructure.vector_store_report import get_report_vector_store
 from app.llm.client import LLMClient
-import os
 
 
 class ReportRAGAgent(ReportBaseAgent):
@@ -32,11 +32,10 @@ class ReportRAGAgent(ReportBaseAgent):
         # VectorDB 초기화
         vector_store = get_report_vector_store()
         collection = vector_store.get_collection()
-        embedding_model_type = os.getenv("REPORT_EMBEDDING_MODEL_TYPE", "hf")
         
         self.retriever = UnifiedRetriever(
             collection=collection,
-            embedding_model_type=embedding_model_type
+            openai_api_key=None,
         )
         
         # RAG Chain은 owner별로 생성되므로, 여기서는 초기화하지 않음
@@ -82,6 +81,12 @@ class ReportRAGAgent(ReportBaseAgent):
         
         reference_date = context.get("reference_date", date.today())
         date_range = context.get("date_range")
+
+        # 인텐트 라우터로 날짜 범위 추론 (context에 없을 때만)
+        if not date_range:
+            intent_router = IntentRouter()
+            intent = intent_router.route(query, reference_date=reference_date)
+            date_range = intent.filters.get("date_range")
         
         # RAG Chain 가져오기
         rag_chain = self._get_rag_chain(owner)

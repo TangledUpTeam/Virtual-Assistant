@@ -93,7 +93,7 @@ def test_today_plan_generation():
     collection = get_report_vector_store().get_collection()
     retriever = UnifiedRetriever(collection)
     tool = YesterdayReportTool(retriever)
-    llm_client = get_llm(model="gpt-4o-mini", temperature=0.7)
+    llm_client = get_llm(model="gpt-4o", temperature=0.7, max_tokens=2000)
     
     generator = TodayPlanGenerator(tool, llm_client)
     

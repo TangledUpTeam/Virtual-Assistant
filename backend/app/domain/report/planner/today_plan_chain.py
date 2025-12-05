@@ -15,7 +15,8 @@ from app.domain.report.search.retriever import UnifiedRetriever, UnifiedSearchRe
 from app.domain.report.planner.schemas import (
     TodayPlanRequest,
     TodayPlanResponse,
-    TaskItem
+    TaskItem,
+    TaskSource
 )
 
 
@@ -287,7 +288,7 @@ class TodayPlanGenerator:
             system_prompt=self.SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=2000
         )
         
         # Step 4: 응답 파싱 및 검증
@@ -334,12 +335,21 @@ class TodayPlanGenerator:
             tasks.extend(default_tasks[:needed])
         
         summary = llm_response.get("summary", "오늘의 일정 플래닝입니다.")
+
+        task_sources = self._track_task_sources(
+            tasks=tasks,
+            next_day_plan=next_day_plan,
+            unresolved=unresolved,
+            similar_tasks=similar_tasks
+        )
         
         return TodayPlanResponse(
             tasks=tasks,
             summary=summary,
             source_date=yesterday_data["search_date"],
-            owner=request.owner
+            owner=request.owner,
+            target_date=str(request.target_date),
+            task_sources=task_sources
         )
     
     def generate_sync(
@@ -537,7 +547,7 @@ class TodayPlanGenerator:
             system_prompt=self.SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=2000
         )
         
         # Step 5: 응답 파싱 및 검증
@@ -585,11 +595,21 @@ class TodayPlanGenerator:
         
         summary = llm_response.get("summary", "오늘의 일정 플래닝입니다.")
         
+        # 업무 출처 추적
+        task_sources = self._track_task_sources(
+            tasks=tasks,
+            next_day_plan=next_day_plan,
+            unresolved=unresolved,
+            similar_tasks=similar_tasks
+        )
+        
         return TodayPlanResponse(
             tasks=tasks,
             summary=summary,
             source_date=yesterday_data["search_date"],
-            owner=request.owner
+            owner=request.owner,
+            target_date=str(request.target_date),
+            task_sources=task_sources
         )
     
     def _build_user_prompt(
@@ -696,4 +716,70 @@ class TodayPlanGenerator:
 """
         
         return prompt
+    
+    def _track_task_sources(
+        self,
+        tasks: List[TaskItem],
+        next_day_plan: list,
+        unresolved: list,
+        similar_tasks: List[UnifiedSearchResult]
+    ) -> List[TaskSource]:
+        """
+        업무 출처 추적
+        
+        Args:
+            tasks: 생성된 업무 목록
+            next_day_plan: 전날 익일 계획
+            unresolved: 전날 미종결 업무
+            similar_tasks: ChromaDB에서 가져온 유사 업무
+            
+        Returns:
+            각 업무의 출처 정보
+        """
+        task_sources = []
+        
+        for idx, task in enumerate(tasks):
+            task_text = f"{task.title} {task.description}".lower()
+            source_type = None
+            source_description = None
+            
+            # 1순위: 익일 업무 계획 확인
+            for plan in next_day_plan:
+                if plan.lower() in task_text or task_text in plan.lower():
+                    source_type = "yesterday_plan"
+                    source_description = "전날 계획한 익일 업무 계획"
+                    break
+            
+            # 2순위: 미종결 업무 확인
+            if not source_type:
+                for unresolved_item in unresolved:
+                    if unresolved_item.lower() in task_text or task_text in unresolved_item.lower():
+                        source_type = "yesterday_unresolved"
+                        source_description = "전날 미종결 업무"
+                        break
+            
+            # 3순위: ChromaDB 추천 업무 확인
+            if not source_type and similar_tasks:
+                for similar_task in similar_tasks:
+                    similar_text = similar_task.text.lower()
+                    # 간단한 키워드 매칭
+                    task_keywords = set(task_text.split())
+                    similar_keywords = set(similar_text.split())
+                    if len(task_keywords & similar_keywords) >= 2:  # 최소 2개 키워드 일치
+                        source_type = "chromadb_recommendation"
+                        source_description = "맞춤형 추천 업무(ChromaDB 접근)"
+                        break
+            
+            # 출처를 찾지 못한 경우 기본값
+            if not source_type:
+                source_type = "chromadb_recommendation"
+                source_description = "맞춤형 추천 업무(ChromaDB 접근)"
+            
+            task_sources.append(TaskSource(
+                type=source_type,
+                description=source_description,
+                task_index=idx
+            ))
+        
+        return task_sources
 

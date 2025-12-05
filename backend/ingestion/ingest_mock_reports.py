@@ -48,6 +48,12 @@ def ingest_daily_reports() -> None:
         print("No mock daily reports found.")
         return
 
+    owner = os.getenv("REPORT_OWNER") or os.getenv("MOCK_OWNER")
+    if not owner or not owner.strip():
+        print("REPORT_OWNER (or MOCK_OWNER) must be set to ingest reports. Aborting.")
+        return
+    owner = owner.strip()
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print("OPENAI_API_KEY is not set. Aborting ingestion.")
@@ -61,7 +67,7 @@ def ingest_daily_reports() -> None:
     for path in files:
         try:
             raw = read_json(path)
-            canonical = service.normalize_daily(raw)
+            canonical = service.normalize_daily(raw, owner_override=owner)
             chunks = chunk_canonical_report(canonical)
             all_chunks.extend(chunks)
             print(f"[OK] {path.name}: {len(chunks)} chunks")

@@ -39,7 +39,7 @@ class ReportRAGService:
                 "has_results": bool  # 검색 결과 존재 여부
             }
         """
-        # RAG 체인 생성
+        # RAG 체인 생성 (LLM/embedding standardized in ReportRAGChain)
         chain = ReportRAGChain(owner=owner, top_k=5)
         
         # 응답 생성

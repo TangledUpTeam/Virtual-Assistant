@@ -5,6 +5,7 @@
 
 import { sendMultiAgentMessage, initChatbotService } from './chatbotService.js';
 import { addTaskRecommendations, showCustomTaskInput } from '../report/taskUI.js';
+import { getOwnerFromCookie } from '../report/taskService.js';
 
 // 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
 const accessToken = sessionStorage.getItem('access_token');
@@ -27,6 +28,17 @@ let messagesContainer = null;
 let chatInput = null;
 let sendBtn = null;
 let isChatPanelInitialized = false;
+let userDisplayEl = null;
+
+function renderCurrentUser() {
+  const owner = window.currentOwner || getOwnerFromCookie() || null;
+  if (owner) {
+    window.currentOwner = owner;
+  }
+  if (userDisplayEl) {
+    userDisplayEl.textContent = owner ? `User: ${owner}` : 'Not logged in';
+  }
+}
 
 /**
  * 채팅 패널 초기화
@@ -43,6 +55,8 @@ export function initChatPanel() {
   messagesContainer = document.getElementById('messages');
   chatInput = document.getElementById('chat-input');
   sendBtn = document.getElementById('send-btn');
+  userDisplayEl = document.getElementById('user-display');
+  renderCurrentUser();
 
   if (!chatPanel || !messagesContainer || !chatInput || !sendBtn) {
     console.error('❌ 채팅 패널 요소를 찾을 수 없습니다.');
@@ -304,35 +318,10 @@ async function handleSendMessage() {
           });
         }
         return;
-    // 브레인스토밍 에이전트인 경우 (특수 처리)
-    if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
-      // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
-      if (result.answer.includes('SUGGESTION:')) {
-        const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
-        addMessage('assistant', cleanMessage, isMarkdown);
-
-        addConfirmationButton('브레인스토밍 시작하기', () => {
-          openBrainstormingPopup();
-          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
-        });
       }
-      // 2. 그 외 (일반 답변 + 도구 열기 버튼)
-      else {
-        addMessage('assistant', result.answer, isMarkdown);
-
-        addConfirmationButton('브레인스토밍 도구 열기', () => {
-          openBrainstormingPopup();
-          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
-        });
-      }
-    }
-    // 그 외 일반 에이전트
-    else {
+      
+      // 그 외 일반 에이전트
       addMessage('assistant', result.answer, isMarkdown);
-    }
-    
-    // 기본: 멀티에이전트 응답 표시
-    addMessage('assistant', result.answer);
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
     addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
@@ -713,6 +702,7 @@ function openReportPopup() {
   }
 }
 
+/**
  * 메시지 히스토리 가져오기 (Notion Agent가 사용)
  */
 window.getMessages = function () {

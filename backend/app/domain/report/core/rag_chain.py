@@ -26,13 +26,21 @@ class ReportRAGChain:
         collection = vector_store.get_collection()
         self.searcher = retriever or HybridSearcher(collection=collection)
 
-        self.llm = llm or LLMClient(model="gpt-4o-mini", temperature=0.7, max_tokens=2000)
+        self.llm = llm or LLMClient(model="gpt-4o", temperature=0.7, max_tokens=2000)
 
     def retrieve(
         self,
         query: str,
         date_range: Optional[Dict[str, date]] = None,
     ) -> List[UnifiedSearchResult]:
+        # Normalize tuple-based date_range into dict
+        if date_range and not isinstance(date_range, dict):
+            try:
+                start, end = date_range  # type: ignore[misc]
+                date_range = {"start": start, "end": end}
+            except Exception:
+                date_range = None
+
         keywords: SearchKeywords = QueryAnalyzer.extract_keywords(query)
         results = self.searcher.search(
             query=query,
@@ -61,6 +69,7 @@ class ReportRAGChain:
         self,
         query: str,
         date_range: Optional[Dict[str, date]] = None,
+        reference_date: Optional[date] = None,
     ) -> Dict[str, Any]:
         results = self.retrieve(query, date_range)
         if not results:
@@ -82,9 +91,19 @@ class ReportRAGChain:
         sources = []
         for result in results:
             meta = result.metadata
+            period = None
+            if meta.get("period_start") and meta.get("period_end"):
+                period = {
+                    "start": meta.get("period_start"),
+                    "end": meta.get("period_end"),
+                }
             sources.append(
                 {
                     "date": meta.get("date", ""),
+                    "period": period,
+                    "owner": meta.get("owner", ""),
+                    "report_type": meta.get("report_type", ""),
+                    "report_id": meta.get("doc_id"),
                     "chunk_type": meta.get("chunk_type", ""),
                     "text_preview": result.text[:120],
                     "score": round(result.score, 3),

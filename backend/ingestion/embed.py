@@ -4,34 +4,25 @@ import os
 from typing import List, Optional
 
 from openai import OpenAI
-from sentence_transformers import SentenceTransformer
 
-DEFAULT_HF_MODEL = "sentence-transformers/all-MiniLM-L12-v2"
-DEFAULT_HF_DIM = 384
 DEFAULT_BATCH = 100
+EMBED_MODEL = "text-embedding-3-large"
+EMBED_DIM = 3072
 
 
 class EmbeddingService:
-    """Shared embedding service (HF or OpenAI)."""
+    """Shared embedding service (OpenAI only for reports)."""
 
-    def __init__(self, model_type: Optional[str] = None, api_key: Optional[str] = None) -> None:
-        self.model_type = model_type or os.getenv("REPORT_EMBEDDING_MODEL_TYPE", "hf")
+    def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None, dimension: Optional[int] = None) -> None:
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY is required for embeddings")
 
-        if self.model_type == "hf":
-            self.model = SentenceTransformer(DEFAULT_HF_MODEL)
-            self.dimension = DEFAULT_HF_DIM
-        else:
-            if not self.api_key:
-                raise ValueError("OPENAI_API_KEY is required for OpenAI embeddings")
-            self.client = OpenAI(api_key=self.api_key)
-            self.model = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-large")
-            self.dimension = 3072
+        self.client = OpenAI(api_key=self.api_key)
+        self.model = model or EMBED_MODEL
+        self.dimension = dimension or EMBED_DIM
 
     def embed_text(self, text: str) -> List[float]:
-        if self.model_type == "hf":
-            return self.model.encode(text, convert_to_numpy=True).tolist()
-
         response = self.client.embeddings.create(
             model=self.model,
             input=text,
@@ -45,15 +36,12 @@ class EmbeddingService:
 
         for i in range(0, total, batch_size):
             batch = texts[i : i + batch_size]
-            if self.model_type == "hf":
-                embeddings.extend(self.model.encode(batch, convert_to_numpy=True).tolist())
-            else:
-                response = self.client.embeddings.create(
-                    model=self.model,
-                    input=batch,
-                    encoding_format="float",
-                )
-                embeddings.extend([item.embedding for item in response.data])
+            response = self.client.embeddings.create(
+                model=self.model,
+                input=batch,
+                encoding_format="float",
+            )
+            embeddings.extend([item.embedding for item in response.data])
 
         return embeddings
 
@@ -61,21 +49,22 @@ class EmbeddingService:
 _embedding_service: Optional[EmbeddingService] = None
 
 
-def get_embedding_service(api_key: Optional[str] = None, model_type: Optional[str] = None) -> EmbeddingService:
+def get_embedding_service(api_key: Optional[str] = None, model: Optional[str] = None, dimension: Optional[int] = None) -> EmbeddingService:
     global _embedding_service
     if _embedding_service is None:
-        _embedding_service = EmbeddingService(api_key=api_key, model_type=model_type)
+        _embedding_service = EmbeddingService(api_key=api_key, model=model, dimension=dimension)
     return _embedding_service
 
 
-def embed_text(text: str, api_key: Optional[str] = None, model_type: Optional[str] = None) -> List[float]:
-    return get_embedding_service(api_key=api_key, model_type=model_type).embed_text(text)
+def embed_text(text: str, api_key: Optional[str] = None, model: Optional[str] = None, dimension: Optional[int] = None) -> List[float]:
+    return get_embedding_service(api_key=api_key, model=model, dimension=dimension).embed_text(text)
 
 
 def embed_texts(
     texts: List[str],
     api_key: Optional[str] = None,
     batch_size: int = DEFAULT_BATCH,
-    model_type: Optional[str] = None,
+    model: Optional[str] = None,
+    dimension: Optional[int] = None,
 ) -> List[List[float]]:
-    return get_embedding_service(api_key=api_key, model_type=model_type).embed_texts(texts, batch_size=batch_size)
+    return get_embedding_service(api_key=api_key, model=model, dimension=dimension).embed_texts(texts, batch_size=batch_size)

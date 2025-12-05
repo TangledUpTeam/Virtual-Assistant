@@ -16,10 +16,9 @@ class EmbeddingPipeline:
     def __init__(
         self,
         vector_store=None,
-        embedding_model_type: Optional[str] = None,
     ) -> None:
         self.vector_store = vector_store or get_report_vector_store()
-        self.embedding_service = get_embedding_service(model_type=embedding_model_type)
+        self.embedding_service = get_embedding_service(model="text-embedding-3-large", dimension=3072)
 
     def embed_texts(self, texts: List[str], batch_size: int = BATCH_SIZE) -> List[List[float]]:
         return self.embedding_service.embed_texts(texts, batch_size=batch_size)
@@ -63,8 +62,8 @@ class EmbeddingPipeline:
 _embedding_pipeline: Optional[EmbeddingPipeline] = None
 
 
-def get_embedding_pipeline(model_type: Optional[str] = None) -> EmbeddingPipeline:
+def get_embedding_pipeline() -> EmbeddingPipeline:
     global _embedding_pipeline
     if _embedding_pipeline is None:
-        _embedding_pipeline = EmbeddingPipeline(embedding_model_type=model_type)
+        _embedding_pipeline = EmbeddingPipeline()
     return _embedding_pipeline
