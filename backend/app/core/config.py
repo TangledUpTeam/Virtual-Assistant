@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     NAVER_CLIENT_SECRET: str
     NAVER_REDIRECT_URI: str
     
+    # Naver Search API (트렌드 검색용)
+    NAVER_SEARCH_CLIENT_ID: str = ""
+    NAVER_SEARCH_CLIENT_SECRET: str = ""
+    
     # OAuth - Slack (사용자 개인 연동)
     SLACK_CLIENT_ID: str = ""
     SLACK_CLIENT_SECRET: str = ""

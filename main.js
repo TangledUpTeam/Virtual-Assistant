@@ -521,6 +521,98 @@ ipcMain.on('close-brainstorming-window', () => {
   }
 });
 
+
+// Notion OAuth 창 열기
+let notionOAuthWin = null;
+
+ipcMain.on('open-notion-oauth', async (event, authUrl) => {
+  console.log('🔗 Notion OAuth 창 열기:', authUrl);
+  
+  // 이미 창이 열려있으면 포커스
+  if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
+    notionOAuthWin.focus();
+    return;
+  }
+  
+  // OAuth 전용 창 생성 (세션 공유)
+  notionOAuthWin = new BrowserWindow({
+    width: 800,
+    height: 700,
+    center: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+      // partition 제거 - 기본 세션 사용하여 로그인 상태 유지
+    }
+  });
+  
+  // Notion 쿠키만 삭제 (로그인 세션은 유지)
+  const { session } = require('electron');
+  try {
+    console.log('🗑️ Notion 쿠키 삭제 중...');
+    const cookies = await session.defaultSession.cookies.get({ domain: '.notion.so' });
+    for (const cookie of cookies) {
+      await session.defaultSession.cookies.remove(`https://${cookie.domain}${cookie.path}`, cookie.name);
+      console.log(`   삭제: ${cookie.name}`);
+    }
+    console.log('✅ Notion 쿠키 삭제 완료');
+  } catch (error) {
+    console.error('⚠️ Notion 쿠키 삭제 실패:', error);
+  }
+  
+  // OAuth URL 로드
+  notionOAuthWin.loadURL(authUrl);
+  
+  // URL 변경 감지 (콜백 URL로 리디렉션되면 자동으로 처리)
+  notionOAuthWin.webContents.on('will-redirect', (event, url) => {
+    console.log('🔄 리디렉션 감지:', url);
+    
+    // 콜백 URL인지 확인
+    if (url.startsWith('http://localhost:8000/api/v1/auth/notion/callback')) {
+      console.log('✅ Notion OAuth 콜백 감지 - 창 닫기');
+      
+      // 콜백 URL을 메인 창에서 처리하도록 로드
+      if (loginWin && !loginWin.isDestroyed()) {
+        // 콜백을 처리하고 /landing으로 리디렉션될 것임
+        loginWin.loadURL(url);
+      }
+      
+      // OAuth 창 즉시 닫기
+      if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
+        notionOAuthWin.close();
+      }
+    }
+  });
+  
+  // did-navigate 이벤트도 감지 (일부 경우 will-redirect가 안 잡힐 수 있음)
+  notionOAuthWin.webContents.on('did-navigate', (event, url) => {
+    console.log('🔄 네비게이션 감지:', url);
+    
+    // 콜백 URL이거나 /landing으로 리디렉션되면 창 닫기
+    if (url.startsWith('http://localhost:8000/api/v1/auth/notion/callback') || 
+        url.includes('/landing?notion_connected=true')) {
+      console.log('✅ Notion OAuth 완료 - 창 닫기');
+      
+      // 메인 창에 알림
+      if (loginWin && !loginWin.isDestroyed()) {
+        loginWin.loadURL('http://localhost:8000/landing?notion_connected=true');
+      }
+      
+      // OAuth 창 즉시 닫기
+      if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
+        notionOAuthWin.close();
+      }
+    }
+  });
+  
+  // 창 닫힘 이벤트
+  notionOAuthWin.on('closed', () => {
+    console.log('🔗 Notion OAuth 창 닫힘');
+    notionOAuthWin = null;
+  });
+});
+
+
 // 백엔드 서버가 준비될 때까지 대기하는 함수
 async function waitForBackend(maxRetries = 30) {
   const http = require('http');

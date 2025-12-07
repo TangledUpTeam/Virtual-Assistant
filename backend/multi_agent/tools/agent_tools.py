@@ -20,6 +20,7 @@ _brainstorming_agent = None
 _report_agent = None
 _therapy_agent = None
 _notion_agent = None
+_email_agent = None
 
 # MemoryManager 초기화
 memory_manager = MemoryManager()
@@ -72,6 +73,14 @@ def get_notion_agent():
         from backend.multi_agent.agents.notion_agent import NotionAgent
         _notion_agent = NotionAgent()
     return _notion_agent
+
+# Email 에이전트 호출
+def get_email_agent():
+    global _email_agent
+    if _email_agent is None:
+        from backend.multi_agent.agents.email_agent import EmailAgent
+        _email_agent = EmailAgent()
+    return _email_agent
 
 def _parse_history_markdown(markdown: str) -> List[Dict[str, Any]]:
     """MemoryManager의 마크다운 히스토리를 파싱하여 리스트로 변환"""
@@ -202,6 +211,24 @@ async def notion_tool(query: str) -> str:
         return result.get("answer", str(result))
     return str(result)
 
+# 이메일 전송 및 검색
+@tool
+async def email_tool(query: str) -> str:
+    """이메일을 전송하거나 검색합니다. 메일 보내기, 첨부파일 전송, 안 읽은 메일 확인 등을 처리합니다."""
+    agent = get_email_agent()
+    context = get_current_context()
+    
+    # user_id 추출 (context에서)
+    user_id = context.get("user_id", "default_user")
+    
+    result = await agent.process(query, context)
+    
+    # 결과가 dict 형태면 answer 추출
+    if isinstance(result, dict):
+        return result.get("answer", str(result))
+    return str(result)
+
+
 # 모든 에이전트를 도구로 해서 도구 리스트 리턴
 def get_all_agent_tools() -> List[Tool]:
     return [
@@ -211,4 +238,5 @@ def get_all_agent_tools() -> List[Tool]:
         report_tool,
         therapy_tool,
         notion_tool,
+        email_tool,
     ]
