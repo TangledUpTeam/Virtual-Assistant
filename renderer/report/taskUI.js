@@ -25,14 +25,14 @@ const MAX_CUSTOM_TASKS = 3; // 최대 직접 작성 가능한 업무 수
 export function addTaskRecommendations(data, addMessage, messagesContainer) {
   console.log('🔥 [TaskUI] addTaskRecommendations 호출:', data);
   
-  const { tasks, summary, owner, target_date, task_sources } = data;
-  const safeOwner = owner || '';
+  const { tasks, summary, owner_id, target_date, task_sources } = data;
+  const safeOwnerId = owner_id || null;
   const safeTargetDate = target_date || new Date().toISOString().split('T')[0];
   
   // 이전 상태 초기화 (Intent 고착 방지)
   resetTaskState();
   
-  currentRecommendation = { owner: safeOwner, target_date: safeTargetDate, tasks };
+  currentRecommendation = { owner_id: safeOwnerId, target_date: safeTargetDate, tasks };
   
   // 1) 요약은 일반 bubble 메시지로 표시
   addMessage('assistant', summary || '오늘의 추천 업무입니다!');
@@ -77,7 +77,7 @@ export function addTaskRecommendations(data, addMessage, messagesContainer) {
   });
   customTaskButton.addEventListener('click', () => {
     console.log('🔥 [TaskUI] 직접 작성하기 버튼 클릭');
-    showCustomTaskInput(safeOwner, safeTargetDate, addMessage);
+    showCustomTaskInput(safeOwnerId, safeTargetDate, addMessage);
   });
   container.appendChild(customTaskButton);
   
@@ -251,7 +251,7 @@ async function handleSaveSelectedTasks(event, addMessage, messagesContainer) {
     return;
   }
   
-  const { owner, target_date, tasks } = currentRecommendation;
+  const { owner_id, target_date, tasks } = currentRecommendation;
   const selectedTasksList = Array.from(selectedTasks).map(i => tasks[i]);
   const allTasksToSave = [...selectedTasksList, ...customTasks];
   
@@ -312,7 +312,7 @@ async function handleSaveSelectedTasks(event, addMessage, messagesContainer) {
   
   confirmBtn.addEventListener('click', async () => {
     confirmDiv.remove();
-    await saveTasks(owner, target_date, allTasksToSave, addMessage);
+    await saveTasks(owner_id, target_date, allTasksToSave, addMessage);
   });
   
   cancelBtn.addEventListener('click', () => {
@@ -349,10 +349,10 @@ function createConfirmationMessage(tasks) {
 /**
  * 실제 업무 저장
  */
-async function saveTasks(owner, targetDate, tasksToSave, addMessage) {
+async function saveTasks(ownerId, targetDate, tasksToSave, addMessage) {
   try {
     // 기존 업무에 추가 (append: true)
-    const result = await saveSelectedTasks(owner, targetDate, tasksToSave, true);
+    const result = await saveSelectedTasks(ownerId, targetDate, tasksToSave, true);
     
     if (result.success) {
       addMessage('assistant', `✅ ${result.saved_count}개의 업무가 금일 진행 업무로 저장되었습니다!`);
@@ -380,7 +380,7 @@ async function saveTasks(owner, targetDate, tasksToSave, addMessage) {
 /**
  * 직접 작성하기 모달 표시
  */
-export function showCustomTaskInput(owner, targetDate, addMessage) {
+export function showCustomTaskInput(ownerId, targetDate, addMessage) {
   console.log('🔥 [TaskUI] 직접 작성하기 모달 표시');
   
   const existingModal = document.querySelector('.custom-task-modal');

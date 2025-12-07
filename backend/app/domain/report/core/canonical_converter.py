@@ -39,7 +39,7 @@ def _resolve_owner(owner_override: str | None) -> str:
     Owner는 호출 컨텍스트에서만 전달된다. 원본 문서에는 더 이상 성명/owner가 포함되지 않는다.
     """
     if owner_override is None or not str(owner_override).strip():
-        raise ValueError("owner_override is required; source documents do not provide owner/name.")
+        raise ValueError("owner is required; source documents do not provide owner/name.")
     return str(owner_override).strip()
 
 
@@ -60,7 +60,7 @@ def convert_daily_to_canonical(raw: DailyReportSchema, owner_override: str | Non
     # 헤더 정보
     header = {
         "작성일자": raw.상단정보.작성일자,
-        "성명": owner  # 헤더에도 owner_override 반영
+        "성명": owner  # 헤더에도 owner 반영
     }
     
     # 날짜 파싱
@@ -159,7 +159,7 @@ def convert_weekly_to_canonical(raw: WeeklyReportSchema, owner_override: str | N
     # 헤더 정보
     header = {
         "작성일자": raw.상단정보.작성일자,
-        "성명": owner  # 헤더에도 owner_override 반영
+        "성명": owner  # 헤더에도 owner 반영
     }
     
     # 날짜 파싱
@@ -231,7 +231,7 @@ def convert_monthly_to_canonical(raw: MonthlyReportSchema, owner_override: str |
     header = {
         "월": raw.상단정보.월,
         "작성일자": raw.상단정보.작성일자,
-        "성명": owner  # 헤더에도 owner_override 반영
+        "성명": owner  # 헤더에도 owner 반영
     }
     
     # 날짜 파싱

@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 from ingestion.embed import get_embedding_service
 
 from app.domain.report.core.chunker import ChunkValidationError, validate_metadata
-from app.infrastructure.vector_store_report import get_report_vector_store
 
 BATCH_SIZE = 64
 
@@ -17,7 +16,11 @@ class EmbeddingPipeline:
         self,
         vector_store=None,
     ) -> None:
-        self.vector_store = vector_store or get_report_vector_store()
+        # Lazy import to avoid circular dependency
+        if vector_store is None:
+            from app.infrastructure.vector_store_report import get_report_vector_store
+            vector_store = get_report_vector_store()
+        self.vector_store = vector_store
         self.embedding_service = get_embedding_service(model="text-embedding-3-large", dimension=3072)
 
     def embed_texts(self, texts: List[str], batch_size: int = BATCH_SIZE) -> List[List[float]]:

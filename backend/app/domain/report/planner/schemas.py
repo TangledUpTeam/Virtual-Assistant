@@ -16,6 +16,10 @@ class TodayPlanRequest(BaseModel):
         None,
         description="Owner name (optional when authenticated, required as fallback when not logged in)",
     )
+    owner_id: int | None = Field(
+        None,
+        description="Owner ID (frontend compatibility; ignored when auth user is present)",
+    )
     target_date: date = Field(..., description="Target date for the plan")
 
 

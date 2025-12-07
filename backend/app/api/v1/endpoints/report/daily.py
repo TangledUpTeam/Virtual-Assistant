@@ -42,7 +42,14 @@ router = APIRouter(prefix="/daily", tags=["daily"])
 # 요청/응답 스키마
 class DailyStartRequest(BaseModel):
     """일일보고서 작성 시작 요청"""
-    owner: str = Field(..., description="작성자")
+    owner: Optional[str] = Field(
+        None,
+        description="작성자 (미사용; 인증 사용자 이름이 우선)",
+    )
+    owner_id: Optional[int] = Field(
+        None,
+        description="작성자 ID (프런트 호환용, 인증 사용자와 불일치 시 무시)",
+    )
     target_date: date = Field(..., description="보고서 날짜")
     time_ranges: List[str] = Field(
         default_factory=list,
@@ -401,7 +408,8 @@ async def answer_daily_question(
 
 class SelectMainTasksRequest(BaseModel):
     """금일 진행 업무 선택 요청"""
-    owner: str = Field(..., description="작성자")
+    owner: Optional[str] = Field(None, description="작성자 (미사용; 인증 사용자 이름이 우선)")
+    owner_id: Optional[int] = Field(None, description="작성자 ID (프런트 호환용)")
     target_date: date = Field(..., description="보고서 날짜")
     main_tasks: List[Dict[str, Any]] = Field(
         ...,
@@ -542,7 +550,8 @@ async def select_main_tasks(
 
 class GetMainTasksRequest(BaseModel):
     """금일 진행 업무 조회 요청"""
-    owner: str = Field(..., description="작성자")
+    owner: Optional[str] = Field(None, description="작성자 (미사용; 인증 사용자 이름이 우선)")
+    owner_id: Optional[int] = Field(None, description="작성자 ID (프런트 호환용)")
     target_date: date = Field(..., description="보고서 날짜")
 
 
@@ -599,7 +608,8 @@ async def get_main_tasks(
 
 class UpdateMainTasksRequest(BaseModel):
     """금일 진행 업무 수정 요청"""
-    owner: str = Field(..., description="작성자")
+    owner: Optional[str] = Field(None, description="작성자 (미사용; 인증 사용자 이름이 우선)")
+    owner_id: Optional[int] = Field(None, description="작성자 ID (프런트 호환용)")
     target_date: date = Field(..., description="보고서 날짜")
     main_tasks: List[Dict[str, Any]] = Field(
         ...,

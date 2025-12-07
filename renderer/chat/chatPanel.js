@@ -13,7 +13,7 @@ let isPanelVisible = true;
 
 // 추천 업무 선택 상태
 let selectedTasks = new Set();
-let currentRecommendation = null; // { owner, target_date, tasks }
+let currentRecommendation = null; // { owner_id, target_date, tasks }
 
 // DOM 요소 참조
 let chatPanel = null;
@@ -212,13 +212,13 @@ function addTherapyMessage(text, mode) {
 
 /**
  * 추천 업무 카드 UI 추가
- * @param {Object} data - { tasks, summary, owner, target_date }
+ * @param {Object} data - { tasks, summary, owner_id, target_date }
  */
 function addTaskRecommendations(data) {
-  const { tasks, summary, owner, target_date } = data;
+  const { tasks, summary, owner_id, target_date } = data;
 
   // 현재 추천 저장
-  currentRecommendation = { owner, target_date, tasks };
+  currentRecommendation = { owner_id, target_date, tasks };
   selectedTasks.clear();
 
   // 상태에 저장
@@ -353,7 +353,7 @@ async function handleSaveSelectedTasks() {
     return;
   }
 
-  const { owner, target_date, tasks } = currentRecommendation;
+  const { owner_id, target_date, tasks } = currentRecommendation;
 
   // 선택된 업무만 추출
   const selectedTasksList = Array.from(selectedTasks).map(index => tasks[index]);
@@ -365,7 +365,7 @@ async function handleSaveSelectedTasks() {
 
   try {
     // API 호출
-    const result = await saveSelectedTasks(owner, target_date, selectedTasksList);
+    const result = await saveSelectedTasks(owner_id, target_date, selectedTasksList);
 
     if (result.success) {
       // 성공 메시지

@@ -5,7 +5,7 @@
 
 import { sendMultiAgentMessage, initChatbotService } from './chatbotService.js';
 import { addTaskRecommendations, showCustomTaskInput } from '../report/taskUI.js';
-import { getOwnerFromCookie } from '../report/taskService.js';
+import { buildRequestContext, getUserFromCookie } from '../report/taskService.js';
 
 // 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
 const accessToken = sessionStorage.getItem('access_token');
@@ -31,12 +31,13 @@ let isChatPanelInitialized = false;
 let userDisplayEl = null;
 
 function renderCurrentUser() {
-  const owner = window.currentOwner || getOwnerFromCookie() || null;
-  if (owner) {
-    window.currentOwner = owner;
+  const user = getUserFromCookie();
+  const name = user?.name || '';
+  if (user?.id) {
+    window.currentUserId = window.currentUserId || user.id;
   }
   if (userDisplayEl) {
-    userDisplayEl.textContent = owner ? `User: ${owner}` : 'Not logged in';
+    userDisplayEl.textContent = name ? `User: ${name}` : 'Not logged in';
   }
 }
 
@@ -388,29 +389,14 @@ async function loadAndDisplayTaskCards() {
   console.log(`[${requestId}] 📋 업무 카드 로드 시작`);
   
   try {
-    // owner 가져오기 (쿠키에서 또는 기본값)
-    let owner = '김보험'; // 기본값
-    try {
-      const userCookie = document.cookie.split('; ').find(row => row.startsWith('user='));
-      if (userCookie) {
-        const userJson = decodeURIComponent(userCookie.split('=')[1]);
-        const userData = JSON.parse(userJson);
-        owner = userData.name || owner;
-      }
-    } catch (error) {
-      console.warn(`[${requestId}] ⚠️ user 쿠키 파싱 실패, 기본값 사용:`, error);
-    }
-    
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-    
+    const { headers, owner_id } = buildRequestContext();
+    const targetDate = new Date().toISOString().split('T')[0];
     const requestBody = {
-      owner: owner,
-      target_date: new Date().toISOString().split('T')[0]
+      owner_id: owner_id,
+      target_date: targetDate
     };
     
-    console.log(`[${requestId}] 📤 API 요청 (인증 불필요):`, {
+    console.log(`[${requestId}] 📤 API 요청:`, {
       url: `http://localhost:8000/api/v1/plan/today`,
       method: 'POST',
       body: requestBody
@@ -452,8 +438,8 @@ async function loadAndDisplayTaskCards() {
       addTaskRecommendations({
         tasks: data.tasks,
         summary: data.summary || '오늘의 추천 업무입니다!',
-        owner: data.owner || owner,
-        target_date: data.target_date || new Date().toISOString().split('T')[0]
+        owner_id: data.owner_id || owner_id,
+        target_date: data.target_date || targetDate
       }, addMessage, messagesContainer);
     } else {
       console.warn(`[${requestId}] ⚠️ 추천할 업무가 없습니다.`);
@@ -478,7 +464,7 @@ async function loadAndDisplayTaskCards() {
       `;
       button.addEventListener('click', () => {
         const targetDate = new Date().toISOString().split('T')[0];
-        showCustomTaskInput(owner, targetDate, addMessage);
+        showCustomTaskInput(owner_id, targetDate, addMessage);
       });
       buttonDiv.appendChild(button);
       messagesContainer.appendChild(buttonDiv);

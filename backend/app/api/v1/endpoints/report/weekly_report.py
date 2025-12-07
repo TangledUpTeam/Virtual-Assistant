@@ -26,6 +26,7 @@ router = APIRouter(prefix="/weekly", tags=["weekly_report"])
 class WeeklyReportGenerateRequest(BaseModel):
     """Request body for weekly report generation."""
     owner: str | None = Field(None, description="Owner name (used only when unauthenticated)")
+    owner_id: int | None = Field(None, description="Owner ID (frontend compatibility)")
     target_date: date = Field(..., description="Any date within the target week")
 
 

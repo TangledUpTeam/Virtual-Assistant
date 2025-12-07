@@ -62,7 +62,7 @@ class CanonicalReport(BaseModel):
 
     report_id: Optional[str] = Field(default=None, description="Unique report identifier")
     report_type: Literal["daily", "weekly", "monthly"] = Field(..., description="Report type")
-    owner: str = Field(default="", description="Report owner")
+    owner: str = Field(default="", description="Report owner (display name)")
     period_start: Optional[date] = Field(default=None, description="Report date")
     period_end: Optional[date] = Field(default=None, description="Report end date")
 

@@ -18,7 +18,8 @@ router = APIRouter(prefix="/report-chat", tags=["report-chat"])
 
 class ChatRequest(BaseModel):
     """챗봇 질문 요청"""
-    owner: str
+    owner: Optional[str] = None  # Deprecated: resolved from auth
+    owner_id: Optional[int] = None  # Frontend compatibility
     query: str
     date_start: Optional[str] = None  # YYYY-MM-DD 형식
     date_end: Optional[str] = None  # YYYY-MM-DD 형식

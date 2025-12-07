@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 
 from app.domain.report.search.hybrid_search import HybridSearcher, QueryAnalyzer, SearchKeywords
 from app.domain.report.search.retriever import UnifiedSearchResult
-from app.infrastructure.vector_store_report import get_report_vector_store
 from app.llm.client import LLMClient
 
 
@@ -22,6 +21,8 @@ class ReportRAGChain:
         self.owner = owner
         self.top_k = top_k
 
+        # Lazy import to avoid circular dependency
+        from app.infrastructure.vector_store_report import get_report_vector_store
         vector_store = get_report_vector_store()
         collection = vector_store.get_collection()
         self.searcher = retriever or HybridSearcher(collection=collection)

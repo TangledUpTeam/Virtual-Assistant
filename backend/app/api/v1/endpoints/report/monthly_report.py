@@ -26,6 +26,7 @@ router = APIRouter(prefix="/monthly", tags=["monthly_report"])
 class MonthlyReportGenerateRequest(BaseModel):
     """Request body for monthly report generation."""
     owner: str | None = Field(None, description="Owner name (used only when unauthenticated)")
+    owner_id: int | None = Field(None, description="Owner ID (frontend compatibility)")
     year: int = Field(..., description="Year")
     month: int = Field(..., description="Month (1~12)")
 
