@@ -31,10 +31,13 @@ from app.domain.report.core.chunker import chunk_canonical_report
 from app.domain.report.core.embedding_pipeline import EmbeddingPipeline
 from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.common.schemas import ReportMeta, ReportPeriod, ReportEnvelope
-from app.domain.auth.dependencies import get_current_user, get_current_user_optional
+from app.domain.auth.dependencies import get_current_user_optional
 from app.domain.user.models import User
-from app.api.v1.endpoints.report.utils import resolve_owner_name
+from app.core.config import settings
 from urllib.parse import quote
+
+# 보고서 owner는 상수로 사용 (실제 사용자 이름과 분리)
+REPORT_OWNER = settings.REPORT_WORKSPACE_OWNER
 
 
 router = APIRouter(prefix="/daily", tags=["daily"])
@@ -43,14 +46,6 @@ router = APIRouter(prefix="/daily", tags=["daily"])
 # 요청/응답 스키마
 class DailyStartRequest(BaseModel):
     """일일보고서 작성 시작 요청"""
-    owner: Optional[str] = Field(
-        None,
-        description="작성자 (미사용; 인증 사용자 이름이 우선)",
-    )
-    owner_id: Optional[int] = Field(
-        None,
-        description="작성자 ID (프런트 호환용, 인증 사용자와 불일치 시 무시)",
-    )
     target_date: date = Field(..., description="보고서 날짜")
     time_ranges: List[str] = Field(
         default_factory=list,
@@ -101,15 +96,11 @@ async def start_daily_report(
     FSM 세션을 시작하고, 첫 번째 시간대 질문을 반환합니다.
     
     main_tasks는 /select_main_tasks로 미리 저장되어 있어야 합니다.
-    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
+    인증 비활성화: current_user가 없어도 동작합니다.
     """
     try:
-        owner = resolve_owner_name(
-            db=db,
-            current_user=current_user,
-            owner=request.owner,
-            owner_id=request.owner_id,
-        )
+        # 인증 비활성화: current_user가 없어도 동작
+        owner = current_user.name if current_user and current_user.name else "사용자"
         
         # 시간대 생성 (제공되지 않으면 기본값: 09:00~18:00, 60분 간격)
         time_ranges = request.time_ranges
@@ -177,7 +168,7 @@ async def start_daily_report(
 async def answer_daily_question(
     request: DailyAnswerRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_current_user_optional)
 ):
     """
     시간대 질문에 답변
@@ -207,30 +198,26 @@ async def answer_daily_question(
         
         # 완료 여부 확인
         if result["finished"]:
-            # owner를 로그인한 사용자 이름으로 강제 설정
-            if not current_user.name:
-                raise HTTPException(
-                    status_code=400,
-                    detail="사용자 이름이 설정되지 않았습니다."
-                )
+            # 인증 비활성화: current_user가 없어도 동작
+            owner = current_user.name if current_user and current_user.name else "사용자"
             
-            owner = current_user.name
-            
-            # 보고서 생성
+            # 보고서 생성 (display_name으로 사용자 이름 전달)
             report = build_daily_report(
-                owner=owner,  # 로그인한 사용자 이름 사용
+                owner=owner,  # 호환성 유지용
                 target_date=updated_context.target_date,
                 main_tasks=updated_context.today_main_tasks,
                 time_tasks=updated_context.time_tasks,
                 issues=updated_context.issues,
-                plans=updated_context.plans
+                plans=updated_context.plans,
+                display_name=owner  # HTML 보고서에 표시할 이름
             )
             
             # 🔥 운영 DB에 저장 (PostgreSQL) - 기존 데이터 병합
             try:
                 # 기존 보고서 확인 (금일 진행 업무가 이미 저장되어 있을 수 있음)
+                # owner는 상수로 사용
                 existing_report = DailyReportRepository.get_by_owner_and_date(
-                    db, report.owner, report.period_start
+                    db, REPORT_OWNER, report.period_start
                 )
                 
                 if existing_report:
@@ -281,7 +268,7 @@ async def answer_daily_question(
                     }
                     
                     report_create = DailyReportCreate(
-                        owner=report.owner,
+                        owner=REPORT_OWNER,  # 상수 owner 사용
                         report_date=report.period_start,
                         report_json=report_dict
                     )
@@ -296,14 +283,16 @@ async def answer_daily_question(
                 html_filename = None
                 html_error_detail = None
                 try:
+                    # HTML 보고서에 표시할 이름 전달
                     html_path = render_report_html(
                         report_type="daily",
                         data=report.model_dump(mode='json'),
-                        output_filename=f"일일보고서_{report.owner}_{report.period_start}.html"
+                        output_filename=f"일일보고서_{owner}_{report.period_start}.html",
+                        display_name=owner  # HTML 보고서에 표시할 이름
                     )
                     
                     html_filename = html_path.name
-                    html_url = f"/static/reports/{quote(html_filename)}"
+                    html_url = f"/static/reports/daily/{quote(html_filename)}"
                     print(f"📄 일일 보고서 HTML 생성 완료: {html_path}")
                 except Exception as html_error:
                     html_error_detail = str(html_error)
@@ -354,8 +343,8 @@ async def answer_daily_question(
             # 세션 삭제
             session_manager.delete_session(request.session_id)
             
-            # 완료된 업무 수 계산
-            done_tasks = len(report.tasks) if report.tasks else 0
+            # 완료된 업무 수 계산 (detail_tasks 사용)
+            done_tasks = len(report.daily.detail_tasks) if report.daily and report.daily.detail_tasks else 0
             
             return DailyAnswerResponse(
                 status="finished",
@@ -375,7 +364,7 @@ async def answer_daily_question(
                 } if html_url else None,
                 envelope=ReportEnvelope(
                     meta=ReportMeta(
-                        owner=report.owner,
+                        owner=REPORT_OWNER,  # 상수 owner 사용
                         period=ReportPeriod(start=str(report.period_start), end=str(report.period_end)),
                         report_type="daily",
                         report_id=str(report.report_id) if getattr(report, "report_id", None) else None,
@@ -408,8 +397,6 @@ async def answer_daily_question(
 
 class SelectMainTasksRequest(BaseModel):
     """금일 진행 업무 선택 요청"""
-    owner: Optional[str] = Field(None, description="작성자 (미사용; 인증 사용자 이름이 우선)")
-    owner_id: Optional[int] = Field(None, description="작성자 ID (프런트 호환용)")
     target_date: date = Field(..., description="보고서 날짜")
     main_tasks: List[Dict[str, Any]] = Field(
         ...,
@@ -444,48 +431,47 @@ async def select_main_tasks(
     1. 메모리에 임시 저장 (FSM 시작 시 사용)
     2. PostgreSQL에 부분 저장 (금일 진행 업무만, status="in_progress")
     
-    인증 사용자 이름 > owner_id > 요청 owner 순서로 소유자를 결정합니다.
+    로그인한 사용자 이름을 owner로 사용합니다.
     """
     try:
-        owner = resolve_owner_name(
-            db=db,
-            current_user=current_user,
-            owner=request.owner,
-            owner_id=request.owner_id,
-        )
+        # 인증 비활성화: current_user가 없어도 동작
+        owner = current_user.name if current_user and current_user.name else "사용자"
         if not request.main_tasks:
             raise HTTPException(
                 status_code=400,
                 detail="최소 1개 이상의 업무를 선택해주세요."
             )
         
-        # 1. 메모리 저장 (FSM용)
+        # 최대 3개까지만 저장 가능
+        if len(request.main_tasks) > 3:
+            raise HTTPException(
+                status_code=400,
+                detail="금일 진행 업무는 최대 3개까지만 저장할 수 있습니다."
+            )
+        
+        # 항상 덮어쓰기 (append 모드 무시)
+        final_tasks = request.main_tasks[:3]  # 최대 3개까지만
+        
+        # 1. 메모리 저장 (FSM용) - 항상 덮어쓰기
         store = get_main_tasks_store()
         store.save(
             owner=owner,  # 로그인한 사용자 이름 사용
             target_date=request.target_date,
-            main_tasks=request.main_tasks,
-            append=request.append
+            main_tasks=final_tasks,
+            append=False  # 항상 덮어쓰기
         )
         
-        # 2. PostgreSQL에 부분 저장 (금일 진행 업무만)
+        # 2. PostgreSQL에 부분 저장 (금일 진행 업무만) - 항상 덮어쓰기
         try:
-            # 기존 보고서 확인
+            # 기존 보고서 확인 (owner는 상수로 사용)
             existing_report = DailyReportRepository.get_by_owner_and_date(
-                db, owner, request.target_date  # 로그인한 사용자 이름 사용
+                db, REPORT_OWNER, request.target_date
             )
             
             if existing_report:
-                # 기존 보고서가 있으면 tasks만 업데이트 (append 모드 고려)
+                # 기존 보고서가 있으면 tasks만 업데이트 (항상 덮어쓰기)
                 report_json = existing_report.report_json.copy()
-                
-                if request.append and "tasks" in report_json:
-                    # 기존 tasks에 추가
-                    existing_tasks = report_json.get("tasks", [])
-                    report_json["tasks"] = existing_tasks + request.main_tasks
-                else:
-                    # 덮어쓰기
-                    report_json["tasks"] = request.main_tasks
+                report_json["tasks"] = final_tasks  # 항상 덮어쓰기
                 
                 report_json["metadata"] = report_json.get("metadata", {})
                 report_json["metadata"]["status"] = "in_progress"
@@ -501,10 +487,10 @@ async def select_main_tasks(
                 # 새로운 부분 보고서 생성
                 partial_report = {
                     "report_type": "daily",
-                    "owner": owner,  # 로그인한 사용자 이름 사용
+                    "owner": REPORT_OWNER,  # 상수 owner 사용
                     "period_start": request.target_date.isoformat(),
                     "period_end": request.target_date.isoformat(),
-                    "tasks": request.main_tasks,
+                    "tasks": final_tasks,  # 최대 3개까지만
                     "kpis": [],
                     "issues": [],
                     "plans": [],
@@ -514,7 +500,7 @@ async def select_main_tasks(
                 DailyReportRepository.create(
                     db,
                     DailyReportCreate(
-                        owner=owner,  # 로그인한 사용자 이름 사용
+                        owner=REPORT_OWNER,  # 상수 owner 사용
                         report_date=request.target_date,
                         report_json=partial_report
                     )
@@ -528,7 +514,7 @@ async def select_main_tasks(
         return SelectMainTasksResponse(
             success=True,
             message="금일 진행 업무가 저장되었습니다.",
-            saved_count=len(request.main_tasks)
+            saved_count=len(final_tasks)
         )
     
     except HTTPException:
@@ -542,8 +528,6 @@ async def select_main_tasks(
 
 class GetMainTasksRequest(BaseModel):
     """금일 진행 업무 조회 요청"""
-    owner: Optional[str] = Field(None, description="작성자 (미사용; 인증 사용자 이름이 우선)")
-    owner_id: Optional[int] = Field(None, description="작성자 ID (프런트 호환용)")
     target_date: date = Field(..., description="보고서 날짜")
 
 
@@ -558,20 +542,16 @@ class GetMainTasksResponse(BaseModel):
 async def get_main_tasks(
     request: GetMainTasksRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_current_user_optional)
 ):
     """
     저장된 금일 진행 업무 조회
     
-    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
+    인증 비활성화: current_user가 없어도 동작합니다.
     """
     try:
-        owner = resolve_owner_name(
-            db=db,
-            current_user=current_user,
-            owner=request.owner,
-            owner_id=request.owner_id,
-        )
+        # 인증 비활성화: current_user가 없어도 동작
+        owner = current_user.name if current_user and current_user.name else "사용자"
         
         store = get_main_tasks_store()
         main_tasks = store.get(
@@ -599,8 +579,6 @@ async def get_main_tasks(
 
 class UpdateMainTasksRequest(BaseModel):
     """금일 진행 업무 수정 요청"""
-    owner: Optional[str] = Field(None, description="작성자 (미사용; 인증 사용자 이름이 우선)")
-    owner_id: Optional[int] = Field(None, description="작성자 ID (프런트 호환용)")
     target_date: date = Field(..., description="보고서 날짜")
     main_tasks: List[Dict[str, Any]] = Field(
         ...,
@@ -628,15 +606,11 @@ async def update_main_tasks(
     - 메모리 (MainTasksStore) 업데이트
     - PostgreSQL 업데이트 (tasks 필드만)
     
-    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
+    인증 비활성화: current_user가 없어도 동작합니다.
     """
     try:
-        owner = resolve_owner_name(
-            db=db,
-            current_user=current_user,
-            owner=request.owner,
-            owner_id=request.owner_id,
-        )
+        # 인증 비활성화: current_user가 없어도 동작
+        owner = current_user.name if current_user and current_user.name else "사용자"
 
         if not request.main_tasks:
             raise HTTPException(
@@ -656,7 +630,7 @@ async def update_main_tasks(
         # 2. PostgreSQL 업데이트
         try:
             existing_report = DailyReportRepository.get_by_owner_and_date(
-                db, owner, request.target_date  # 로그인한 사용자 이름 사용
+                db, REPORT_OWNER, request.target_date  # 상수 owner 사용
             )
             
             if existing_report:
@@ -674,12 +648,12 @@ async def update_main_tasks(
                     existing_report,
                     DailyReportUpdate(report_json=report_json)
                 )
-                print(f"💾 금일 진행 업무 수정 완료 (DB): {owner} - {request.target_date}")
+                print(f"💾 금일 진행 업무 수정 완료 (DB): {REPORT_OWNER} - {request.target_date}")
             else:
                 # 보고서가 없으면 새로 생성
                 partial_report = {
                     "report_type": "daily",
-                    "owner": owner,  # 로그인한 사용자 이름 사용
+                    "owner": REPORT_OWNER,  # 상수 owner 사용
                     "period_start": request.target_date.isoformat(),
                     "period_end": request.target_date.isoformat(),
                     "tasks": request.main_tasks,
@@ -692,7 +666,7 @@ async def update_main_tasks(
                 DailyReportRepository.create(
                     db,
                     DailyReportCreate(
-                        owner=owner,  # 로그인한 사용자 이름 사용
+                        owner=REPORT_OWNER,  # 상수 owner 사용
                         report_date=request.target_date,
                         report_json=partial_report
                     )

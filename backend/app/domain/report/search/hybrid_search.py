@@ -192,8 +192,9 @@ class HybridSearcher:
             if valid:
                 conditions.append({"chunk_type": {"$in": valid}})
 
-        if owner:
-            conditions.append({"owner": owner})
+        # owner 필터링 제거: 단일 워크스페이스로 동작
+        # if owner:
+        #     conditions.append({"owner": owner})
 
         if normalized_date_range:
             conditions.append(

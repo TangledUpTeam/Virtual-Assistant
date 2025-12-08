@@ -20,13 +20,15 @@ class HTMLReportRenderer:
     # 템플릿 디렉토리
     TEMPLATE_DIR = _BASE_DIR / "Data" / "reports" / "html"
     
-    # 출력 디렉토리
-    OUTPUT_DIR = _BASE_DIR / "Data" / "reports" / "output_html"
+    # 출력 디렉토리 (타입별로 분리)
+    OUTPUT_BASE_DIR = _BASE_DIR / "Data" / "reports"
     
     def __init__(self):
         """Jinja2 Environment 초기화"""
-        # 출력 디렉토리 생성
-        self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        # 출력 디렉토리 생성 (타입별로 분리)
+        (self.OUTPUT_BASE_DIR / "daily").mkdir(parents=True, exist_ok=True)
+        (self.OUTPUT_BASE_DIR / "weekly").mkdir(parents=True, exist_ok=True)
+        (self.OUTPUT_BASE_DIR / "monthly").mkdir(parents=True, exist_ok=True)
         
         # Jinja2 Environment 설정
         self.env = Environment(
@@ -43,9 +45,13 @@ class HTMLReportRenderer:
             "monthly": "월간보고서.html"
         }
     
-    def _convert_daily_to_context(self, report: CanonicalReport) -> Dict[str, Any]:
+    def _convert_daily_to_context(self, report: CanonicalReport, display_name: Optional[str] = None) -> Dict[str, Any]:
         """
         일일보고서 CanonicalReport → 템플릿 context 변환
+        
+        Args:
+            report: CanonicalReport 객체
+            display_name: HTML 보고서에 표시할 이름 (우선 사용)
         
         Returns:
             템플릿에 전달할 context 딕셔너리
@@ -58,10 +64,14 @@ class HTMLReportRenderer:
         # 날짜를 문자열로 변환 (YYYY-MM-DD 형식)
         작성일자 = report.period_start.strftime("%Y-%m-%d") if report.period_start else ""
         
+        # 성명 결정: display_name 우선, 없으면 daily.header의 성명 사용
+        # report.owner는 더 이상 사용하지 않음 (상수이므로)
+        성명 = display_name or daily.header.get("성명", "")
+        
         # 헤더 정보
         header = {
             "작성일자": daily.header.get("작성일자", 작성일자),
-            "성명": daily.header.get("성명", report.owner)
+            "성명": 성명
         }
         
         # 세부 업무 목록 (최대 9개)
@@ -100,9 +110,13 @@ class HTMLReportRenderer:
             "notes": daily.notes or ""
         }
     
-    def _convert_weekly_to_context(self, report: CanonicalReport) -> Dict[str, Any]:
+    def _convert_weekly_to_context(self, report: CanonicalReport, display_name: Optional[str] = None) -> Dict[str, Any]:
         """
         주간보고서 CanonicalReport → 템플릿 context 변환
+        
+        Args:
+            report: CanonicalReport 객체
+            display_name: HTML 보고서에 표시할 이름 (우선 사용)
         
         Returns:
             템플릿에 전달할 context 딕셔너리
@@ -115,10 +129,14 @@ class HTMLReportRenderer:
         # 날짜를 문자열로 변환 (YYYY-MM-DD 형식)
         작성일자 = report.period_end.strftime("%Y-%m-%d") if report.period_end else ""
         
+        # 성명 결정: display_name 우선, 없으면 weekly.header의 성명 사용
+        # report.owner는 더 이상 사용하지 않음 (상수이므로)
+        성명 = display_name or weekly.header.get("성명", "")
+        
         # 헤더 정보
         header = {
             "작성일자": weekly.header.get("작성일자", 작성일자),
-            "성명": weekly.header.get("성명", report.owner)
+            "성명": 성명
         }
         
         # 요일별 업무 (날짜 키를 요일명으로 변환)
@@ -145,9 +163,13 @@ class HTMLReportRenderer:
             "notes": weekly.notes or ""
         }
     
-    def _convert_monthly_to_context(self, report: CanonicalReport) -> Dict[str, Any]:
+    def _convert_monthly_to_context(self, report: CanonicalReport, display_name: Optional[str] = None) -> Dict[str, Any]:
         """
         월간보고서 CanonicalReport → 템플릿 context 변환
+        
+        Args:
+            report: CanonicalReport 객체
+            display_name: HTML 보고서에 표시할 이름 (우선 사용)
         
         Returns:
             템플릿에 전달할 context 딕셔너리
@@ -164,11 +186,15 @@ class HTMLReportRenderer:
             월 = f"{report.period_start.year}-{report.period_start.month:02d}"
             작성일자 = report.period_start.strftime("%Y-%m-%d")
         
+        # 성명 결정: display_name 우선, 없으면 monthly.header의 성명 사용
+        # report.owner는 더 이상 사용하지 않음 (상수이므로)
+        성명 = display_name or monthly.header.get("성명", "")
+        
         # 헤더 정보
         상단정보 = {
             "월": monthly.header.get("월", 월),
             "작성일자": monthly.header.get("작성일자", 작성일자),
-            "성명": monthly.header.get("성명", report.owner)
+            "성명": 성명
         }
         
         # 주차별 세부 업무 변환
@@ -234,7 +260,8 @@ class HTMLReportRenderer:
     def _convert_to_context(
         self,
         report_type: Literal["daily", "weekly", "monthly"],
-        report: CanonicalReport
+        report: CanonicalReport,
+        display_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         CanonicalReport를 템플릿 context로 변환
@@ -242,16 +269,17 @@ class HTMLReportRenderer:
         Args:
             report_type: 보고서 타입
             report: CanonicalReport 객체
+            display_name: HTML 보고서에 표시할 이름 (우선 사용)
             
         Returns:
             템플릿에 전달할 context 딕셔너리
         """
         if report_type == "daily":
-            return self._convert_daily_to_context(report)
+            return self._convert_daily_to_context(report, display_name)
         elif report_type == "weekly":
-            return self._convert_weekly_to_context(report)
+            return self._convert_weekly_to_context(report, display_name)
         elif report_type == "monthly":
-            return self._convert_monthly_to_context(report)
+            return self._convert_monthly_to_context(report, display_name)
         else:
             raise ValueError(f"Unknown report type: {report_type}")
     
@@ -259,7 +287,8 @@ class HTMLReportRenderer:
         self,
         report_type: Literal["daily", "weekly", "monthly"],
         data: Dict[str, Any],
-        output_filename: Optional[str] = None
+        output_filename: Optional[str] = None,
+        display_name: Optional[str] = None
     ) -> Path:
         """
         보고서를 HTML로 렌더링
@@ -297,8 +326,8 @@ class HTMLReportRenderer:
                 f"Template not found: {template_filename} in {self.TEMPLATE_DIR}"
             )
         
-        # CanonicalReport → context 변환
-        context = self._convert_to_context(report_type, report)
+        # CanonicalReport → context 변환 (display_name 전달)
+        context = self._convert_to_context(report_type, report, display_name)
         
         # HTML 렌더링
         html_content = template.render(**context)
@@ -321,8 +350,18 @@ class HTMLReportRenderer:
         import re
         output_filename = re.sub(r'[<>:"/\\|?*]', '_', output_filename)
         
+        # 타입별 출력 디렉토리 선택
+        if report_type == "daily":
+            output_dir = self.OUTPUT_BASE_DIR / "daily"
+        elif report_type == "weekly":
+            output_dir = self.OUTPUT_BASE_DIR / "weekly"
+        elif report_type == "monthly":
+            output_dir = self.OUTPUT_BASE_DIR / "monthly"
+        else:
+            output_dir = self.OUTPUT_BASE_DIR / "output_html"  # 기본값
+        
         # HTML 파일 저장
-        output_path = self.OUTPUT_DIR / output_filename
+        output_path = output_dir / output_filename
         
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
@@ -347,7 +386,8 @@ def get_html_renderer() -> HTMLReportRenderer:
 def render_report_html(
     report_type: Literal["daily", "weekly", "monthly"],
     data: Dict[str, Any],
-    output_filename: Optional[str] = None
+    output_filename: Optional[str] = None,
+    display_name: Optional[str] = None
 ) -> Path:
     """
     보고서를 HTML로 렌더링 (편의 함수)
@@ -356,10 +396,11 @@ def render_report_html(
         report_type: 보고서 타입
         data: CanonicalReport JSON 딕셔너리
         output_filename: 출력 파일명
+        display_name: HTML 보고서에 표시할 이름 (우선 사용)
         
     Returns:
         생성된 HTML 파일 경로
     """
     renderer = get_html_renderer()
-    return renderer.render_report_html(report_type, data, output_filename)
+    return renderer.render_report_html(report_type, data, output_filename, display_name)
 

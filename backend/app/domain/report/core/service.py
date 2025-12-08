@@ -25,6 +25,7 @@ from app.domain.report.core.canonical_converter import (
     convert_weekly_to_canonical,
     convert_monthly_to_canonical
 )
+from multi_agent.agents.report_main_router import ReportPromptRegistry
 
 
 class ReportProcessingService:
@@ -102,7 +103,7 @@ class ReportProcessingService:
         ReportType.MONTHLY: MONTHLY_SCHEMA
     }
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, prompt_registry=None):
         """
         서비스 초기화
         
@@ -113,6 +114,7 @@ class ReportProcessingService:
             os.environ["OPENAI_API_KEY"] = api_key
         
         self.client = OpenAI()
+        self.prompt_registry = prompt_registry or ReportPromptRegistry
 
     def pdf_to_images(self, pdf_path: str, dpi: int = 200) -> List[bytes]:
         """
@@ -157,37 +159,8 @@ class ReportProcessingService:
         Returns:
             감지된 보고서 타입
         """
-        messages = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "너는 문서 종류를 분류하는 전문가다."}]
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": """
-이 문서가 어떤 보고서인지 판단하라.
-반드시 아래 중 하나로만 답하라:
-
-daily / weekly / monthly
-
-단 한 단어만 출력하라.
-"""
-                    },
-                    *[
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{self.encode_b64(img)}"
-                            }
-                        }
-                        for img in images
-                    ]
-                ]
-            }
-        ]
+        images_base64 = [self.encode_b64(img) for img in images]
+        messages = self.prompt_registry.vision_detect_messages(images_base64)
 
         response = self.client.chat.completions.create(
             model="gpt-4o",  # gpt-4.1은 gpt-4o로 변경
@@ -213,39 +186,8 @@ daily / weekly / monthly
         Returns:
             추출된 JSON 데이터
         """
-        prompt = f"""
-PDF 내용을 아래 JSON 스키마에 정확히 채워 넣어 출력하라.
-
-규칙:
-1) 필드명, 계층, 구조 절대 변경 금지
-2) 값 누락 시 "" 유지
-3) 필드 추가 금지
-4) OCR로 읽은 값만 넣기
-5) JSON만 출력
-
-스키마:
-{schema}
-"""
-
-        messages = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "너는 PDF를 JSON 스키마로 변환하는 전문가다."}]
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    *[
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{self.encode_b64(img)}"}
-                        }
-                        for img in images
-                    ]
-                ]
-            }
-        ]
+        images_base64 = [self.encode_b64(img) for img in images]
+        messages = self.prompt_registry.vision_extract_messages(images_base64, schema)
 
         response = self.client.chat.completions.create(
             model="gpt-4o",  # gpt-4.1은 gpt-4o로 변경

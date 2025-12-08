@@ -14,15 +14,12 @@ from app.domain.user.models import User
 from app.domain.report.search.intent_router import IntentRouter
 from app.domain.report.common.schemas import RAGSourceRef, ReportPeriod
 from app.infrastructure.database.session import get_db
-from app.api.v1.endpoints.report.utils import resolve_owner_name
 
 router = APIRouter(prefix="/report-chat", tags=["report-chat"])
 
 
 class ChatRequest(BaseModel):
     """챗봇 질문 요청"""
-    owner: Optional[str] = None  # Deprecated: resolved from auth
-    owner_id: Optional[int] = None  # Frontend compatibility
     query: str
     date_start: Optional[str] = None  # YYYY-MM-DD 형식
     date_end: Optional[str] = None  # YYYY-MM-DD 형식
@@ -45,11 +42,11 @@ async def chat_with_reports(
     """
     일일보고서 데이터 기반 RAG 챗봇 대화 (Agent 기반)
     
-    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
+    인증 비활성화: current_user가 없어도 동작합니다.
     
     Args:
         request: ChatRequest (query, date_start, date_end)
-        current_user: 현재 로그인한 사용자
+        current_user: 현재 로그인한 사용자 (선택)
         
     Returns:
         ChatResponse (answer, sources, has_results)
@@ -62,12 +59,8 @@ async def chat_with_reports(
         - "지난주에 처리 못한 미종결 업무 뭐 있었지?"
     """
     try:
-        resolved_owner = resolve_owner_name(
-            db=db,
-            current_user=current_user,
-            owner=request.owner,
-            owner_id=request.owner_id,
-        )
+        # 인증 비활성화: current_user가 없어도 동작
+        resolved_owner = current_user.name if current_user and current_user.name else "사용자"
         from multi_agent.agents.report_tools import get_report_rag_agent
         
         intent_router = IntentRouter()
@@ -89,9 +82,10 @@ async def chat_with_reports(
                 date_range = intent.filters["date_range"]
         
         # ReportRAGAgent 사용
+        # owner 필터링 제거: 단일 워크스페이스로 동작
         rag_agent = get_report_rag_agent()
         result = await rag_agent.search_reports(
-            owner=resolved_owner,
+            owner=None,  # owner 필터링 제거
             query=request.query,
             date_range=date_range,
             reference_date=reference_date

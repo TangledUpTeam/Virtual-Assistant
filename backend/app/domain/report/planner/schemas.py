@@ -41,7 +41,7 @@ class TodayPlanResponse(BaseModel):
     tasks: List[Task] = Field(default_factory=list, description="Recommended tasks")
     summary: str = Field("", description="Plan summary")
     source_date: Optional[str] = Field(None, description="Date used as source data")
-    owner: str = Field("", description="Resolved owner name")
+    owner: Optional[str] = Field(None, description="Resolved owner name (deprecated, not used)")
     target_date: str = Field("", description="Target date for the generated plan")
     task_sources: List[TaskSource] = Field(default_factory=list, description="Source info for each task")
 

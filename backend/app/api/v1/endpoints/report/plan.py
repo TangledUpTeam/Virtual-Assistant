@@ -8,7 +8,6 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.v1.endpoints.report.utils import resolve_owner_name
 from app.domain.auth.dependencies import get_current_user_optional
 from app.domain.report.planner.schemas import (
     TaskItem,
@@ -32,25 +31,11 @@ async def generate_today_plan(
     """
     Generate today's plan (agent powered).
 
-    Owner resolution rule:
-    - Authenticated user: use current_user.name
-    - Else resolve by owner_id
-    - Else request.owner
+    인증 비활성화: current_user가 없어도 동작합니다.
     """
     try:
-        # 디버깅: 전달된 값 확인
-        print(f"[DEBUG] Plan API - current_user: {current_user.name if current_user else None}")
-        print(f"[DEBUG] Plan API - request.owner: {request.owner}")
-        print(f"[DEBUG] Plan API - request.owner_id: {request.owner_id}")
-        
-        resolved_owner = resolve_owner_name(
-            db=db,
-            current_user=current_user,
-            owner=request.owner,
-            owner_id=request.owner_id,
-        )
-        
-        print(f"[DEBUG] Plan API - resolved_owner: {resolved_owner}")
+        # 인증 비활성화: current_user가 없어도 동작
+        resolved_owner = current_user.name if current_user and current_user.name else "사용자"
 
         target_date = request.target_date or date.today()
 
@@ -59,8 +44,10 @@ async def generate_today_plan(
 
         planning_agent = get_planning_agent()
 
+        # owner 필터링 제거: 단일 워크스페이스로 동작
+        # owner는 더 이상 사용하지 않지만, 호환성을 위해 전달
         result_dict = planning_agent.generate_plan_sync(
-            owner=resolved_owner,
+            owner=None,  # owner 필터링 제거
             target_date=target_date,
         )
 
@@ -73,7 +60,7 @@ async def generate_today_plan(
             tasks=tasks,
             summary=result_dict["summary"],
             source_date=result_dict["source_date"],
-            owner=result_dict["owner"],
+            owner=result_dict.get("owner"),  # None일 수 있음
             target_date=result_dict["target_date"],
             task_sources=task_sources,
         )

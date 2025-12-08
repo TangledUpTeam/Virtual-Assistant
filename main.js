@@ -375,7 +375,8 @@ function openReportPopup() {
     center: true,
     resizable: true,
     frame: false, // 툴바 제거
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f5f5f5', // HTML 배경색과 일치
+    transparent: false, // 투명도 비활성화 (둥근 모서리와 충돌 방지)
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
@@ -449,6 +450,14 @@ function openReportPopup() {
 
   reportWin.on('closed', () => {
     console.log('📝 보고서 팝업 닫힘');
+
+    // 챗봇에 종료 이벤트 전송
+    if (characterWin && !characterWin.isDestroyed()) {
+      characterWin.webContents.send('report-closed', {
+        // 단순히 종료만 알림
+      });
+    }
+
     reportWin = null;
   });
 }

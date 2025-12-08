@@ -351,8 +351,14 @@ function createConfirmationMessage(tasks) {
  */
 async function saveTasks(ownerId, targetDate, tasksToSave, addMessage) {
   try {
-    // 기존 업무에 추가 (append: true)
-    const result = await saveSelectedTasks(ownerId, targetDate, tasksToSave, true);
+    // 최대 3개까지만 저장
+    if (tasksToSave.length > 3) {
+      addMessage('assistant', '⚠️ 금일 진행 업무는 최대 3개까지만 저장할 수 있습니다. 처음 3개만 저장됩니다.');
+      tasksToSave = tasksToSave.slice(0, 3);
+    }
+    
+    // 항상 덮어쓰기 (append: false)
+    const result = await saveSelectedTasks(ownerId, targetDate, tasksToSave, false);
     
     if (result.success) {
       addMessage('assistant', `✅ ${result.saved_count}개의 업무가 금일 진행 업무로 저장되었습니다!`);

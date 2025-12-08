@@ -3,7 +3,7 @@
 새로운 4청크 구조 기반 RAG 프롬프트 사용
 """
 from datetime import date, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 import uuid
 import json
@@ -13,7 +13,10 @@ from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.search.retriever import UnifiedRetriever
 from app.llm.client import LLMClient
 from app.core.config import settings
-from app.domain.report.core.rag_prompts import WEEKLY_REPORT_RAG_PROMPT
+from multi_agent.agents.report_main_router import ReportPromptRegistry
+
+# 보고서 owner는 상수로 사용 (실제 사용자 이름과 분리)
+REPORT_OWNER = settings.REPORT_WORKSPACE_OWNER
 
 
 def get_week_range(target_date: date) -> tuple[date, date]:
@@ -26,19 +29,22 @@ def get_week_range(target_date: date) -> tuple[date, date]:
 
 def generate_weekly_report(
     db: Session,
-    owner: str,
-    target_date: date
+    owner: str,  # 실제 사용자 이름 (display_name용, 더 이상 CanonicalReport.owner에 저장 안 함)
+    target_date: date,
+    display_name: Optional[str] = None,  # HTML 보고서에 표시할 이름
+    prompt_registry: Optional[ReportPromptRegistry] = None,
 ) -> CanonicalReport:
     """
     주간 보고서 자동 생성 (새로운 4청크 구조 기반)
     
     Args:
         db: 데이터베이스 세션
-        owner: 작성자
+        owner: 작성자 (deprecated, 호환성 유지용)
         target_date: 기준 날짜 (해당 주의 아무 날짜)
+        display_name: HTML 보고서에 표시할 이름 (선택, 없으면 owner 사용)
         
     Returns:
-        CanonicalReport (weekly)
+        CanonicalReport (weekly, owner는 상수로 설정됨)
     """
     # 1. 해당 주의 월~금 날짜 계산
     monday, friday = get_week_range(target_date)
@@ -53,12 +59,13 @@ def generate_weekly_report(
         openai_api_key=settings.OPENAI_API_KEY,
     )
     
-    print(f"[DEBUG] 주간 보고서 데이터 검색: owner={owner}, range={monday}~{friday}")
+    print(f"[DEBUG] 주간 보고서 데이터 검색: range={monday}~{friday}")
     
     # 날짜 범위로 모든 일일보고서 청크 검색 (5일 × 4청크 = 20개 기대)
+    # owner 필터링 제거: 단일 워크스페이스로 동작
     all_chunks = retriever.search_daily(
-        query=f"{owner} 주간 업무",
-        owner=owner,
+        query="주간 업무",
+        owner=None,  # owner 필터링 제거
         date_range=(monday, friday),
         top_k=20,  # 충분히 20개
         chunk_types=None  # 모든 청크 타입
@@ -79,29 +86,17 @@ def generate_weekly_report(
     
     # 4. LLM 프롬프트 구성
     llm_client = LLMClient(model="gpt-4o", temperature=0.7, max_tokens=2000)
-    
-    user_prompt = f"""다음은 ChromaDB에서 검색된 일일보고서 청크 데이터입니다:
-
-{json.dumps(search_results, ensure_ascii=False, indent=2)}
-
-위 데이터를 기반으로 주간보고서를 생성해주세요.
-
-**중요**: 
-- 월~금 날짜 범위({monday.isoformat()} ~ {friday.isoformat()})의 모든 청크를 분석하여 주간보고서를 작성하세요.
-- 해당 주의 날짜 범위: {monday.isoformat()} (월요일) ~ {friday.isoformat()} (금요일)
-- weekday_tasks 필드는 반드시 다음 5개 날짜를 모두 포함해야 합니다:
-  * "{monday.isoformat()}" (월요일)
-  * "{(monday + timedelta(days=1)).isoformat()}" (화요일)
-  * "{(monday + timedelta(days=2)).isoformat()}" (수요일)
-  * "{(monday + timedelta(days=3)).isoformat()}" (목요일)
-  * "{friday.isoformat()}" (금요일)
-- 각 날짜별로 chunk_type="detail" 청크에서 업무를 추출하여 배열로 작성하세요.
-- 업무가 없더라도 빈 배열([])로라도 해당 날짜는 반드시 포함하세요."""
+    prompt_registry = prompt_registry or ReportPromptRegistry
+    search_results_json = json.dumps(search_results, ensure_ascii=False, indent=2)
+    user_prompt = prompt_registry.weekly_user(
+        search_results_json=search_results_json,
+        monday=monday,
+        friday=friday,
+    )
     
     # 5. LLM 호출
     try:
-        # 프롬프트 내 JSON 예시의 중괄호는 이스케이프되어 있으므로 .format() 사용 가능
-        system_prompt = WEEKLY_REPORT_RAG_PROMPT.format(week_number=week_str)
+        system_prompt = prompt_registry.weekly_system(week_number=week_str)
         response = llm_client.complete_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -120,9 +115,11 @@ def generate_weekly_report(
         raise
     
     # 6. CanonicalWeekly 생성
+    # display_name 결정 (HTML 보고서용)
+    actual_display_name = display_name or owner
     header = {
         "작성일자": f"{monday.isoformat()} ~ {friday.isoformat()}",
-        "성명": owner
+        "성명": actual_display_name  # HTML 보고서에 표시할 이름
     }
     
     # weekday_tasks의 날짜 키를 요일 키로 변환
@@ -151,9 +148,21 @@ def generate_weekly_report(
     
     print(f"[DEBUG] 최종 weekday_tasks_converted: {list(weekday_tasks_converted.keys())}")
     
+    # 주간업무목표를 한 줄로 제한 (각 항목의 첫 줄만 사용)
+    weekly_goals_raw = weekly_data.get("weekly_goals", [])
+    weekly_goals = []
+    for goal in weekly_goals_raw:
+        if isinstance(goal, str):
+            # 첫 줄만 추출 (줄바꿈 제거)
+            first_line = goal.split('\n')[0].strip()
+            if first_line:
+                weekly_goals.append(first_line)
+        else:
+            weekly_goals.append(str(goal))
+    
     canonical_weekly = CanonicalWeekly(
         header=header,
-        weekly_goals=weekly_data.get("weekly_goals", []),
+        weekly_goals=weekly_goals,
         weekday_tasks=weekday_tasks_converted,
         weekly_highlights=weekly_data.get("weekly_highlights", []),
         notes=weekly_data.get("notes", "")
@@ -163,7 +172,7 @@ def generate_weekly_report(
     report = CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="weekly",
-        owner=owner,
+        owner=REPORT_OWNER,  # 상수 owner 사용 (실제 사용자 이름과 분리)
         period_start=monday,
         period_end=friday,
         weekly=canonical_weekly

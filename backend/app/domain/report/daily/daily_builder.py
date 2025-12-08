@@ -6,7 +6,7 @@ FSM 결과를 CanonicalReport로 변환
 Author: AI Assistant
 Created: 2025-11-18
 """
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Optional
 from datetime import date
 import hashlib
 import re
@@ -20,6 +20,9 @@ from app.domain.report.core.canonical_models import (
     DetailTask
 )
 from app.core.config import settings
+
+# 보고서 owner는 상수로 사용 (실제 사용자 이름과 분리)
+REPORT_OWNER = settings.REPORT_WORKSPACE_OWNER
 
 EMBEDDING_MODEL = "text-embedding-3-large"
 EMBEDDING_DIM = 3072
@@ -209,12 +212,13 @@ def find_completed_main_tasks(
 
 
 def build_daily_report(
-    owner: str,
+    owner: str,  # 실제 사용자 이름 (display_name용, 더 이상 CanonicalReport.owner에 저장 안 함)
     target_date: date,
     main_tasks: List[Dict[str, Any]],
     time_tasks: List[Dict[str, Any]],
     issues: List[Dict[str, Any]] = None,
-    plans: List[Dict[str, Any]] = None
+    plans: List[Dict[str, Any]] = None,
+    display_name: Optional[str] = None  # HTML 보고서에 표시할 이름
 ) -> CanonicalReport:
     """
     일일보고서 생성
@@ -227,22 +231,26 @@ def build_daily_report(
     - 실제 수행되지 않은 main_tasks → unresolved (미종결 업무)
     
     Args:
-        owner: 작성자
+        owner: 작성자 (deprecated, 호환성 유지용)
         target_date: 날짜
         main_tasks: 금일 진행 업무 (예정, TodayPlan에서 선택)
         time_tasks: 시간대별 세부업무 (실제 수행, FSM 입력)
         issues: 이슈 사항 (FSM 입력, optional)
         plans: 익일 업무 계획 (FSM 입력, optional)
+        display_name: HTML 보고서에 표시할 이름 (선택, 없으면 owner 사용)
         
     Returns:
-        CanonicalReport 객체
+        CanonicalReport 객체 (owner는 상수로 설정됨)
     """
     if issues is None:
         issues = []
     if plans is None:
         plans = []
-    # report_id 생성 (deterministic)
-    report_id = generate_report_id(owner, target_date)
+    # report_id 생성 (deterministic, 상수 owner 사용)
+    report_id = generate_report_id(REPORT_OWNER, target_date)
+    
+    # display_name 결정 (HTML 보고서용)
+    actual_display_name = display_name or owner
     
     # 🔥 실제 수행된 main_task 인덱스 찾기 (fuzzy matching)
     completed_main_indices = find_completed_main_tasks(main_tasks, time_tasks)
@@ -315,7 +323,7 @@ def build_daily_report(
     canonical_daily = CanonicalDaily(
         header={
             "작성일자": target_date.isoformat(),
-            "성명": owner
+            "성명": actual_display_name  # HTML 보고서에 표시할 이름
         },
         todo_tasks=todo_tasks,
         detail_tasks=detail_tasks,
@@ -328,7 +336,7 @@ def build_daily_report(
     return CanonicalReport(
         report_id=report_id,
         report_type="daily",
-        owner=owner,
+        owner=REPORT_OWNER,  # 상수 owner 사용 (실제 사용자 이름과 분리)
         period_start=target_date,
         period_end=target_date,
         daily=canonical_daily
@@ -340,7 +348,7 @@ def generate_report_id(owner: str, target_date: date) -> str:
     보고서 ID 생성 (deterministic)
     
     Args:
-        owner: 작성자
+        owner: 작성자 (상수 owner 사용)
         target_date: 날짜
         
     Returns:

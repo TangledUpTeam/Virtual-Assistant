@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from datetime import date
 
 from multi_agent.agents.report_base import ReportBaseAgent
+from multi_agent.agents.report_main_router import ReportPromptRegistry
 from app.domain.report.planner.today_plan_chain import TodayPlanGenerator
 from app.domain.report.planner.tools import YesterdayReportTool, get_yesterday_report
 from app.domain.report.planner.schemas import TodayPlanRequest
@@ -22,13 +23,14 @@ from app.llm.client import LLMClient
 class ReportPlanningAgent(ReportBaseAgent):
     """업무 플래닝 에이전트"""
     
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: Optional[LLMClient] = None, prompt_registry=None):
         """초기화"""
         super().__init__(
             name="ReportPlanningAgent",
             description="업무 플래닝 및 일정 관리를 도와주는 에이전트입니다. 최근 일일보고서를 기반으로 오늘 해야 할 업무를 추천합니다.",
             llm_client=llm_client
         )
+        self.prompt_registry = prompt_registry or ReportPromptRegistry
         
         # TodayPlanGenerator 초기화 (기존 로직 활용)
         from app.infrastructure.database.session import SessionLocal
@@ -58,8 +60,15 @@ class ReportPlanningAgent(ReportBaseAgent):
         self.plan_generator = TodayPlanGenerator(
             retriever_tool=retriever_tool,
             llm_client=self.llm,
-            vector_retriever=self.vector_retriever
+            vector_retriever=self.vector_retriever,
+            prompt_registry=self.prompt_registry,
         )
+
+    def configure_prompts(self, prompt_registry):
+        """Prompt registry 주입 (router에서 호출)."""
+        self.prompt_registry = prompt_registry or ReportPromptRegistry
+        if hasattr(self.plan_generator, "prompt_registry"):
+            self.plan_generator.prompt_registry = self.prompt_registry
     
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -72,22 +81,20 @@ class ReportPlanningAgent(ReportBaseAgent):
         Returns:
             플래닝 결과 문자열
         """
-        # 컨텍스트에서 owner와 target_date 추출
+        if context and context.get("prompt_registry"):
+            self.configure_prompts(context.get("prompt_registry"))
+
+        # 컨텍스트에서 target_date 추출 (owner는 더 이상 필수 아님)
         if not context:
-            return "업무 플래닝을 위해서는 작성자(owner)와 날짜(target_date) 정보가 필요합니다."
+            context = {}
         
-        owner = context.get("owner")
         target_date = context.get("target_date")
-        
-        if not owner:
-            return "작성자(owner) 정보가 필요합니다."
-        
         if not target_date:
             target_date = date.today()
         
-        # TodayPlanRequest 생성
+        # TodayPlanRequest 생성 (owner는 None으로 전달, 필터링에 사용하지 않음)
         request = TodayPlanRequest(
-            owner=owner,
+            owner=None,  # owner 필터링 제거
             target_date=target_date
         )
         
@@ -116,12 +123,12 @@ class ReportPlanningAgent(ReportBaseAgent):
             traceback.print_exc()
             return f"업무 플래닝 생성 중 오류가 발생했습니다: {str(e)}"
     
-    def generate_plan_sync(self, owner: str, target_date: date) -> Dict[str, Any]:
+    def generate_plan_sync(self, owner: Optional[str], target_date: date) -> Dict[str, Any]:
         """
         동기 버전: 업무 플래닝 생성 (API 엔드포인트용)
         
         Args:
-            owner: 작성자
+            owner: 작성자 (deprecated, 필터링에 사용하지 않음)
             target_date: 대상 날짜
             
         Returns:

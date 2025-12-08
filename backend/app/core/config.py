@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     API_PREFIX: str = "/api/v1"
     
+    # Report Workspace
+    REPORT_WORKSPACE_OWNER: str = "default_workspace"
+    
     # Embedding
     EMBEDDING_MODEL: str = "text-embedding-3-large"
     EMBEDDING_DIMENSION: int = 3072

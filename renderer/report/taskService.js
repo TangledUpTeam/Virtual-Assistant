@@ -1,84 +1,5 @@
 const API_BASE = 'http://localhost:8000/api/v1';
 
-export async function getUserFromCookie() {
-  try {
-    // Electron 환경에서 IPC를 통해 쿠키 가져오기 시도
-    let userCookieValue = null;
-    
-    // Electron 환경 확인
-    if (typeof require !== 'undefined') {
-      try {
-        const { ipcRenderer } = require('electron');
-        const cookies = await ipcRenderer.invoke('get-main-cookies');
-        console.log('[DEBUG] getUserFromCookie - IPC 쿠키:', cookies);
-        
-        if (cookies && cookies.user) {
-          userCookieValue = cookies.user;
-        }
-      } catch (ipcError) {
-        console.warn('[DEBUG] getUserFromCookie - IPC 실패, document.cookie 시도:', ipcError);
-      }
-    }
-    
-    // IPC 실패 시 document.cookie에서 직접 파싱
-    if (!userCookieValue) {
-      const cookies = document.cookie.split(';');
-      for (let cookie of cookies) {
-        cookie = cookie.trim();
-        if (cookie.startsWith('user=')) {
-          userCookieValue = cookie.substring(5); // 'user=' 제거
-          break;
-        }
-      }
-    }
-    
-    console.log('[DEBUG] getUserFromCookie - 쿠키 파싱:', {
-      all_cookies: document.cookie,
-      user_cookie_found: !!userCookieValue,
-      user_cookie_length: userCookieValue?.length
-    });
-    
-    if (!userCookieValue) {
-      console.warn('[DEBUG] getUserFromCookie - user 쿠키가 없습니다');
-      return null;
-    }
-    
-    // URL 디코딩
-    const decoded = decodeURIComponent(userCookieValue);
-    console.log('[DEBUG] getUserFromCookie - 디코딩 후:', decoded);
-    
-    const parsed = JSON.parse(decoded);
-    console.log('[DEBUG] getUserFromCookie - 파싱 후:', parsed);
-    
-    if (typeof parsed?.id === 'undefined') {
-      console.warn('[DEBUG] getUserFromCookie - parsed.id가 없습니다');
-      return null;
-    }
-
-    if (typeof window !== 'undefined' && parsed.id) {
-      window.currentUserId = window.currentUserId || parsed.id;
-    }
-
-    const result = {
-      id: parsed.id,
-      name: parsed.name || '',
-      email: parsed.email || ''
-    };
-    
-    console.log('[DEBUG] getUserFromCookie - 최종 결과:', result);
-    return result;
-  } catch (error) {
-    console.error('[DEBUG] getUserFromCookie - 에러:', error);
-    console.warn('Failed to parse user cookie:', error);
-    return null;
-  }
-}
-
-if (typeof window !== 'undefined') {
-  const user = getUserFromCookie();
-  window.currentUserId = window.currentUserId || user?.id || null;
-}
-
 export async function buildRequestContext() {
   const headers = { 'Content-Type': 'application/json' };
   const accessToken = getAccessToken();
@@ -87,9 +8,7 @@ export async function buildRequestContext() {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  const user = await getUserFromCookie();  // ✅ async로 변경
-  const ownerId = window.currentUserId || user?.id || null;
-  const owner = user?.name || null;  // ✅ user 쿠키에서 이름 가져오기
+  const ownerId = window.currentUserId || null;
 
   if (typeof window !== 'undefined' && ownerId) {
     window.currentUserId = ownerId;
@@ -97,8 +16,7 @@ export async function buildRequestContext() {
 
   return { 
     headers, 
-    owner_id: ownerId,
-    owner: owner  // ✅ owner (사용자 이름) 반환
+    owner_id: ownerId
   };
 }
 
@@ -292,6 +210,46 @@ async function generateYearlyReport() {
     return {
       type: 'text',
       data: '연간 보고서 생성 중 오류가 발생했습니다.'
+    };
+  }
+}
+
+/**
+ * 저장된 금일 진행 업무 조회
+ */
+export async function getMainTasks(ownerId, targetDate) {
+  try {
+    console.log('📌 [API] /daily/get_main_tasks 호출 시작...', { ownerId, targetDate });
+
+    const { headers, owner_id } = await buildRequestContext();
+    const response = await fetch(`${API_BASE}/daily/get_main_tasks`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        owner_id: ownerId || owner_id,
+        target_date: targetDate
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API 오류: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ [API] 저장된 업무 조회 응답:', data);
+
+    return {
+      success: true,
+      main_tasks: data.main_tasks || [],
+      count: data.count || 0
+    };
+  } catch (error) {
+    console.error('❌ [API] 저장된 업무 조회 실패:', error);
+    return {
+      success: false,
+      main_tasks: [],
+      count: 0,
+      message: error.message
     };
   }
 }

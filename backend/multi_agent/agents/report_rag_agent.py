@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, List
 from datetime import date
 
 from multi_agent.agents.report_base import ReportBaseAgent
+from multi_agent.agents.report_main_router import ReportPromptRegistry
 from app.domain.report.core.rag_chain import ReportRAGChain
 from app.domain.report.search.retriever import UnifiedRetriever
 from app.domain.report.search.intent_router import IntentRouter
@@ -21,13 +22,14 @@ from app.llm.client import LLMClient
 class ReportRAGAgent(ReportBaseAgent):
     """일일보고서 RAG 챗봇 에이전트"""
     
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: Optional[LLMClient] = None, prompt_registry=None):
         """초기화"""
         super().__init__(
             name="ReportRAGAgent",
             description="일일보고서 데이터를 검색하여 질문에 답변하는 에이전트입니다. 과거 업무 내역, 고객 상담 기록 등을 조회할 수 있습니다.",
             llm_client=llm_client
         )
+        self.prompt_registry = prompt_registry or ReportPromptRegistry
         
         # VectorDB 초기화
         vector_store = get_report_vector_store()
@@ -40,23 +42,31 @@ class ReportRAGAgent(ReportBaseAgent):
         
         # RAG Chain은 owner별로 생성되므로, 여기서는 초기화하지 않음
         self.rag_chains: Dict[str, ReportRAGChain] = {}
+
+    def configure_prompts(self, prompt_registry):
+        """Prompt registry 주입 (router에서 호출)."""
+        self.prompt_registry = prompt_registry or ReportPromptRegistry
+        for owner_key, chain in self.rag_chains.items():
+            chain.prompt_registry = self.prompt_registry
     
     def _get_rag_chain(self, owner: str) -> ReportRAGChain:
         """
         Owner별 RAG Chain 가져오기 (캐싱)
         
         Args:
-            owner: 작성자
+            owner: 작성자 (deprecated, 단일 워크스페이스이므로 하나만 사용)
             
         Returns:
             RAG Chain
         """
+        # 단일 워크스페이스이므로 하나의 RAG Chain만 사용
         if owner not in self.rag_chains:
             self.rag_chains[owner] = ReportRAGChain(
-                owner=owner,
+                owner=owner,  # 호환성 유지 (실제로는 필터링에 사용 안 함)
                 retriever=self.retriever,
                 llm=self.llm,
-                top_k=5
+                top_k=5,
+                prompt_registry=self.prompt_registry,
             )
         return self.rag_chains[owner]
     
@@ -71,13 +81,12 @@ class ReportRAGAgent(ReportBaseAgent):
         Returns:
             답변 문자열
         """
-        # 컨텍스트에서 owner 추출
+        if context and context.get("prompt_registry"):
+            self.configure_prompts(context.get("prompt_registry"))
+
+        # 컨텍스트에서 날짜 정보 추출 (owner는 더 이상 필수 아님)
         if not context:
-            return "일일보고서 검색을 위해서는 작성자(owner) 정보가 필요합니다."
-        
-        owner = context.get("owner")
-        if not owner:
-            return "작성자(owner) 정보가 필요합니다."
+            context = {}
         
         reference_date = context.get("reference_date", date.today())
         date_range = context.get("date_range")
@@ -88,8 +97,10 @@ class ReportRAGAgent(ReportBaseAgent):
             intent = intent_router.route(query, reference_date=reference_date)
             date_range = intent.filters.get("date_range")
         
-        # RAG Chain 가져오기
-        rag_chain = self._get_rag_chain(owner)
+        # RAG Chain 가져오기 (owner는 상수 사용, 필터링에 사용하지 않음)
+        from app.core.config import settings
+        REPORT_OWNER = settings.REPORT_WORKSPACE_OWNER
+        rag_chain = self._get_rag_chain(REPORT_OWNER)
         
         try:
             # RAG 파이프라인 실행

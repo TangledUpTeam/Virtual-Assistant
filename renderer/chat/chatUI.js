@@ -4,8 +4,6 @@
  */
 
 import { sendMultiAgentMessage, initChatbotService } from './chatbotService.js';
-import { addTaskRecommendations, showCustomTaskInput } from '../report/taskUI.js';
-import { buildRequestContext, getUserFromCookie } from '../report/taskService.js';
 
 // 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
 const accessToken = sessionStorage.getItem('access_token');
@@ -30,17 +28,6 @@ let sendBtn = null;
 let isChatPanelInitialized = false;
 let userDisplayEl = null;
 
-function renderCurrentUser() {
-  const user = getUserFromCookie();
-  const name = user?.name || '';
-  if (user?.id) {
-    window.currentUserId = window.currentUserId || user.id;
-  }
-  if (userDisplayEl) {
-    userDisplayEl.textContent = name ? `User: ${name}` : 'Not logged in';
-  }
-}
-
 /**
  * 채팅 패널 초기화
  */
@@ -57,7 +44,11 @@ export function initChatPanel() {
   chatInput = document.getElementById('chat-input');
   sendBtn = document.getElementById('send-btn');
   userDisplayEl = document.getElementById('user-display');
-  renderCurrentUser();
+  
+  // 사용자 표시 숨기기 (보고서 기능에서만 사용자 이름 필요)
+  if (userDisplayEl) {
+    userDisplayEl.style.display = 'none';
+  }
 
   if (!chatPanel || !messagesContainer || !chatInput || !sendBtn) {
     console.error('❌ 채팅 패널 요소를 찾을 수 없습니다.');
@@ -261,15 +252,6 @@ async function handleSendMessage() {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
     const result = await sendMultiAgentMessage(text);
     
-    // 업무 플래닝 쿼리인지 먼저 확인 (응답 표시 여부 결정)
-    const lowerText = text.toLowerCase();
-    const isPlanningQuery = lowerText.includes('오늘') || lowerText.includes('금일') || 
-                           lowerText.includes('플래닝') || lowerText.includes('추천') || 
-                           lowerText.includes('할일') || lowerText.includes('뭐해야') ||
-                           lowerText.includes('뭐해') || lowerText.includes('해야') || 
-                           lowerText.includes('업무');
-    
-
     // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
     const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
 
@@ -278,57 +260,91 @@ async function handleSendMessage() {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
     }
 
-      // 보고서/플래닝 에이전트가 사용되었으면
-      if (result.agent_used === 'planner' || result.agent_used === 'report' || 
-          result.agent_used === 'planner_tool' || result.agent_used === 'report_tool') {
-        
-        if (isPlanningQuery) {
-          // 업무 플래닝: 멀티에이전트 응답 표시하지 않고 바로 카드 UI 표시
-          console.log('📋 [ChatUI] 업무 플래닝 요청으로 감지, 업무 카드 UI 표시');
-          await loadAndDisplayTaskCards();
-          return; // 멀티에이전트 응답 표시하지 않음
-        } else {
-          // 일반 보고서 요청: 멀티에이전트 응답 표시 후 보고서 도구 열기 버튼
-          addMessage('assistant', result.answer);
-          addConfirmationButton('📝 보고서 도구 열기', () => {
-            openReportPopup();
-            addMessage('assistant', '보고서 도구를 열었습니다! 📝');
-          });
-          return;
-        }
-      }
-      
-      // 브레인스토밍 에이전트가 사용되었으면
-      if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
-        addMessage('assistant', result.answer);
+    // 업무 플래닝 요청인지 확인 (쿼리 내용 기반)
+    const isPlanningQuery = (text) => {
+      const lower = text.toLowerCase();
+      const planningKeywords = ['오늘', '금일', '업무', '추천', '할일', '플래닝', '계획', '뭐해야', '뭐해', '해야'];
+      const hasPlanningKeyword = planningKeywords.some(keyword => lower.includes(keyword));
+      const isNotReportQuery = !lower.includes('보고서') && !lower.includes('리포트');
+      return hasPlanningKeyword && isNotReportQuery;
+    };
 
-        // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
-        if (result.answer.includes('SUGGESTION:')) {
-          const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
-          // 메시지는 이미 addMessage로 출력되었으므로 버튼만 추가
-          addConfirmationButton('브레인스토밍 시작하기', () => {
-            openBrainstormingPopup();
-            addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
-          });
-        }
-        // 2. 그 외 (RAG 답변 등) - 자동 실행하지 않고 버튼 표시
-        else {
-          addConfirmationButton('브레인스토밍 도구 열기', () => {
-            openBrainstormingPopup();
-            addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
-          });
-        }
-        return;
+    // 업무 플래닝 요청이면 업무 카드 UI 직접 표시
+    if (isPlanningQuery(text) && (result.agent_used === 'report' || result.agent_used === 'report_tool' || 
+        result.agent_used === 'planning' || result.intent === 'planning')) {
+      await loadAndDisplayTaskCardsInChat();
+      return;
+    }
+
+    // 보고서 관련 에이전트가 사용되었으면 팝업 열기 버튼 추가
+    if (result.agent_used === 'planner' || result.agent_used === 'report' || 
+        result.agent_used === 'planner_tool' || result.agent_used === 'report_tool') {
+      // 고정 메시지 표시 (LLM 응답 대신)
+      addMessage('assistant', '네 보고서 작성 기능을 도와드리겠습니다!');
+      addConfirmationButton('📝 보고서 도구 열기', () => {
+        openReportPopup();
+        addMessage('assistant', '보고서 도구를 열었습니다! 📝');
+      });
+      return;
+    }
+    
+    // 브레인스토밍 에이전트가 사용되었으면
+    if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
+      addMessage('assistant', result.answer);
+
+      // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
+      if (result.answer.includes('SUGGESTION:')) {
+        const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
+        // 메시지는 이미 addMessage로 출력되었으므로 버튼만 추가
+        addConfirmationButton('브레인스토밍 시작하기', () => {
+          openBrainstormingPopup();
+          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+        });
       }
-      
-      // 그 외 일반 에이전트
-      addMessage('assistant', result.answer, isMarkdown);
+      // 2. 그 외 (RAG 답변 등) - 자동 실행하지 않고 버튼 표시
+      else {
+        addConfirmationButton('브레인스토밍 도구 열기', () => {
+          openBrainstormingPopup();
+          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+        });
+      }
+      return;
+    }
+    
+    // 그 외 일반 에이전트
+    addMessage('assistant', result.answer, isMarkdown);
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
     addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
   } finally {
     sendBtn.disabled = false;
     sendBtn.textContent = '전송';
+  }
+}
+
+/**
+ * 메인 챗봇에서 업무 카드 UI 로드 및 표시
+ */
+async function loadAndDisplayTaskCardsInChat() {
+  try {
+    // taskUI.js의 함수들을 동적으로 import
+    const { addTaskRecommendations } = await import('../report/taskUI.js');
+    const { getTodayPlan } = await import('../report/taskService.js');
+    
+    const planResult = await getTodayPlan();
+    
+    if (planResult.type === 'task_recommendations' && planResult.data.tasks && planResult.data.tasks.length > 0) {
+      addTaskRecommendations(
+        planResult.data,
+        addMessage,
+        messagesContainer
+      );
+    } else {
+      addMessage('assistant', '추천할 업무가 없습니다. 직접 작성해주세요! 😊');
+    }
+  } catch (error) {
+    console.error('❌ 업무 카드 로드 오류:', error);
+    addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
 
@@ -381,108 +397,6 @@ function addMessage(role, text, isMarkdown = false) {
   console.log(`💬 [${role}]: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 }
 
-/**
- * 업무 카드 UI 로드 및 표시 (보고서 팝업과 동일한 로직)
- */
-async function loadAndDisplayTaskCards() {
-  const requestId = `chat_load_tasks_${Date.now()}`;
-  console.log(`[${requestId}] 📋 업무 카드 로드 시작`);
-  
-  try {
-    const { headers, owner_id } = buildRequestContext();
-    const targetDate = new Date().toISOString().split('T')[0];
-    const requestBody = {
-      owner_id: owner_id,
-      target_date: targetDate
-    };
-    
-    console.log(`[${requestId}] 📤 API 요청:`, {
-      url: `http://localhost:8000/api/v1/plan/today`,
-      method: 'POST',
-      body: requestBody
-    });
-    
-    const response = await fetch(`http://localhost:8000/api/v1/plan/today`, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody)
-    });
-    
-    console.log(`[${requestId}] 📥 API 응답:`, {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
-      let errorData;
-      try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        errorData = { detail: errorText || `API 오류: ${response.status}` };
-      }
-      throw new Error(errorData.detail || `API 오류: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    console.log(`[${requestId}] ✅ 업무 데이터 로드 성공:`, {
-      summary: data.summary,
-      tasksCount: data.tasks?.length || 0
-    });
-    
-    // 업무 카드 UI 표시 (taskUI.js 사용 - summary는 addTaskRecommendations에서 표시)
-    if (data.tasks && data.tasks.length > 0) {
-      console.log(`[${requestId}] 📋 업무 카드 UI 표시: ${data.tasks.length}개`);
-      addTaskRecommendations({
-        tasks: data.tasks,
-        summary: data.summary || '오늘의 추천 업무입니다!',
-        owner_id: data.owner_id || owner_id,
-        target_date: data.target_date || targetDate
-      }, addMessage, messagesContainer);
-    } else {
-      console.warn(`[${requestId}] ⚠️ 추천할 업무가 없습니다.`);
-      addMessage('assistant', '추천할 업무가 없습니다. 직접 작성해주세요! 😊');
-      
-      // 직접 작성하기 버튼 표시
-      const buttonDiv = document.createElement('div');
-      buttonDiv.className = 'message assistant';
-      
-      const button = document.createElement('button');
-      button.textContent = '✏️ 직접 작성하기';
-      button.style.cssText = `
-        background: #fdbc66;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 600;
-        margin-top: 10px;
-      `;
-      button.addEventListener('click', () => {
-        const targetDate = new Date().toISOString().split('T')[0];
-        showCustomTaskInput(owner_id, targetDate, addMessage);
-      });
-      buttonDiv.appendChild(button);
-      messagesContainer.appendChild(buttonDiv);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-    
-    console.log(`[${requestId}] ✅ 업무 카드 로드 완료`);
-  } catch (error) {
-    console.error(`[${requestId}] ❌ 업무 카드 로드 오류:`, {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      error: error
-    });
-    
-    addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
-  }
-}
 
 /**
  * 확인 버튼 추가
@@ -681,7 +595,21 @@ function openReportPopup() {
     const { ipcRenderer } = window.require('electron');
     ipcRenderer.send('open-report-popup');
 
-    console.log('✅ 보고서 팝업 요청 전송');
+    // 챗봇 패널 숨기기
+    chatPanel.style.display = 'none';
+    isPanelVisible = false;
+
+    // 팝업 종료 이벤트 리스너
+    ipcRenderer.once('report-closed', (event, data) => {
+      console.log('📝 보고서 팝업 완료:', data);
+
+      // 챗봇 패널 복구
+      chatPanel.style.display = 'flex';
+      isPanelVisible = true;
+
+      // 완료 메시지 추가
+      addMessage('assistant', '보고서 작성이 종료되었습니다.');
+    });
   } else {
     console.error('❌ Electron IPC를 사용할 수 없습니다.');
     addMessage('assistant', '❌ 보고서 팝업을 열 수 없습니다.');

@@ -7,6 +7,7 @@ import time
 from app.domain.report.search.hybrid_search import HybridSearcher, QueryAnalyzer, SearchKeywords
 from app.domain.report.search.retriever import UnifiedSearchResult
 from app.llm.client import LLMClient
+from multi_agent.agents.report_main_router import ReportPromptRegistry
 from app.domain.report.core.rag_benchmark import (
     evaluate_consistency,
     evaluate_retrieval_accuracy,
@@ -24,6 +25,7 @@ class ReportRAGChain:
         retriever: Optional[HybridSearcher] = None,
         llm: Optional[LLMClient] = None,
         top_k: int = 5,
+        prompt_registry=None,
     ) -> None:
         self.owner = owner
         self.top_k = top_k
@@ -35,6 +37,7 @@ class ReportRAGChain:
         self.searcher = retriever or HybridSearcher(collection=collection)
 
         self.llm = llm or LLMClient(model="gpt-4o", temperature=0.7, max_tokens=2000)
+        self.prompt_registry = prompt_registry or ReportPromptRegistry
 
     def retrieve(
         self,
@@ -50,10 +53,11 @@ class ReportRAGChain:
                 date_range = None
 
         keywords: SearchKeywords = QueryAnalyzer.extract_keywords(query)
+        # owner 필터링 제거: 단일 워크스페이스로 동작
         results = self.searcher.search(
             query=query,
             keywords=keywords,
-            owner=self.owner,
+            owner=None,  # owner 필터링 제거
             base_date_range=date_range,
             top_k=self.top_k,
         )
@@ -102,11 +106,8 @@ class ReportRAGChain:
             }
 
         context = self.format_context(results)
-        system_prompt = (
-            "주어진 일일 보고서 청크들만 활용하여 사용자 질문에 답변하세요. "
-            "문맥에 없는 내용은 추측하지 말고, 필요한 경우 청크에 없다고 명시하세요."
-        )
-        user_prompt = f"질문: {query}\n\n청크:\n{context}"
+        system_prompt = self.prompt_registry.rag_system()
+        user_prompt = self.prompt_registry.rag_user(query=query, context=context)
 
         llm_start = time.perf_counter()
         answer = await self.llm.acomplete(system_prompt=system_prompt, user_prompt=user_prompt, temperature=0.5)

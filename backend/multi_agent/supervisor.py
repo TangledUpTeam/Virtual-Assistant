@@ -178,7 +178,7 @@ class SupervisorAgent:
    - 예: "노션에 있는 AI직업종류 내용 알려줘" → notion_tool
    - 예: "페이지 찾아줘" → notion_tool
 
-2. **"메일", "이메일"** 관련 요청(전송, 검색, 첨부) → **무조건 email_tool**
+8. **"메일", "이메일"** 관련 요청(전송, 검색, 첨부) → **무조건 email_tool**
    - 예: "이거 메일로 보내줘" → email_tool
    - 예: "안 읽은 메일 있어?" → email_tool
 

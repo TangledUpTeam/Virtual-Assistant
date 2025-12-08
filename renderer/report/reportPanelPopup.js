@@ -4,7 +4,7 @@
  */
 
 import { addTaskRecommendations, showCustomTaskInput } from './taskUI.js';
-import { buildRequestContext, getUserFromCookie } from './taskService.js';
+import { buildRequestContext } from './taskService.js';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 const API_BASE_URL = 'http://localhost:8000/api/v1';
@@ -20,8 +20,6 @@ let isInitialized = false;
 // FSM 상태
 let chatMode = 'normal'; // 'normal' 또는 'daily_fsm'
 let dailySessionId = null;
-let currentUser = null;  // ✅ async로 변경되므로 초기화 시 설정
-let currentUserName = '';
 let dailyOwnerId = null;
 
 // 업무 플래닝 선택 상태
@@ -61,18 +59,6 @@ export async function initReportPanel() {
     return;
   }
   
-  // ✅ 사용자 정보 비동기 로드
-  try {
-    currentUser = await getUserFromCookie();
-    if (currentUser) {
-      window.currentUserId = window.currentUserId || currentUser.id || null;
-      currentUserName = currentUser.name || '';
-      dailyOwnerId = window.currentUserId || null;
-    }
-  } catch (error) {
-    console.warn('사용자 정보 로드 실패:', error);
-  }
-  
   // 초기 메시지
   addMessage('assistant', '📝 보고서 & 업무 관리를 도와드립니다!\n\n• "오늘 업무 플래닝" - 업무 추천\n• "일일 보고서" - 일일 보고서 작성\n• "주간 보고서" - 주간 보고서 생성\n• "월간 보고서" - 월간 보고서 생성\n• "날짜 설정" - 과거 기간 보고서\n\n💬 자연어로 질문하면 일일보고서를 검색해 답변합니다!');
   
@@ -96,15 +82,28 @@ export async function initReportPanel() {
 /**
  * 메시지 추가
  */
-function addMessage(role, content) {
+function addMessage(role, content, isMarkdown = false) {
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${role}`;
   
   // 구조화된 메시지 처리 (보고서 링크)
   if (typeof content === 'object' && content.type) {
+    // 구조화된 메시지는 bubble 래퍼 없이 직접 추가
     messageDiv.innerHTML = formatStructuredMessage(content);
   } else {
-    messageDiv.textContent = content;
+    // 일반 텍스트 메시지는 bubble 래퍼 추가
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    
+    if (isMarkdown) {
+      // 마크다운 렌더링 (간단한 처리)
+      const marked = window.marked || ((text) => text);
+      bubble.innerHTML = marked.parse(content);
+    } else {
+      bubble.textContent = content;
+    }
+    
+    messageDiv.appendChild(bubble);
   }
   
   messagesContainer.appendChild(messageDiv);
@@ -126,10 +125,16 @@ function formatStructuredMessage(data) {
     html += `<div class="report-period">📅 ${period.start || ''} ~ ${period.end || ''}</div>`;
   }
   
-  if (report_data && report_data.html_url) {
+  // report_data.url 또는 report_data.html_url 지원
+  const reportUrl = report_data?.url || report_data?.html_url;
+  const fileName = report_data?.file_name || '보고서 보기';
+  
+  if (reportUrl) {
     html += `<div class="report-link">`;
-    html += `<a href="${report_data.html_url}" target="_blank" class="report-btn">`;
-    html += `📄 ${report_data.file_name || '보고서 보기'}`;
+    // Electron 환경에서 링크 열기
+    const fullUrl = reportUrl.startsWith('http') ? reportUrl : `http://localhost:8000${reportUrl}`;
+    html += `<a href="#" onclick="openReportLink('${fullUrl}'); return false;" class="report-btn">`;
+    html += `📄 ${fileName}`;
     html += `</a>`;
     html += `</div>`;
   }
@@ -137,6 +142,24 @@ function formatStructuredMessage(data) {
   html += `</div>`;
   return html;
 }
+
+/**
+ * 보고서 링크 열기 (Electron 환경)
+ * 전역 함수로 노출되어 HTML에서 호출 가능
+ */
+window.openReportLink = function(url) {
+  try {
+    if (window.require) {
+      const { shell } = window.require('electron');
+      shell.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  } catch (e) {
+    console.error('보고서 링크 열기 실패:', e);
+    window.open(url, '_blank');
+  }
+};
 
 /**
  * 입력 키 이벤트
@@ -191,42 +214,119 @@ async function handleReportIntent(text) {
     return;
   }
   
+  // 보고서 생성 요청 감지 (설정된 날짜 사용)
+  if (lower.includes('일일보고서') && (lower.includes('만들') || lower.includes('생성') || lower.includes('작성'))) {
+    if (customDates.daily) {
+      addMessage('assistant', `📅 설정된 날짜(${customDates.daily})로 일일보고서를 생성합니다.`);
+      await startDailyReport();
+    } else {
+      addMessage('assistant', '일일보고서를 생성합니다. (오늘 날짜 사용)');
+      await startDailyReport();
+    }
+    return;
+  }
+  
+  if (lower.includes('주간보고서') && (lower.includes('만들') || lower.includes('생성') || lower.includes('작성'))) {
+    if (customDates.weekly) {
+      addMessage('assistant', `📅 설정된 날짜(${customDates.weekly})로 주간보고서를 생성합니다.`);
+      await generateWeeklyReport();
+    } else {
+      addMessage('assistant', '주간보고서를 생성합니다. (오늘 날짜 기준)');
+      await generateWeeklyReport();
+    }
+    return;
+  }
+  
+  if (lower.includes('월간보고서') && (lower.includes('만들') || lower.includes('생성') || lower.includes('작성'))) {
+    const year = customDates.monthly?.year;
+    const month = customDates.monthly?.month;
+    if (year && month) {
+      addMessage('assistant', `📅 설정된 기간(${year}년 ${month}월)으로 월간보고서를 생성합니다.`);
+      await generateMonthlyReport();
+    } else {
+      addMessage('assistant', '월간보고서를 생성합니다. (이번 달 기준)');
+      await generateMonthlyReport();
+    }
+    return;
+  }
+  
   // 일일 보고서 시작은 직접 처리 (FSM 모드)
-  if (lower.includes('일일') && lower.includes('보고서') && (lower.includes('작성') || lower.includes('시작'))) {
+  // "일일보고서 작성" 또는 "일일보고서 시작"만 FSM 모드
+  // "일일보고서 만들어줘"는 아래에서 처리 (자동 생성)
+  if (lower.includes('일일') && lower.includes('보고서') && 
+      (lower.includes('작성') || lower.includes('시작')) && 
+      !lower.includes('만들')) {
     await startDailyReport();
     return;
   }
   
-  // 나머지는 멀티에이전트 시스템 사용 (메인 챗봇과 동일)
+  // 나머지는 보고서 에이전트 시스템 사용
   try {
-    console.log(`[ReportPopup] 멀티에이전트로 요청 전송: "${text}"`);
+    console.log(`[ReportPopup] 보고서 에이전트로 요청 전송: "${text}"`);
     
     const result = await sendMultiAgentMessage(text);
-    console.log(`[ReportPopup] 멀티에이전트 응답:`, result);
+    console.log(`[ReportPopup] 보고서 에이전트 응답:`, result);
     
-    // 사용된 에이전트에 따라 추가 처리
-    if (result.agent_used === 'report' || result.agent_used === 'report_tool' || result.agent_used === 'planner' || result.agent_used === 'planner_tool') {
-      // 보고서/플래닝 에이전트가 사용된 경우
-      console.log(`[ReportPopup] 보고서/플래닝 에이전트 사용됨: ${result.agent_used}`);
-      
-      // 업무 플래닝인 경우 업무 카드 UI 표시
-      const isPlanningQuery = lower.includes('오늘') || lower.includes('금일') || lower.includes('플래닝') || 
-                              lower.includes('추천') || lower.includes('할일') || lower.includes('뭐해야') ||
-                              lower.includes('뭐해') || lower.includes('해야') || lower.includes('업무');
-      
-      if (isPlanningQuery) {
-        console.log(`[ReportPopup] 업무 플래닝 요청으로 감지, 업무 카드 UI 표시`);
-        // 업무 카드 UI를 표시하기 위해 /plan/today API 호출
-        await loadAndDisplayTaskCards();
-    return;
-      }
+    // 사용된 에이전트 로그
+    if (result.agent_used) {
+      console.log(`[ReportPopup] 사용된 에이전트: ${result.agent_used}`);
     }
     
+    // 업무 플래닝 요청인 경우 업무 카드 UI 표시
+    if (result.intent === 'planning' || result.agent_used === 'planning') {
+      console.log(`[ReportPopup] 업무 플래닝 요청으로 감지, 업무 카드 UI 표시`);
+      await loadAndDisplayTaskCards();
+      return;
+    }
+    
+    // 보고서 생성 요청 감지 (에이전트 응답에서)
+    const answerLower = result.answer.toLowerCase();
+    if ((result.intent === 'report' || result.agent_used === 'report') && 
+        (answerLower.includes('일일보고서') || answerLower.includes('일일 보고서'))) {
+      // 일일보고서 생성 요청
+      if (customDates.daily) {
+        addMessage('assistant', `📅 설정된 날짜(${customDates.daily})로 일일보고서를 생성합니다.`);
+      } else {
+        addMessage('assistant', '일일보고서를 생성합니다. (오늘 날짜 사용)');
+      }
+      await startDailyReport();
+      return;
+    }
+    
+    if ((result.intent === 'report' || result.agent_used === 'report') && 
+        (answerLower.includes('주간보고서') || answerLower.includes('주간 보고서'))) {
+      // 주간보고서 생성 요청
+      if (customDates.weekly) {
+        addMessage('assistant', `📅 설정된 날짜(${customDates.weekly})로 주간보고서를 생성합니다.`);
+      } else {
+        addMessage('assistant', '주간보고서를 생성합니다. (오늘 날짜 기준)');
+      }
+      await generateWeeklyReport();
+      return;
+    }
+    
+    if ((result.intent === 'report' || result.agent_used === 'report') && 
+        (answerLower.includes('월간보고서') || answerLower.includes('월간 보고서'))) {
+      // 월간보고서 생성 요청
+      const year = customDates.monthly?.year;
+      const month = customDates.monthly?.month;
+      if (year && month) {
+        addMessage('assistant', `📅 설정된 기간(${year}년 ${month}월)으로 월간보고서를 생성합니다.`);
+      } else {
+        addMessage('assistant', '월간보고서를 생성합니다. (이번 달 기준)');
+      }
+      await generateMonthlyReport();
+      return;
+    }
+    
+    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown = (result.agent_used === 'rag' || result.intent === 'rag');
+    
     // 일반 응답 표시
-    addMessage('assistant', result.answer);
+    addMessage('assistant', result.answer, isMarkdown);
     
   } catch (error) {
-    console.error('[ReportPopup] 멀티에이전트 오류:', error);
+    console.error('[ReportPopup] 보고서 에이전트 오류:', error);
     addMessage('assistant', `오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
@@ -239,31 +339,115 @@ async function loadAndDisplayTaskCards() {
   console.log(`[${requestId}] 📋 업무 카드 로드 시작`);
   
   try {
-    const { headers, owner_id, owner } = await buildRequestContext();  // ✅ await 추가
-    syncOwnerId(owner_id);
-    syncOwnerId(owner_id);
-    syncOwnerId(owner_id);
-    syncOwnerId(owner_id);
-    syncOwnerId(owner_id);
+    const { headers, owner_id } = await buildRequestContext();
     syncOwnerId(owner_id);
     
-    // 디버깅: 쿠키에서 가져온 값 확인
-    const user = await getUserFromCookie();
-    console.log(`[${requestId}] 🔍 디버깅 정보:`, {
-      user_cookie: user,
-      owner_id: owner_id,
-      owner: owner,
-      window_currentUserId: window.currentUserId
+    const targetDate = new Date().toISOString().split('T')[0];
+    const effectiveOwnerId = owner_id || dailyOwnerId;
+    
+    // 먼저 저장된 금일 업무 확인
+    const { getMainTasks } = await import('./taskService.js');
+    const savedTasksResult = await getMainTasks(effectiveOwnerId, targetDate);
+    
+    if (savedTasksResult.success && savedTasksResult.count > 0) {
+      console.log(`[${requestId}] ✅ 저장된 금일 업무 발견: ${savedTasksResult.count}개`);
+      
+      // 저장된 업무를 보여주고 수정 여부 확인
+      const taskList = savedTasksResult.main_tasks.map((task, idx) => 
+        `${idx + 1}. ${task.title || task.task || '제목 없음'}`
+      ).join('\n');
+      
+      addMessage('assistant', `이미 저장된 금일 업무가 있습니다:\n\n${taskList}\n\n수정하시겠습니까?`);
+      
+      // 수정하기 버튼과 새로 추천받기 버튼
+      const buttonDiv = document.createElement('div');
+      buttonDiv.className = 'message assistant';
+      buttonDiv.style.display = 'flex';
+      buttonDiv.style.gap = '10px';
+      buttonDiv.style.marginTop = '10px';
+      
+      const modifyButton = document.createElement('button');
+      modifyButton.textContent = '✏️ 수정하기';
+      modifyButton.style.cssText = `
+        background: #9CAF88;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      `;
+      modifyButton.addEventListener('click', async () => {
+        // 저장된 업무를 업무 카드 형식으로 표시 (수정 모드)
+        addTaskRecommendations({
+          tasks: savedTasksResult.main_tasks.map(task => ({
+            title: task.title || task.task || '제목 없음',
+            description: task.description || '',
+            priority: task.priority || 'medium',
+            expected_time: task.expected_time || '1시간',
+            category: task.category || '기타'
+          })),
+          summary: '저장된 금일 업무입니다. 수정하거나 추가할 수 있습니다.',
+          owner_id: effectiveOwnerId,
+          target_date: targetDate,
+          task_sources: []
+        }, addMessage, messagesContainer);
+      });
+      
+      const newRecommendButton = document.createElement('button');
+      newRecommendButton.textContent = '🔄 새로 추천받기';
+      newRecommendButton.style.cssText = `
+        background: #fdbc66;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      `;
+      newRecommendButton.addEventListener('click', async () => {
+        // 새로 추천받기
+        await loadNewTaskRecommendations(effectiveOwnerId, targetDate, headers);
+      });
+      
+      buttonDiv.appendChild(modifyButton);
+      buttonDiv.appendChild(newRecommendButton);
+      messagesContainer.appendChild(buttonDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      return;
+    }
+    
+    // 저장된 업무가 없으면 새로 추천받기
+    await loadNewTaskRecommendations(effectiveOwnerId, targetDate, headers);
+    
+  } catch (error) {
+    console.error(`[${requestId}] ❌ 업무 카드 로드 오류:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      error: error
     });
     
+    addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
+  }
+}
+
+/**
+ * 새로운 업무 추천 로드 및 표시
+ */
+async function loadNewTaskRecommendations(ownerId, targetDate, headers) {
+  const requestId = `load_new_tasks_${Date.now()}`;
+  console.log(`[${requestId}] 📋 새로운 업무 추천 로드 시작`);
+  
+  try {
     const requestBody = {
-      target_date: new Date().toISOString().split('T')[0]
+      target_date: targetDate
     };
-    if (owner_id) {
-      requestBody.owner_id = owner_id;
-    }
-    if (owner) {  // ✅ owner도 전송
-      requestBody.owner = owner;
+    if (ownerId) {
+      requestBody.owner_id = ownerId;
     }
     
     console.log(`[${requestId}] 📤 API 요청:`, {
@@ -305,12 +489,12 @@ async function loadAndDisplayTaskCards() {
     // 업무 카드 UI 표시 (taskUI.js 사용 - summary는 addTaskRecommendations에서 표시)
     if (data.tasks && data.tasks.length > 0) {
       console.log(`[${requestId}] 📋 업무 카드 UI 표시: ${data.tasks.length}개`);
-      const effectiveOwnerId = data.owner_id || owner_id || dailyOwnerId;
+      const effectiveOwnerId = data.owner_id || ownerId || dailyOwnerId;
       addTaskRecommendations({
         tasks: data.tasks,
         summary: data.summary || '오늘의 추천 업무입니다!',
         owner_id: effectiveOwnerId,
-        target_date: data.target_date || requestBody.target_date,
+        target_date: data.target_date || targetDate,
         task_sources: data.task_sources || []
       }, addMessage, messagesContainer);
     } else {
@@ -336,8 +520,7 @@ async function loadAndDisplayTaskCards() {
       `;
       
       button.addEventListener('click', () => {
-        const targetDate = new Date().toISOString().split('T')[0];
-        const effectiveOwnerId = owner_id || dailyOwnerId || null;
+        const effectiveOwnerId = ownerId || dailyOwnerId || null;
         showCustomTaskInput(effectiveOwnerId, targetDate, addMessage);
       });
       
@@ -348,13 +531,7 @@ async function loadAndDisplayTaskCards() {
     
     console.log(`[${requestId}] ✅ 업무 카드 로드 완료`);
   } catch (error) {
-    console.error(`[${requestId}] ❌ 업무 카드 로드 오류:`, {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      error: error
-    });
-    
+    console.error(`[${requestId}] ❌ 업무 카드 로드 오류:`, error);
     addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
   }
 }
@@ -363,11 +540,11 @@ async function loadAndDisplayTaskCards() {
  * 멀티에이전트 메시지 전송 (메인 챗봇과 동일한 로직)
  */
 async function sendMultiAgentMessage(userMessage) {
-  const requestId = `multi_agent_${Date.now()}`;
-  console.log(`[${requestId}] 🤖 멀티에이전트 메시지 전송:`, userMessage);
+  const requestId = `report_agent_${Date.now()}`;
+  console.log(`[${requestId}] 🤖 보고서 에이전트 메시지 전송:`, userMessage);
   
   try {
-    // 세션 ID 가져오기
+    // 세션 ID 가져오기 (실패해도 계속 진행)
     let sessionId = null;
     try {
       sessionId = await getOrCreateMultiAgentSession();
@@ -376,33 +553,17 @@ async function sendMultiAgentMessage(userMessage) {
       console.warn(`[${requestId}] ⚠️ 세션 생성 실패, 세션 없이 진행:`, error);
     }
     
-    const { headers, owner_id, owner } = await buildRequestContext();  // ✅ await 추가
+    const { headers, owner_id } = await buildRequestContext();
     syncOwnerId(owner_id);
-    
-    // 디버깅: 쿠키 상태 확인
-    console.log(`[${requestId}] 🔍 멀티에이전트 컨텍스트:`, {
-      owner_id: owner_id,
-      owner: owner,
-      all_cookies: document.cookie
-    });
     
     const requestBody = {
       query: userMessage,
-      owner_id: owner_id
+      context: {}
     };
     
-    // context에 owner 정보 추가
-    if (owner || owner_id) {
-      requestBody.context = {};
-      if (owner) {
-        requestBody.context.owner = owner;
-      }
-      if (owner_id) {
-        requestBody.context.owner_id = owner_id;
-      }
-      console.log(`[${requestId}] ✅ context에 owner 정보 추가:`, requestBody.context);
-    } else {
-      console.warn(`[${requestId}] ⚠️ owner 정보가 없습니다. 로그인이 필요할 수 있습니다.`);
+    if (owner_id) {
+      requestBody.user_id = owner_id;
+      requestBody.context.owner_id = owner_id;
     }
     
     if (sessionId) {
@@ -410,13 +571,13 @@ async function sendMultiAgentMessage(userMessage) {
     }
     
     console.log(`[${requestId}] 📤 API 요청:`, {
-      url: `${API_BASE_URL}/multi-agent/query`,
+      url: `${API_BASE_URL}/agent/report`,
       method: 'POST',
       headers: { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : '없음' },
       body: requestBody
     });
     
-    const response = await fetch(`${API_BASE_URL}/multi-agent/query`, {
+    const response = await fetch(`${API_BASE_URL}/agent/report`, {
       method: 'POST',
       headers: headers,
       credentials: 'include',
@@ -432,16 +593,24 @@ async function sendMultiAgentMessage(userMessage) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[${requestId}] ❌ API 오류 응답:`, errorText);
-      throw new Error(`Multi-Agent API 호출 실패: ${response.status} ${response.statusText}`);
+      throw new Error(`Report Agent API 호출 실패: ${response.status} ${response.statusText}`);
     }
     
     const result = await response.json();
-    console.log(`[${requestId}] ✅ 멀티에이전트 응답:`, result);
+    console.log(`[${requestId}] ✅ 보고서 에이전트 응답:`, result);
     
-    return result;
+    // 멀티에이전트 응답 형식과 호환되도록 변환
+    return {
+      query: result.query,
+      answer: result.answer,
+      agent_used: result.agent_used,
+      intent: result.intent,
+      processing_time: result.processing_time,
+      session_id: result.session_id
+    };
     
   } catch (error) {
-    console.error(`[${requestId}] ❌ 멀티에이전트 오류:`, {
+    console.error(`[${requestId}] ❌ 보고서 에이전트 오류:`, {
       name: error.name,
       message: error.message,
       stack: error.stack,
@@ -496,16 +665,13 @@ async function getTodayPlan() {
   try {
     addMessage('assistant', '📋 오늘의 업무 플래닝을 생성 중입니다...');
     
-    const { headers, owner_id, owner } = await buildRequestContext();  // ✅ await 추가
+    const { headers, owner_id } = await buildRequestContext();
     
     const requestBody = {
       target_date: new Date().toISOString().split('T')[0]
     };
     if (owner_id) {
       requestBody.owner_id = owner_id;
-    }
-    if (owner) {  // ✅ owner도 전송
-      requestBody.owner = owner;
     }
     
     console.log(`[${requestId}] 📤 API 요청:`, {
@@ -1166,12 +1332,36 @@ function getCookie(name) {
 function showDateSettings() {
   if (!dateSettingsPanel) return;
   
-  // 모든 날짜 입력 숨기기
-  document.querySelectorAll('.date-input-group').forEach(el => el.style.display = 'none');
+  // 모든 날짜 입력 표시
+  const dailyInput = document.getElementById('daily-date-input');
+  const weeklyInput = document.getElementById('weekly-date-input');
+  const monthlyInput = document.getElementById('monthly-date-input');
   
-  addMessage('assistant', '어떤 보고서의 날짜를 설정하시겠습니까?\n\n• 일일 보고서\n• 주간 보고서\n• 월간 보고서');
+  if (dailyInput) dailyInput.style.display = 'block';
+  if (weeklyInput) weeklyInput.style.display = 'block';
+  if (monthlyInput) monthlyInput.style.display = 'block';
   
-  // 다음 메시지에서 보고서 타입 감지
+  // 현재 설정된 날짜 표시
+  const dailyDateInput = document.getElementById('daily-target-date');
+  const weeklyDateInput = document.getElementById('weekly-target-date');
+  const monthlyYearInput = document.getElementById('monthly-year');
+  const monthlyMonthInput = document.getElementById('monthly-month');
+  
+  if (dailyDateInput && customDates.daily) {
+    dailyDateInput.value = customDates.daily;
+  }
+  if (weeklyDateInput && customDates.weekly) {
+    weeklyDateInput.value = customDates.weekly;
+  }
+  if (monthlyYearInput && customDates.monthly?.year) {
+    monthlyYearInput.value = customDates.monthly.year;
+  }
+  if (monthlyMonthInput && customDates.monthly?.month) {
+    monthlyMonthInput.value = customDates.monthly.month;
+  }
+  
+  dateSettingsPanel.style.display = 'block';
+  addMessage('assistant', '📅 보고서 날짜를 설정해주세요.\n\n• 일일 보고서: 날짜 선택\n• 주간 보고서: 기준 날짜 선택\n• 월간 보고서: 년도와 월 입력\n\n설정 후 "적용" 버튼을 눌러주세요.');
 }
 
 function handleApplyDate() {
@@ -1180,14 +1370,28 @@ function handleApplyDate() {
   const monthlyYear = document.getElementById('monthly-year')?.value;
   const monthlyMonth = document.getElementById('monthly-month')?.value;
   
-  if (dailyDate) customDates.daily = dailyDate;
-  if (weeklyDate) customDates.weekly = weeklyDate;
+  const dateMessages = [];
+  
+  if (dailyDate) {
+    customDates.daily = dailyDate;
+    dateMessages.push(`일일보고서: ${dailyDate}`);
+  }
+  if (weeklyDate) {
+    customDates.weekly = weeklyDate;
+    dateMessages.push(`주간보고서: ${weeklyDate}`);
+  }
   if (monthlyYear && monthlyMonth) {
     customDates.monthly = { year: parseInt(monthlyYear), month: parseInt(monthlyMonth) };
+    dateMessages.push(`월간보고서: ${monthlyYear}년 ${monthlyMonth}월`);
   }
   
   dateSettingsPanel.style.display = 'none';
-  addMessage('assistant', '✅ 날짜가 설정되었습니다!');
+  
+  if (dateMessages.length > 0) {
+    addMessage('assistant', `✅ 날짜가 설정되었습니다!\n\n${dateMessages.join('\n')}\n\n이제 "일일보고서 만들어줘", "주간보고서 만들어줘", "월간보고서 만들어줘"라고 요청하시면 설정된 날짜로 자동 생성됩니다.`);
+  } else {
+    addMessage('assistant', '⚠️ 날짜를 입력해주세요.');
+  }
 }
 
 /**

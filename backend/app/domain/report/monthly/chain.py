@@ -9,6 +9,11 @@ import uuid
 import json
 from calendar import monthrange
 
+from app.core.config import settings
+
+# 보고서 owner는 상수로 사용 (실제 사용자 이름과 분리)
+REPORT_OWNER = settings.REPORT_WORKSPACE_OWNER
+
 from app.domain.report.core.canonical_models import CanonicalReport, CanonicalMonthly
 from app.domain.report.weekly.repository import WeeklyReportRepository
 from app.domain.report.daily.repository import DailyReportRepository
@@ -16,7 +21,7 @@ from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.search.retriever import UnifiedRetriever
 from app.llm.client import LLMClient
 from app.core.config import settings
-from app.domain.report.core.rag_prompts import MONTHLY_REPORT_RAG_PROMPT
+from multi_agent.agents.report_main_router import ReportPromptRegistry
 
 
 def get_month_range(target_date: date) -> tuple[date, date]:
@@ -37,30 +42,35 @@ def get_month_range(target_date: date) -> tuple[date, date]:
 
 def generate_monthly_report(
     db: Session,
-    owner: str,
+    owner: str,  # 실제 사용자 이름 (display_name용, 더 이상 CanonicalReport.owner에 저장 안 함)
     target_date: date,
-    kpi_data: Optional[Dict[str, Any]] = None
+    kpi_data: Optional[Dict[str, Any]] = None,
+    display_name: Optional[str] = None,  # HTML 보고서에 표시할 이름
+    prompt_registry: Optional[ReportPromptRegistry] = None,
 ) -> CanonicalReport:
     """
     월간 보고서 자동 생성 (새로운 4청크 구조 기반)
     
     Args:
         db: 데이터베이스 세션
-        owner: 작성자
+        owner: 작성자 (deprecated, 호환성 유지용)
         target_date: 기준 날짜 (해당 월의 아무 날짜)
         kpi_data: PostgreSQL에서 조회한 월간 KPI 숫자 JSON (선택)
+        display_name: HTML 보고서에 표시할 이름 (선택, 없으면 owner 사용)
         
     Returns:
-        CanonicalReport (monthly)
+        CanonicalReport (monthly, owner는 상수로 설정됨)
     """
     # 1. 해당 월의 1일~말일 날짜 계산
     first_day, last_day = get_month_range(target_date)
     month_str = target_date.strftime("%Y-%m")
     
     # 2. DB에서 해당 월의 모든 주간보고서 조회
+    # owner 필터링 제거: 단일 워크스페이스로 동작 (모든 주간보고서 조회)
+    # TODO: PostgreSQL 스키마에서 owner 필터링 제거 필요 (현재는 호환성 유지)
     weekly_reports = WeeklyReportRepository.list_by_owner_and_period_range(
         db=db,
-        owner=owner,
+        owner=REPORT_OWNER,  # 상수 owner 사용
         period_start=first_day,
         period_end=last_day
     )
@@ -76,9 +86,10 @@ def generate_monthly_report(
     )
     
     # 해당 월의 모든 일일보고서 청크 검색
+    # owner 필터링 제거: 단일 워크스페이스로 동작
     daily_chunks = retriever.search_daily(
-        query=f"{owner} 월간 업무",
-        owner=owner,
+        query="월간 업무",
+        owner=None,  # owner 필터링 제거
         period_start=first_day.isoformat(),
         period_end=last_day.isoformat(),
         n_results=500,  # 충분한 데이터 수집
@@ -103,24 +114,21 @@ def generate_monthly_report(
     
     # 6. LLM 프롬프트 구성
     llm_client = LLMClient(model="gpt-4o", temperature=0.7, max_tokens=2000)
-    
-    user_prompt = f"""다음은 해당 월({month_str})의 데이터입니다:
-
-### 주간보고서 JSON (4개):
-{json.dumps(weekly_reports_json, ensure_ascii=False, indent=2)}
-
-### 일일보고서 청크:
-{json.dumps(daily_chunks_data, ensure_ascii=False, indent=2)}
-
-### 월간 KPI 숫자 JSON:
-{json.dumps(kpi_data or {}, ensure_ascii=False, indent=2)}
-
-위 데이터를 기반으로 월간보고서를 생성해주세요."""
+    prompt_registry = prompt_registry or ReportPromptRegistry
+    weekly_reports_dump = json.dumps(weekly_reports_json, ensure_ascii=False, indent=2)
+    daily_chunks_dump = json.dumps(daily_chunks_data, ensure_ascii=False, indent=2)
+    kpi_dump = json.dumps(kpi_data or {}, ensure_ascii=False, indent=2)
+    user_prompt = prompt_registry.monthly_user(
+        weekly_reports_json=weekly_reports_dump,
+        daily_chunks_json=daily_chunks_dump,
+        kpi_json=kpi_dump,
+        month_str=month_str,
+    )
     
     # 7. LLM 호출
     try:
         response = llm_client.complete_json(
-            system_prompt=MONTHLY_REPORT_RAG_PROMPT,
+            system_prompt=prompt_registry.monthly_system(),
             user_prompt=user_prompt,
             temperature=0.7
         )
@@ -134,10 +142,12 @@ def generate_monthly_report(
         raise
     
     # 8. CanonicalMonthly 생성
+    # display_name 결정 (HTML 보고서용)
+    actual_display_name = display_name or owner
     header = {
         "월": f"{target_date.year}년 {target_date.month}월",
         "작성일자": last_day.isoformat(),
-        "성명": owner
+        "성명": actual_display_name  # HTML 보고서에 표시할 이름
     }
     
     canonical_monthly = CanonicalMonthly(
@@ -150,7 +160,7 @@ def generate_monthly_report(
     report = CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="monthly",
-        owner=owner,
+        owner=REPORT_OWNER,  # 상수 owner 사용 (실제 사용자 이름과 분리)
         period_start=first_day,
         period_end=last_day,
         monthly=canonical_monthly

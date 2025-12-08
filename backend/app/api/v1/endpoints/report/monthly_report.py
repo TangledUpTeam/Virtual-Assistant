@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.v1.endpoints.report.utils import resolve_owner_name
 from app.domain.auth.dependencies import get_current_user_optional
 from app.domain.report.common.schemas import ReportEnvelope, ReportMeta, ReportPeriod
 from app.domain.report.core.canonical_models import CanonicalReport
@@ -31,8 +30,6 @@ router = APIRouter(prefix="/monthly", tags=["monthly_report"])
 
 class MonthlyReportGenerateRequest(BaseModel):
     """Request body for monthly report generation."""
-    owner: str | None = Field(None, description="Owner name (used only when unauthenticated)")
-    owner_id: int | None = Field(None, description="Owner ID (frontend compatibility)")
     year: int = Field(..., description="Year")
     month: int = Field(..., description="Month (1~12)")
 
@@ -58,26 +55,28 @@ async def generate_monthly(
 ):
     """
     Generate a monthly report and store it.
+    
+    인증 비활성화: current_user가 없어도 동작합니다.
     """
     try:
-        resolved_owner = resolve_owner_name(
-            db=db,
-            current_user=current_user,
-            owner=request.owner,
-            owner_id=request.owner_id,
-        )
+        # 인증 비활성화: current_user가 없어도 동작
+        resolved_owner = current_user.name if current_user and current_user.name else "사용자"
 
         target_date = date(request.year, request.month, 1)
 
         report = generate_monthly_report(
             db=db,
-            owner=resolved_owner,
-            target_date=target_date
+            owner=resolved_owner,  # 호환성 유지용
+            target_date=target_date,
+            display_name=resolved_owner  # HTML 보고서에 표시할 이름
         )
 
         report_dict = report.model_dump(mode="json")
+        # owner는 상수로 사용 (실제 사용자 이름과 분리)
+        from app.core.config import settings
+        REPORT_OWNER = settings.REPORT_WORKSPACE_OWNER
         report_create = MonthlyReportCreate(
-            owner=report.owner,
+            owner=REPORT_OWNER,  # 상수 owner 사용
             period_start=report.period_start,
             period_end=report.period_end,
             report_json=report_dict
@@ -94,24 +93,25 @@ async def generate_monthly(
         html_url = None
         html_filename = None
         try:
+            # HTML 보고서에 표시할 이름 전달
             html_path = render_report_html(
                 report_type="monthly",
                 data=report.model_dump(mode="json"),
-                output_filename=f"monthly_report_{report.owner}_{report.period_start}.html"
+                output_filename=f"monthly_report_{resolved_owner}_{report.period_start}.html",
+                display_name=resolved_owner  # HTML 보고서에 표시할 이름
             )
 
             html_filename = html_path.name
-            html_url = f"/static/reports/{quote(html_filename)}"
+            html_url = f"/static/reports/monthly/{quote(html_filename)}"
             print(f"Monthly report HTML generated: {html_path}")
         except Exception as html_error:
             print(f"HTML generation failed (report saved): {str(html_error)}")
 
         done_tasks = 0
-        if report.weekly_summaries:
-            for week_summary in report.weekly_summaries:
-                tasks = week_summary.get("tasks")
-                if tasks:
-                    done_tasks += len(tasks)
+        if report.monthly and report.monthly.weekly_summaries:
+            for week_key, week_tasks in report.monthly.weekly_summaries.items():
+                if isinstance(week_tasks, list):
+                    done_tasks += len(week_tasks)
 
         return MonthlyReportGenerateResponse(
             role="assistant",

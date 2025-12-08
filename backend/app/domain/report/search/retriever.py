@@ -111,8 +111,9 @@ class UnifiedRetriever:
             if valid:
                 conditions.append({"chunk_type": {"$in": valid}})
 
-        if owner:
-            conditions.append({"owner": owner})
+        # owner 필터링 제거: 단일 워크스페이스로 동작
+        # if owner:
+        #     conditions.append({"owner": owner})
 
         if week is not None:
             try:
@@ -149,7 +150,8 @@ class UnifiedRetriever:
     def search_by_doc_type(self, query: str, doc_type: str, n_results: int = 5, **filters: Any) -> List[UnifiedSearchResult]:
         if doc_type != "daily":
             return []
-        return self.search_daily(query=query, n_results=n_results, owner=filters.get("owner"))
+        # owner 필터링 제거: 단일 워크스페이스로 동작
+        return self.search_daily(query=query, n_results=n_results, owner=None)
 
     def search_kpi(self, query: str, category: Optional[str] = None, n_results: int = 5) -> List[UnifiedSearchResult]:
         # KPI documents are not stored in the daily report collection after the reset.

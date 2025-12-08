@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주간 업무 보고서</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+        }
+
+        .report-title {
+            color: #4a90e2;
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #4a90e2;
+            padding-bottom: 10px;
+        }
+
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+        }
+
+        .header-table td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+        }
+
+        .header-table .label {
+            background-color: #e8f4ff;
+            font-weight: bold;
+            width: 100px;
+            text-align: center;
+        }
+
+        .header-table input {
+            width: 100%;
+            border: none;
+            padding: 5px;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            background-color: #e8f4ff;
+            padding: 12px 15px;
+            font-weight: bold;
+            margin-bottom: 0;
+            border: 1px solid #dbdbdb;
+            border-bottom: none;
+        }
+
+        .section-content {
+            border: 1px solid #ddd;
+            padding: 15px;
+            min-height: 100px;
+            background-color: white;
+        }
+
+        .goals-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #ddd;
+        }
+
+        .goals-table th,
+        .goals-table td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+        }
+
+        .goals-table th {
+            background-color: #e8f4ff;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .goals-table th:first-child {
+            width: 100px;
+        }
+
+        .goals-table th:last-child {
+            width: 100px;
+        }
+
+        .goals-table .category-cell {
+            width: 100px;
+            text-align: center;
+            font-weight: bold;
+            background-color: #e8f4ff;
+        }
+
+        .goals-table .note-cell {
+            width: 100px;
+        }
+
+        .goals-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .goals-list li {
+            padding: 8px 0;
+            line-height: 1.8;
+            position: relative;
+            padding-left: 25px;
+        }
+
+        .goals-list li::before {
+            content: attr(data-number) ')';
+            position: absolute;
+            left: 0;
+            font-weight: 500;
+        }
+
+        .goals-list li[contenteditable="true"]:focus {
+            background-color: #f8f9fa;
+        }
+
+        .weekday-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #ddd;
+        }
+
+        .weekday-table th,
+        .weekday-table td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+        }
+
+        .weekday-table th {
+            background-color: #e8f4ff;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .weekday-table .day-header {
+            background-color: #e8f4ff;
+            font-weight: bold;
+            text-align: center;
+            width: 80px;
+        }
+
+        .weekday-table .tasks-cell {
+            background-color: white;
+        }
+
+        .weekday-table .note-cell {
+            width: 100px;
+        }
+
+        .weekday-table ul {
+            list-style: disc;
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        .weekday-table li {
+            padding: 4px 0;
+            line-height: 1.6;
+        }
+
+        .weekday-table li[contenteditable="true"]:focus {
+            background-color: #f8f9fa;
+        }
+
+        .highlights-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #ddd;
+        }
+
+        .highlights-table th,
+        .highlights-table td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+        }
+
+        .highlights-table th {
+            background-color: #e8f4ff;
+            font-weight: bold;
+            text-align: center;
+            width: 100px;
+        }
+
+        .highlights-table td {
+            background-color: white;
+        }
+
+        .highlights-table ul {
+            list-style: disc;
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        .highlights-table li {
+            padding: 6px 0;
+            line-height: 1.8;
+        }
+
+        .highlights-table li[contenteditable="true"]:focus {
+            background-color: #f8f9fa;
+        }
+
+        .text-area {
+            width: 100%;
+            min-height: 120px;
+            padding: 15px;
+            border: none;
+            resize: vertical;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .text-area:focus {
+            outline: none;
+            background-color: #f8f9fa;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                max-width: 100%;
+                padding: 20px;
+            }
+
+            .pdf-save-button {
+                display: none !important;
+            }
+        }
+
+        /* PDF 저장 버튼 스타일 */
+        .pdf-save-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+            font-family: 'Malgun Gothic', sans-serif;
+        }
+
+        .pdf-save-button:hover {
+            background-color: #357abd;
+        }
+
+        .pdf-save-button:active {
+            background-color: #2a5f8f;
+        }
+    </style>
+    <!-- html2pdf.js 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <!-- PDF 저장 버튼 -->
+    <button class="pdf-save-button" id="pdf-save-btn" onclick="saveAsPDF()">PDF로 저장</button>
+    
+    <div class="container" id="report-container">
+        <div class="report-title">주간 업무 보고서</div>
+
+        <table class="header-table">
+            <tr>
+                <td class="label">작성자</td>
+                <td class="label">작성일자</td>
+                <td><input type="date" id="작성일자" value="2025-12-01 ~ 2025-12-05"></td>
+                <td class="label">성명</td>
+                <td><input type="text" id="성명" value="사용자"></td>
+            </tr>
+        </table>
+
+        <div class="section">
+            <div class="section-title">주간업무목표</div>
+            <table class="goals-table">
+                <tr>
+                    <th>분류</th>
+                    <th>목표</th>
+                    <th>비고</th>
+                </tr>
+                <tr>
+                    <td class="category-cell">주간업무목표</td>
+                    <td>
+                        <ol class="goals-list" id="weekly-goals">
+                            <li data-number="1">12월 첫째 주 갱신 문의에 대비하여 고객 불만을 최소화하고, 고객 만족도를 높이기 위해 연말정산 관련 자료를 10건 준비 및 안내한다.</li>
+                            <li data-number="2">고객 보장 리모델링과 실손보험 유지 상담을 통해 고객 맞춤형 보장 서비스를 5건 제공하고, 피드백을 수집하여 개선한다.</li>
+                            <li data-number="3">연말 고객 안내 메일을 15건 발송하여 고객의 이해를 돕고, 보험 갱신 및 만기 고객 리스트를 정리하여 효율적인 고객 관리 시스템을 구축한다.</li>
+                        </ol>
+                    </td>
+                    <td class="note-cell"></td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">요일별 세부 업무</div>
+            <table class="weekday-table">
+                <tr>
+                    <th>분류</th>
+                    <th>업무내용</th>
+                    <th>비고</th>
+                </tr>
+                <tr>
+                    <td class="day-header">월</td>
+                    <td class="tasks-cell">
+                        <ul id="tasks-월">
+                                <li>송나율 보장 리포트 작성 및 정리</li>
+                                <li>연말정산용 요약자료 작성(보험료 공제 관련)</li>
+                                <li>윤채원 종신보험 유지 상담 진행</li>
+                        </ul>
+                    </td>
+                    <td class="note-cell"></td>
+                </tr>
+                <tr>
+                    <td class="day-header">화</td>
+                    <td class="tasks-cell">
+                        <ul id="tasks-화">
+                                <li>박서연 고객 리모델링 초안 송부 및 피드백 요청</li>
+                                <li>송나율 보장점검 상담 진행</li>
+                                <li>강민재 어린이보험 유지 점검</li>
+                        </ul>
+                    </td>
+                    <td class="note-cell"></td>
+                </tr>
+                <tr>
+                    <td class="day-header">수</td>
+                    <td class="tasks-cell">
+                        <ul id="tasks-수">
+                                <li>박서연 보장 리모델링 초안 작성</li>
+                                <li>연말 고객 안내 메일 발송</li>
+                                <li>문하윤 실손 갱신 조건 비교 상담</li>
+                        </ul>
+                    </td>
+                    <td class="note-cell"></td>
+                </tr>
+                <tr>
+                    <td class="day-header">목</td>
+                    <td class="tasks-cell">
+                        <ul id="tasks-목">
+                                <li>연말정산 대비 고객 보장 점검 리스트 정리</li>
+                                <li>김태은 실손보험 유지 상담</li>
+                                <li>박서연 고객 연말 세액공제 자료 안내</li>
+                        </ul>
+                    </td>
+                    <td class="note-cell"></td>
+                </tr>
+                <tr>
+                    <td class="day-header">금</td>
+                    <td class="tasks-cell">
+                        <ul id="tasks-금">
+                                <li>박서연 고객 보장 리모델링 자료 검토</li>
+                                <li>김태은 고객 보장 점검 결과 안내 및 추가 니즈 확인</li>
+                                <li>유채린 자동차보험 갱신 조건 설명</li>
+                        </ul>
+                    </td>
+                    <td class="note-cell"></td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">주간 중요 업무</div>
+            <table class="highlights-table">
+                <tr>
+                    <th>내용</th>
+                    <td>
+                        <ul id="weekly-highlights">
+                            <li>박서연 리모델링 초안 송부 필요</li>
+                            <li>박서연 초안 송부 필요</li>
+                            <li>연말정산 문의 증가 시작</li>
+                        </ul>
+                    </td>
+                    <td style="width: 100px;"></td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="section-title">특이사항</div>
+            <div class="section-content">
+                <textarea class="text-area" id="notes" placeholder="특이사항을 입력하세요">연말정산 관련 문의가 증가하기 시작했으며, 고객의 보장 요구 사항에 대한 피드백을 적극 수집하고 있습니다. 송나율 보장점검 상담 및 강민재 어린이보험 유지 점검을 통해 고객의 요구에 맞춘 서비스를 제공하고 있습니다.</textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function saveAsPDF() {
+            const button = document.getElementById('pdf-save-btn');
+            const originalText = button.textContent;
+            
+            // 버튼 비활성화 및 텍스트 변경
+            button.disabled = true;
+            button.textContent = 'PDF 생성 중...';
+            
+            // PDF 생성 옵션
+            const element = document.getElementById('report-container');
+            const opt = {
+                margin: [10, 10, 10, 10],
+                filename: 'report.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2,
+                    useCORS: true,
+                    letterRendering: true
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait',
+                    compress: true
+                }
+            };
+            
+            // PDF 생성
+            html2pdf().set(opt).from(element).save().then(() => {
+                // 완료 후 버튼 복원
+                button.disabled = false;
+                button.textContent = originalText;
+            }).catch((error) => {
+                console.error('PDF 생성 실패:', error);
+                alert('PDF 생성 중 오류가 발생했습니다.');
+                button.disabled = false;
+                button.textContent = originalText;
+            });
+        }
+    </script>
+</body>
+</html>
