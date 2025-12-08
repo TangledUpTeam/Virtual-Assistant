@@ -13,15 +13,44 @@ from app.core.config import settings
 # Tools OAuth 토큰 저장
 import sys
 from pathlib import Path
-tools_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "tools"
-if str(tools_path) not in sys.path:
-    sys.path.insert(0, str(tools_path))
+
+# 동적 경로 탐색: tools/token_manager.py가 있는 상위 디렉토리를 찾음
+current_path = Path(__file__).resolve()
+project_root = None
+
+while current_path.parent != current_path:  # 루트 디렉토리 도달 시 종료
+    parent = current_path.parent
+    
+    # tools/token_manager.py 파일이 존재하는지 확인
+    token_manager_path = parent / "tools" / "token_manager.py"
+    if token_manager_path.exists():
+        project_root = parent
+        break
+    
+    current_path = parent
+
+# 경로 설정 및 임포트
+if project_root:
+    print(f"✅ 프로젝트 루트 발견: {project_root}")
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+else:
+    # Fallback: 6단계 상위 (Virtual-Assistant/Virtual-Assistant)
+    # auth.py -> endpoints -> v1 -> api -> app -> backend -> Virtual-Assistant
+    fallback_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+    print(f"⚠️ 동적 탐색 실패. 기본 경로 사용: {fallback_root}")
+    if str(fallback_root) not in sys.path:
+        sys.path.insert(0, str(fallback_root))
 
 try:
     from tools.token_manager import save_token
     TOOLS_AVAILABLE = True
-except ImportError:
+    print(f"✅ tools.token_manager 임포트 성공")
+except ImportError as e:
     TOOLS_AVAILABLE = False
+    print(f"❌ tools.token_manager 임포트 실패: {e}")
+    # 디버깅을 위해 sys.path 출력
+    print(f"   sys.path: {sys.path}")
 
 router = APIRouter()
 
@@ -30,12 +59,12 @@ router = APIRouter()
 # Google OAuth
 # ========================================
 
+# 기존 google_login 함수를 이걸로 통째로 교체하세요!
+
 @router.get("/google/login")
 async def google_login():
     """
     Google OAuth 로그인 URL 반환
-    
-    프론트엔드에서 이 URL로 리다이렉트
     """
     authorization_url = google_oauth.get_authorization_url()
     return {"authorization_url": authorization_url}

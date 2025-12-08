@@ -80,27 +80,6 @@ async function handleSendMessage() {
 
   if (!text) return;
 
-  // /hr 명령어 체크 (HR 팝업 열기)
-  if (text.toLowerCase() === '/hr') {
-    addMessage('assistant', '📚 HR 도우미 팝업을 엽니다...');
-
-    // Electron IPC로 HR 팝업 열기
-    if (typeof require !== 'undefined') {
-      try {
-        const { ipcRenderer } = require('electron');
-        ipcRenderer.send('open-hr-popup');
-        console.log('📚 HR 팝업 열기 요청 전송');
-      } catch (err) {
-        console.error('IPC 전송 실패:', err);
-        addMessage('assistant', '❌ HR 팝업을 열 수 없습니다.');
-      }
-    } else {
-      addMessage('assistant', '❌ Electron 환경에서만 사용 가능합니다.');
-    }
-
-    chatInput.value = '';
-    return;
-  }
 
   // 사용자 메시지 추가
   addMessage('user', text);

@@ -275,7 +275,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('notion_connected') === 'true') {
         const workspace = urlParams.get('workspace') || 'Notion';
-        alert(`✅ ${workspace} 연동이 완료되었습니다!`);
+        alert('✅ ' + workspace + ' 연동이 완료되었습니다!');
         // URL 파라미터 제거
         window.history.replaceState({}, document.title, '/landing');
     }
