@@ -3,15 +3,18 @@ Report Chat API Endpoints
 
 일일보고서 RAG 챗봇 API
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from datetime import date
 
-from app.domain.auth.dependencies import get_current_user
+from app.domain.auth.dependencies import get_current_user_optional
 from app.domain.user.models import User
 from app.domain.report.search.intent_router import IntentRouter
 from app.domain.report.common.schemas import RAGSourceRef, ReportPeriod
+from app.infrastructure.database.session import get_db
+from app.api.v1.endpoints.report.utils import resolve_owner_name
 
 router = APIRouter(prefix="/report-chat", tags=["report-chat"])
 
@@ -36,12 +39,13 @@ class ChatResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_reports(
     request: ChatRequest,
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
 ):
     """
     일일보고서 데이터 기반 RAG 챗봇 대화 (Agent 기반)
     
-    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
+    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
     
     Args:
         request: ChatRequest (query, date_start, date_end)
@@ -58,15 +62,12 @@ async def chat_with_reports(
         - "지난주에 처리 못한 미종결 업무 뭐 있었지?"
     """
     try:
-        # owner를 로그인한 사용자 이름으로 강제 설정
-        if not current_user.name:
-            raise HTTPException(
-                status_code=400,
-                detail="사용자 이름이 설정되지 않았습니다."
-            )
-        
-        owner = current_user.name
-        
+        resolved_owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
         from multi_agent.agents.report_tools import get_report_rag_agent
         
         intent_router = IntentRouter()
@@ -90,7 +91,7 @@ async def chat_with_reports(
         # ReportRAGAgent 사용
         rag_agent = get_report_rag_agent()
         result = await rag_agent.search_reports(
-            owner=owner,  # 로그인한 사용자 이름 사용
+            owner=resolved_owner,
             query=request.query,
             date_range=date_range,
             reference_date=reference_date

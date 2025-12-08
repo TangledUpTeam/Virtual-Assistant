@@ -1,22 +1,74 @@
 const API_BASE = 'http://localhost:8000/api/v1';
 
-export function getUserFromCookie() {
+export async function getUserFromCookie() {
   try {
-    const raw = getCookie('user');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.id === 'undefined') return null;
+    // Electron 환경에서 IPC를 통해 쿠키 가져오기 시도
+    let userCookieValue = null;
+    
+    // Electron 환경 확인
+    if (typeof require !== 'undefined') {
+      try {
+        const { ipcRenderer } = require('electron');
+        const cookies = await ipcRenderer.invoke('get-main-cookies');
+        console.log('[DEBUG] getUserFromCookie - IPC 쿠키:', cookies);
+        
+        if (cookies && cookies.user) {
+          userCookieValue = cookies.user;
+        }
+      } catch (ipcError) {
+        console.warn('[DEBUG] getUserFromCookie - IPC 실패, document.cookie 시도:', ipcError);
+      }
+    }
+    
+    // IPC 실패 시 document.cookie에서 직접 파싱
+    if (!userCookieValue) {
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        cookie = cookie.trim();
+        if (cookie.startsWith('user=')) {
+          userCookieValue = cookie.substring(5); // 'user=' 제거
+          break;
+        }
+      }
+    }
+    
+    console.log('[DEBUG] getUserFromCookie - 쿠키 파싱:', {
+      all_cookies: document.cookie,
+      user_cookie_found: !!userCookieValue,
+      user_cookie_length: userCookieValue?.length
+    });
+    
+    if (!userCookieValue) {
+      console.warn('[DEBUG] getUserFromCookie - user 쿠키가 없습니다');
+      return null;
+    }
+    
+    // URL 디코딩
+    const decoded = decodeURIComponent(userCookieValue);
+    console.log('[DEBUG] getUserFromCookie - 디코딩 후:', decoded);
+    
+    const parsed = JSON.parse(decoded);
+    console.log('[DEBUG] getUserFromCookie - 파싱 후:', parsed);
+    
+    if (typeof parsed?.id === 'undefined') {
+      console.warn('[DEBUG] getUserFromCookie - parsed.id가 없습니다');
+      return null;
+    }
 
     if (typeof window !== 'undefined' && parsed.id) {
       window.currentUserId = window.currentUserId || parsed.id;
     }
 
-    return {
+    const result = {
       id: parsed.id,
       name: parsed.name || '',
       email: parsed.email || ''
     };
+    
+    console.log('[DEBUG] getUserFromCookie - 최종 결과:', result);
+    return result;
   } catch (error) {
+    console.error('[DEBUG] getUserFromCookie - 에러:', error);
     console.warn('Failed to parse user cookie:', error);
     return null;
   }
@@ -27,7 +79,7 @@ if (typeof window !== 'undefined') {
   window.currentUserId = window.currentUserId || user?.id || null;
 }
 
-export function buildRequestContext() {
+export async function buildRequestContext() {
   const headers = { 'Content-Type': 'application/json' };
   const accessToken = getAccessToken();
 
@@ -35,14 +87,19 @@ export function buildRequestContext() {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  const user = getUserFromCookie();
+  const user = await getUserFromCookie();  // ✅ async로 변경
   const ownerId = window.currentUserId || user?.id || null;
+  const owner = user?.name || null;  // ✅ user 쿠키에서 이름 가져오기
 
   if (typeof window !== 'undefined' && ownerId) {
     window.currentUserId = ownerId;
   }
 
-  return { headers, owner_id: ownerId };
+  return { 
+    headers, 
+    owner_id: ownerId,
+    owner: owner  // ✅ owner (사용자 이름) 반환
+  };
 }
 
 export async function callChatModule(userText) {
@@ -83,7 +140,7 @@ export async function getTodayPlan() {
   try {
     console.log('📌 [API] /plan/today 호출 시작...');
 
-    const { headers, owner_id } = buildRequestContext();
+    const { headers, owner_id } = await buildRequestContext();
     const requestBody = {
       target_date: new Date().toISOString().split('T')[0]
     };
@@ -127,7 +184,7 @@ async function generateWeeklyReport() {
   try {
     console.log('📌 [API] /weekly/generate 호출 시작...');
 
-    const { headers, owner_id } = buildRequestContext();
+    const { headers, owner_id } = await buildRequestContext();
     const body = {
       target_date: getMonday(new Date())
     };
@@ -169,7 +226,7 @@ async function generateMonthlyReport() {
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
-    const { headers, owner_id } = buildRequestContext();
+    const { headers, owner_id } = await buildRequestContext();
     const body = { year, month };
     if (owner_id) {
       body.owner_id = owner_id;
@@ -207,7 +264,7 @@ async function generateYearlyReport() {
 
     const year = new Date().getFullYear();
 
-    const { headers, owner_id } = buildRequestContext();
+    const { headers, owner_id } = await buildRequestContext();
     const body = { year };
     if (owner_id) {
       body.owner_id = owner_id;
@@ -243,7 +300,7 @@ export async function saveSelectedTasks(ownerId, targetDate, tasks, append = fal
   try {
     console.log('📌 [API] /daily/select_main_tasks 호출 시작...', { append, tasksCount: tasks.length });
 
-    const { headers, owner_id } = buildRequestContext();
+    const { headers, owner_id } = await buildRequestContext();
     const response = await fetch(`${API_BASE}/daily/select_main_tasks`, {
       method: 'POST',
       headers,
@@ -280,7 +337,7 @@ export async function updateMainTasks(ownerId, targetDate, tasks) {
   try {
     console.log('📌 [API] /daily/update_main_tasks 호출 시작...');
 
-    const { headers, owner_id } = buildRequestContext();
+    const { headers, owner_id } = await buildRequestContext();
     const response = await fetch(`${API_BASE}/daily/update_main_tasks`, {
       method: 'PUT',
       headers,

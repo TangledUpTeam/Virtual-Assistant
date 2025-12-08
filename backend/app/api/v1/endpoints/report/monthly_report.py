@@ -3,21 +3,27 @@ Monthly Report API
 
 Generates monthly reports from aggregated daily/weekly data.
 """
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
 from datetime import date
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.v1.endpoints.report.utils import resolve_owner_name
+from app.domain.auth.dependencies import get_current_user_optional
+from app.domain.report.common.schemas import ReportEnvelope, ReportMeta, ReportPeriod
+from app.domain.report.core.canonical_models import CanonicalReport
 from app.domain.report.monthly.chain import generate_monthly_report
 from app.domain.report.monthly.repository import MonthlyReportRepository
-from app.domain.report.monthly.schemas import MonthlyReportCreate, MonthlyReportResponse, MonthlyReportListResponse
-from app.domain.report.core.canonical_models import CanonicalReport
-from app.domain.report.common.schemas import ReportMeta, ReportPeriod, ReportEnvelope
+from app.domain.report.monthly.schemas import (
+    MonthlyReportCreate,
+    MonthlyReportListResponse,
+    MonthlyReportResponse,
+)
+from app.domain.user.models import User
 from app.infrastructure.database.session import get_db
 from app.reporting.html_renderer import render_report_html
-from app.domain.auth.dependencies import get_current_user_optional
-from app.domain.user.models import User
-from urllib.parse import quote
 
 
 router = APIRouter(prefix="/monthly", tags=["monthly_report"])
@@ -54,19 +60,12 @@ async def generate_monthly(
     Generate a monthly report and store it.
     """
     try:
-        resolved_owner: str | None = None
-        if current_user and current_user.name:
-            resolved_owner = current_user.name
-            print(f"Authenticated owner resolved: {resolved_owner}")
-        elif request.owner:
-            resolved_owner = request.owner
-            print(f"Request owner used: {resolved_owner}")
-
-        if not resolved_owner:
-            raise HTTPException(
-                status_code=400,
-                detail="owner가 필요합니다. (로그인 사용자 또는 request.owner 중 하나가 필요합니다.)"
-            )
+        resolved_owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
 
         target_date = date(request.year, request.month, 1)
 
@@ -110,13 +109,14 @@ async def generate_monthly(
         done_tasks = 0
         if report.weekly_summaries:
             for week_summary in report.weekly_summaries:
-                if week_summary.get("tasks"):
-                    done_tasks += len(week_summary["tasks"])
+                tasks = week_summary.get("tasks")
+                if tasks:
+                    done_tasks += len(tasks)
 
         return MonthlyReportGenerateResponse(
             role="assistant",
             type="monthly_report",
-            message=f"월간 보고서가 {action}되었습니다.",
+            message=f"월간 보고서 {action}되었습니다.",
             period={
                 "start": str(report.period_start),
                 "end": str(report.period_end),

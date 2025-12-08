@@ -53,8 +53,9 @@ class ReportAgent(BaseAgent):
             if context is None:
                 context = {}
             
+            # owner가 없으면 에러 반환 (기본값 제거)
             if "owner" not in context:
-                context["owner"] = "김보험"  # 기본값
+                return "보고서 처리를 위해서는 작성자(owner) 정보가 필요합니다."
             
             if "target_date" not in context:
                 context["target_date"] = date.today()

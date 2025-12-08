@@ -33,6 +33,7 @@ from app.infrastructure.vector_store_report import get_report_vector_store
 from app.domain.report.common.schemas import ReportMeta, ReportPeriod, ReportEnvelope
 from app.domain.auth.dependencies import get_current_user, get_current_user_optional
 from app.domain.user.models import User
+from app.api.v1.endpoints.report.utils import resolve_owner_name
 from urllib.parse import quote
 
 
@@ -90,7 +91,8 @@ class DailyAnswerResponse(BaseModel):
 @router.post("/start", response_model=DailyStartResponse)
 async def start_daily_report(
     request: DailyStartRequest,
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
 ):
     """
     일일보고서 작성 시작
@@ -99,17 +101,15 @@ async def start_daily_report(
     FSM 세션을 시작하고, 첫 번째 시간대 질문을 반환합니다.
     
     main_tasks는 /select_main_tasks로 미리 저장되어 있어야 합니다.
-    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
+    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
     """
     try:
-        # owner를 로그인한 사용자 이름으로 강제 설정
-        if not current_user.name:
-            raise HTTPException(
-                status_code=400,
-                detail="사용자 이름이 설정되지 않았습니다."
-            )
-        
-        owner = current_user.name
+        owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
         
         # 시간대 생성 (제공되지 않으면 기본값: 09:00~18:00, 60분 간격)
         time_ranges = request.time_ranges
@@ -444,23 +444,15 @@ async def select_main_tasks(
     1. 메모리에 임시 저장 (FSM 시작 시 사용)
     2. PostgreSQL에 부분 저장 (금일 진행 업무만, status="in_progress")
     
-    인증된 사용자가 있으면 해당 사용자 이름을 사용하고,
-    없으면 request의 owner를 사용합니다.
+    인증 사용자 이름 > owner_id > 요청 owner 순서로 소유자를 결정합니다.
     """
     try:
-        # owner 결정: 인증된 사용자가 있으면 해당 사용자 이름 사용, 없으면 request의 owner 사용
-        if current_user and current_user.name:
-            owner = current_user.name
-            print(f"✅ 인증된 사용자 이름 사용: {owner}")
-        elif request.owner:
-            owner = request.owner
-            print(f"ℹ️  Request의 owner 사용: {owner}")
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="owner가 필요합니다. (인증되지 않았거나 request에 owner가 없습니다.)"
-            )
-        
+        owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
         if not request.main_tasks:
             raise HTTPException(
                 status_code=400,
@@ -565,22 +557,21 @@ class GetMainTasksResponse(BaseModel):
 @router.post("/get_main_tasks", response_model=GetMainTasksResponse)
 async def get_main_tasks(
     request: GetMainTasksRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     저장된 금일 진행 업무 조회
     
-    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
+    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
     """
     try:
-        # owner를 로그인한 사용자 이름으로 강제 설정
-        if not current_user.name:
-            raise HTTPException(
-                status_code=400,
-                detail="사용자 이름이 설정되지 않았습니다."
-            )
-        
-        owner = current_user.name
+        owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
         
         store = get_main_tasks_store()
         main_tasks = store.get(
@@ -628,7 +619,7 @@ class UpdateMainTasksResponse(BaseModel):
 async def update_main_tasks(
     request: UpdateMainTasksRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_current_user_optional)
 ):
     """
     금일 진행 업무 수정
@@ -637,18 +628,16 @@ async def update_main_tasks(
     - 메모리 (MainTasksStore) 업데이트
     - PostgreSQL 업데이트 (tasks 필드만)
     
-    owner는 로그인한 사용자 이름으로 강제 설정됩니다.
+    owner는 인증 사용자 이름 > owner_id > 요청 owner 순서로 결정됩니다.
     """
     try:
-        # owner를 로그인한 사용자 이름으로 강제 설정
-        if not current_user.name:
-            raise HTTPException(
-                status_code=400,
-                detail="사용자 이름이 설정되지 않았습니다."
-            )
-        
-        owner = current_user.name
-        
+        owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
+
         if not request.main_tasks:
             raise HTTPException(
                 status_code=400,

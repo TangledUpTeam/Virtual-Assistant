@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any, Dict, List, Optional
+import time
 
 from app.domain.report.search.hybrid_search import HybridSearcher, QueryAnalyzer, SearchKeywords
 from app.domain.report.search.retriever import UnifiedSearchResult
 from app.llm.client import LLMClient
+from app.domain.report.core.rag_benchmark import (
+    evaluate_consistency,
+    evaluate_retrieval_accuracy,
+    estimate_generation_quality,
+    log_benchmark_entry,
+)
 
 
 class ReportRAGChain:
@@ -72,8 +79,22 @@ class ReportRAGChain:
         date_range: Optional[Dict[str, date]] = None,
         reference_date: Optional[date] = None,
     ) -> Dict[str, Any]:
+        total_start = time.perf_counter()
+        retrieval_start = time.perf_counter()
         results = self.retrieve(query, date_range)
+        retrieval_time_ms = (time.perf_counter() - retrieval_start) * 1000
+
         if not results:
+            total_time_ms = (time.perf_counter() - total_start) * 1000
+            log_benchmark_entry(
+                query=query,
+                retrieval_time_ms=retrieval_time_ms,
+                llm_time_ms=0.0,
+                total_time_ms=total_time_ms,
+                retrieval_accuracy=evaluate_retrieval_accuracy(query, results, top_k=self.top_k),
+                consistency_score=1.0,
+                generation_quality=0.0,
+            )
             return {
                 "answer": "검색된 청크가 없습니다.",
                 "sources": [],
@@ -87,7 +108,9 @@ class ReportRAGChain:
         )
         user_prompt = f"질문: {query}\n\n청크:\n{context}"
 
+        llm_start = time.perf_counter()
         answer = await self.llm.acomplete(system_prompt=system_prompt, user_prompt=user_prompt, temperature=0.5)
+        llm_time_ms = (time.perf_counter() - llm_start) * 1000
 
         sources = []
         for result in results:
@@ -110,6 +133,19 @@ class ReportRAGChain:
                     "score": round(result.score, 3),
                 }
             )
+
+        consistency_results = self.retrieve(query, date_range)
+        total_time_ms = (time.perf_counter() - total_start) * 1000
+
+        log_benchmark_entry(
+            query=query,
+            retrieval_time_ms=retrieval_time_ms,
+            llm_time_ms=llm_time_ms,
+            total_time_ms=total_time_ms,
+            retrieval_accuracy=evaluate_retrieval_accuracy(query, results, top_k=self.top_k),
+            consistency_score=evaluate_consistency(results, consistency_results),
+            generation_quality=estimate_generation_quality(answer if isinstance(answer, str) else str(answer)),
+        )
 
         return {
             "answer": answer,

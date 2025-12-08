@@ -3,14 +3,21 @@ Plan API Endpoint
 
 Generates today's plan based on recent reports and recommendations.
 """
-from fastapi import APIRouter, HTTPException, Depends
 from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.domain.report.planner.schemas import TodayPlanRequest, TodayPlanResponse, TaskItem, TaskSource
-from app.infrastructure.database.session import get_db
+from app.api.v1.endpoints.report.utils import resolve_owner_name
 from app.domain.auth.dependencies import get_current_user_optional
+from app.domain.report.planner.schemas import (
+    TaskItem,
+    TaskSource,
+    TodayPlanRequest,
+    TodayPlanResponse,
+)
 from app.domain.user.models import User
+from app.infrastructure.database.session import get_db
 
 
 router = APIRouter(prefix="/plan", tags=["plan"])
@@ -20,29 +27,30 @@ router = APIRouter(prefix="/plan", tags=["plan"])
 async def generate_today_plan(
     request: TodayPlanRequest,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_current_user_optional)
+    current_user: User | None = Depends(get_current_user_optional),
 ) -> TodayPlanResponse:
     """
     Generate today's plan (agent powered).
 
     Owner resolution rule:
     - Authenticated user: use current_user.name
-    - Unauthenticated: fall back to request.owner
+    - Else resolve by owner_id
+    - Else request.owner
     """
     try:
-        resolved_owner: str | None = None
-        if current_user and current_user.name:
-            resolved_owner = current_user.name
-            print(f"✅ 인증된 사용자 이름 사용: {resolved_owner}")
-        elif request.owner:
-            resolved_owner = request.owner
-            print(f"👤 Request의 owner 사용: {resolved_owner}")
-
-        if not resolved_owner:
-            raise HTTPException(
-                status_code=400,
-                detail="owner가 필요합니다. (로그인 사용자 또는 request.owner 중 하나가 필요합니다.)"
-            )
+        # 디버깅: 전달된 값 확인
+        print(f"[DEBUG] Plan API - current_user: {current_user.name if current_user else None}")
+        print(f"[DEBUG] Plan API - request.owner: {request.owner}")
+        print(f"[DEBUG] Plan API - request.owner_id: {request.owner_id}")
+        
+        resolved_owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
+        
+        print(f"[DEBUG] Plan API - resolved_owner: {resolved_owner}")
 
         target_date = request.target_date or date.today()
 
@@ -53,11 +61,13 @@ async def generate_today_plan(
 
         result_dict = planning_agent.generate_plan_sync(
             owner=resolved_owner,
-            target_date=target_date
+            target_date=target_date,
         )
 
         tasks = [TaskItem(**task) for task in result_dict["tasks"]]
-        task_sources = [TaskSource(**source) for source in result_dict.get("task_sources", [])]
+        task_sources = [
+            TaskSource(**source) for source in result_dict.get("task_sources", [])
+        ]
 
         return TodayPlanResponse(
             tasks=tasks,
@@ -65,16 +75,17 @@ async def generate_today_plan(
             source_date=result_dict["source_date"],
             owner=result_dict["owner"],
             target_date=result_dict["target_date"],
-            task_sources=task_sources
+            task_sources=task_sources,
         )
 
     except Exception as e:
-        print(f"[ERROR] Today plan generation failed: {e}")
         import traceback
+
+        print(f"[ERROR] Today plan generation failed: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"일정 생성 실패: {str(e)}"
+            detail=f"Plan generation failed: {str(e)}",
         )
 
 

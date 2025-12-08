@@ -20,7 +20,10 @@ class TodayPlanRequest(BaseModel):
         None,
         description="Owner ID (frontend compatibility; ignored when auth user is present)",
     )
-    target_date: date = Field(..., description="Target date for the plan")
+    target_date: date | None = Field(
+        None,
+        description="Target date for the plan (defaults to today when omitted)"
+    )
 
 
 class TaskSource(BaseModel):

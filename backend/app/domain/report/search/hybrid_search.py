@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import calendar
+import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from chromadb import Collection
@@ -27,9 +29,123 @@ class QueryAnalyzer:
     """Lightweight keyword analyzer to guide filters."""
 
     @staticmethod
+    def _parse_date_string(raw: str) -> Optional[date]:
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+            try:
+                return datetime.strptime(raw.strip(), fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _month_range_from_token(token: str) -> Optional[Dict[str, date]]:
+        parsed = None
+        for fmt in ("%Y-%m", "%Y/%m", "%Y.%m"):
+            try:
+                parsed = datetime.strptime(token.strip(), fmt)
+                break
+            except ValueError:
+                continue
+        if not parsed:
+            return None
+
+        year, month = parsed.year, parsed.month
+        _, last_day = calendar.monthrange(year, month)
+        return {"start": date(year, month, 1), "end": date(year, month, last_day)}
+
+    @staticmethod
+    def _week_range_from_anchor(anchor: date) -> Dict[str, date]:
+        week_start = anchor - timedelta(days=anchor.weekday())
+        week_end = week_start + timedelta(days=6)
+        return {"start": week_start, "end": week_end}
+
+    @staticmethod
+    def _extract_relative_date_range(lower: str, reference: date) -> Optional[Dict[str, date]]:
+        if "today" in lower:
+            return {"start": reference, "end": reference}
+        if "yesterday" in lower:
+            day = reference - timedelta(days=1)
+            return {"start": day, "end": day}
+
+        match = re.search(r"last\s+(\d+)\s+days", lower)
+        if match:
+            days = max(int(match.group(1)), 1)
+            start = reference - timedelta(days=days - 1)
+            return {"start": start, "end": reference}
+
+        if "this week" in lower:
+            return QueryAnalyzer._week_range_from_anchor(reference)
+        if "last week" in lower or "past week" in lower:
+            anchor = reference - timedelta(days=7)
+            return QueryAnalyzer._week_range_from_anchor(anchor)
+
+        if "this month" in lower:
+            _, last_day = calendar.monthrange(reference.year, reference.month)
+            return {
+                "start": date(reference.year, reference.month, 1),
+                "end": date(reference.year, reference.month, last_day),
+            }
+        if "last month" in lower or "past month" in lower:
+            year, month = reference.year, reference.month - 1
+            if month == 0:
+                year -= 1
+                month = 12
+            _, last_day = calendar.monthrange(year, month)
+            return {"start": date(year, month, 1), "end": date(year, month, last_day)}
+
+        return None
+
+    @staticmethod
+    def _extract_date_range(query: str, base_date: Optional[date] = None) -> Optional[Dict[str, date]]:
+        reference = base_date or date.today()
+        lower = query.lower()
+
+        relative = QueryAnalyzer._extract_relative_date_range(lower, reference)
+        if relative:
+            return relative
+
+        explicit_dates = [
+            QueryAnalyzer._parse_date_string(match)
+            for match in re.findall(r"\b(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})\b", query)
+        ]
+        explicit_dates = [d for d in explicit_dates if d]
+        if len(explicit_dates) >= 2:
+            start, end = explicit_dates[0], explicit_dates[1]
+            if start > end:
+                start, end = end, start
+            return {"start": start, "end": end}
+        if len(explicit_dates) == 1:
+            return {"start": explicit_dates[0], "end": explicit_dates[0]}
+
+        week_anchor = re.search(
+            r"week\s+(?:of|starting|beginning)?\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})",
+            lower,
+        )
+        if week_anchor:
+            anchor_date = QueryAnalyzer._parse_date_string(week_anchor.group(1))
+            if anchor_date:
+                return QueryAnalyzer._week_range_from_anchor(anchor_date)
+
+        month_ranges = []
+        for token in re.findall(r"\b(\d{4}[-/.]\d{1,2})(?![-/.]\d)\b", query):
+            month_range = QueryAnalyzer._month_range_from_token(token)
+            if month_range:
+                month_ranges.append(month_range)
+        if month_ranges:
+            start = month_ranges[0]["start"]
+            end = month_ranges[-1]["end"]
+            if start > end:
+                start, end = end, start
+            return {"start": start, "end": end}
+
+        return None
+
+    @staticmethod
     def extract_keywords(query: str, base_date: Optional[date] = None) -> SearchKeywords:
         lower = query.lower()
         chunk_types: List[str] = []
+        date_range = QueryAnalyzer._extract_date_range(query, base_date)
+        single_date = None
 
         if any(word in lower for word in ["계획", "plan", "익일"]):
             chunk_types.append("plan")
@@ -42,7 +158,10 @@ class QueryAnalyzer:
         if not chunk_types:
             chunk_types = ["detail", "todo", "pending", "plan", "summary"]
 
-        return SearchKeywords(chunk_types=chunk_types)
+        if date_range and date_range["start"] == date_range["end"]:
+            single_date = date_range["start"].strftime("%Y-%m-%d")
+
+        return SearchKeywords(chunk_types=chunk_types, single_date=single_date, date_range=date_range)
 
 
 class HybridSearcher:
@@ -64,7 +183,7 @@ class HybridSearcher:
         self,
         keywords: SearchKeywords,
         owner: Optional[str],
-        base_date_range: Optional[Dict[str, date]],
+        normalized_date_range: Optional[Dict[str, str]],
     ) -> Dict[str, Any]:
         conditions: List[Dict[str, Any]] = [{"report_type": "daily"}]
 
@@ -76,15 +195,44 @@ class HybridSearcher:
         if owner:
             conditions.append({"owner": owner})
 
-        if keywords.single_date:
+        if normalized_date_range:
+            conditions.append(
+                {
+                    "date": {
+                        "$gte": normalized_date_range["start"],
+                        "$lte": normalized_date_range["end"],
+                    }
+                }
+            )
+        elif keywords.single_date:
             conditions.append({"date": keywords.single_date})
-        elif keywords.date_range or base_date_range:
-            date_range = keywords.date_range or base_date_range
-            if date_range:
-                dates = self._build_date_list(date_range["start"], date_range["end"])
-                conditions.append({"date": {"$in": dates}})
 
         return {"$and": conditions} if len(conditions) > 1 else conditions[0]
+
+    def _normalize_date_range(self, date_range: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+        if not date_range:
+            return None
+
+        start_date = self._parse_to_date(date_range.get("start"))
+        end_date = self._parse_to_date(date_range.get("end"))
+        if not start_date or not end_date:
+            return None
+
+        if start_date > end_date:
+            start_date, end_date = end_date, start_date
+
+        return {"start": start_date.strftime("%Y-%m-%d"), "end": end_date.strftime("%Y-%m-%d")}
+
+    def _parse_to_date(self, value: Any) -> Optional[date]:
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+                try:
+                    return datetime.strptime(value.strip(), fmt).date()
+                except ValueError:
+                    continue
+        return None
 
     def search(
         self,
@@ -94,7 +242,12 @@ class HybridSearcher:
         base_date_range: Optional[Dict[str, date]] = None,
         top_k: int = 5,
     ) -> List[UnifiedSearchResult]:
-        where_filter = self._build_where(keywords, owner, base_date_range)
+        effective_date_range: Optional[Dict[str, Any]] = keywords.date_range or base_date_range
+        if not effective_date_range and keywords.single_date:
+            effective_date_range = {"start": keywords.single_date, "end": keywords.single_date}
+        normalized_date_range = self._normalize_date_range(effective_date_range)
+
+        where_filter = self._build_where(keywords, owner, normalized_date_range)
         query_embedding = self.embedding_service.embed_text(query)
 
         results = self.collection.query(
@@ -123,6 +276,12 @@ class HybridSearcher:
                 continue
             if metadata.get("report_type") != "daily":
                 continue
+            if normalized_date_range:
+                meta_date = metadata.get("date", "")
+                if not meta_date or not (
+                    normalized_date_range["start"] <= meta_date <= normalized_date_range["end"]
+                ):
+                    continue
 
             score = 1.0 / (1.0 + distances[i])
             search_results.append(

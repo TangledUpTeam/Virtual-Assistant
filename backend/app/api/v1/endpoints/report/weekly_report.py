@@ -17,6 +17,7 @@ from app.infrastructure.database.session import get_db
 from app.reporting.html_renderer import render_report_html
 from app.domain.auth.dependencies import get_current_user_optional
 from app.domain.user.models import User
+from app.api.v1.endpoints.report.utils import resolve_owner_name
 from urllib.parse import quote
 
 
@@ -53,19 +54,12 @@ async def generate_weekly(
     Generate a weekly report and store it.
     """
     try:
-        resolved_owner: str | None = None
-        if current_user and current_user.name:
-            resolved_owner = current_user.name
-            print(f"Authenticated owner resolved: {resolved_owner}")
-        elif request.owner:
-            resolved_owner = request.owner
-            print(f"Request owner used: {resolved_owner}")
-
-        if not resolved_owner:
-            raise HTTPException(
-                status_code=400,
-                detail="owner가 필요합니다. (로그인 사용자 또는 request.owner 중 하나가 필요합니다.)"
-            )
+        resolved_owner = resolve_owner_name(
+            db=db,
+            current_user=current_user,
+            owner=request.owner,
+            owner_id=request.owner_id,
+        )
 
         report = generate_weekly_report(
             db=db,

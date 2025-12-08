@@ -21,6 +21,14 @@ from .schemas import (
 from .embedding_pipeline import get_embedding_pipeline
 from .rag_chain import ReportRAGChain
 from .rag_service import ReportRAGService
+from .rag_benchmark import (
+    run_single_benchmark,
+    run_batch_benchmark,
+    evaluate_retrieval_accuracy,
+    evaluate_consistency,
+    summarize_accuracy_from_log,
+    summarize_consistency_from_log,
+)
 
 __all__ = [
     "CanonicalReport",
@@ -43,5 +51,11 @@ __all__ = [
     "get_embedding_pipeline",
     "ReportRAGChain",
     "ReportRAGService",
+    "run_single_benchmark",
+    "run_batch_benchmark",
+    "evaluate_retrieval_accuracy",
+    "evaluate_consistency",
+    "summarize_accuracy_from_log",
+    "summarize_consistency_from_log",
 ]
 

@@ -776,8 +776,8 @@ class TodayPlanGenerator:
                 source_description = "맞춤형 추천 업무(ChromaDB 접근)"
             
             task_sources.append(TaskSource(
-                type=source_type,
-                description=source_description,
+                source_type=source_type,
+                source_description=source_description,
                 task_index=idx
             ))
         
