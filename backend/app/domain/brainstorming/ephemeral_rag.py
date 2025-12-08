@@ -243,6 +243,55 @@ class EphemeralRAG:
             List[str]: 연상 단어 리스트
         """
         return [item["text"] for item in self.data.get("associations", [])]
+    
+    def filter_trend_keywords(self, trend_keywords: List[str], top_k: int = 10) -> List[str]:
+        """
+        트렌드 키워드를 사용자 Q3 키워드 기준으로 필터링
+        
+        사용자 키워드와 유사한 트렌드만 선별하여 쏠림 방지
+        
+        Args:
+            trend_keywords: 트렌드 키워드 리스트
+            top_k: 선별할 상위 개수
+            
+        Returns:
+            List[str]: 필터링된 트렌드 키워드
+        """
+        if not self.data["associations"]:
+            print("⚠️ 사용자 키워드가 없어 트렌드 필터링 불가")
+            return trend_keywords[:top_k]
+        
+        if not trend_keywords:
+            return []
+        
+        # 1. 사용자 키워드들의 평균 임베딩 계산 (기준점)
+        user_embeddings = [item["embedding"] for item in self.data["associations"]]
+        avg_user_embedding = np.mean(user_embeddings, axis=0).tolist()
+        
+        # 2. 각 트렌드 키워드와 사용자 기준점 간 유사도 계산
+        trend_scores = []
+        for trend_kw in trend_keywords:
+            try:
+                trend_embedding = self.embed_text(trend_kw)
+                similarity = self._cosine_similarity(avg_user_embedding, trend_embedding)
+                trend_scores.append({
+                    "keyword": trend_kw,
+                    "similarity": similarity
+                })
+            except Exception as e:
+                print(f"⚠️ 트렌드 키워드 임베딩 실패: {trend_kw} - {e}")
+                continue
+        
+        # 3. 유사도 기준 정렬 후 상위 k개 선별
+        trend_scores.sort(key=lambda x: x["similarity"], reverse=True)
+        filtered = [ts["keyword"] for ts in trend_scores[:top_k]]
+        
+        print(f"\n🔍 트렌드 필터링 결과:")
+        print(f"   원본: {len(trend_keywords)}개 → 필터링: {len(filtered)}개")
+        for i, ts in enumerate(trend_scores[:top_k], 1):
+            print(f"   {i}. {ts['keyword']} (유사도: {ts['similarity']:.4f})")
+        
+        return filtered
 
 
 # ============================================================
