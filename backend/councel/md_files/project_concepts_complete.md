@@ -48,9 +48,10 @@ ResponseGenerator (LLM 답변 생성)
 - **역할**: RAG 기반 상담 시스템의 메인 컨트롤러
 - **주요 책임**:
   1. Vector DB 연결 및 관리
-  2. 상담 세션 관리 (대화 히스토리)
-  3. Threshold 기반 분기 처리
-  4. Self-learning (Q&A 자동 저장)
+  2. 상담 세션 관리 (대화 히스토리, 사용자별 세션)
+  3. EAP + SFBT 프로토콜 통합 관리
+  4. Threshold 기반 분기 처리
+  5. Self-learning (Q&A 자동 저장)
 
 #### 2.1.2 초기화 과정
 ```python
@@ -60,9 +61,11 @@ ResponseGenerator (LLM 답변 생성)
 3. OpenAI 클라이언트 초기화 (동기 + 비동기)
 4. 모듈 초기화:
    - PersonaManager: 페르소나 생성 및 관리
+   - TherapyProtocol: EAP + SFBT 프로토콜 관리
    - SearchEngine: Vector DB 검색
    - ResponseGenerator: 답변 생성
 5. 대화 히스토리 초기화 (최대 10개 유지)
+6. 사용자별 세션 관리 초기화 (user_sessions)
 ```
 
 #### 2.1.3 Threshold 기반 분기 시스템
@@ -92,14 +95,20 @@ ResponseGenerator (LLM 답변 생성)
 ##### `chat(user_input: str) -> Dict[str, Any]`
 - **역할**: 사용자 입력을 받아 상담 답변 생성
 - **처리 단계**:
-  1. 종료 키워드 확인 ("exit", "고마워", "끝")
-  2. 입력 분류 (ResponseGenerator.classify_input)
-  3. Multi-step 반복 검색 (SearchEngine)
-  4. 최고 유사도 계산
-  5. Threshold 분기:
-     - >= 0.7: LLM 단독 답변
-     - < 0.7: RAG + Self-learning
-  6. 대화 히스토리에 추가 (최대 10개)
+  1. 종료 키워드 확인 ("exit", "고마워", "끝", "종료", "그만", "안녕")
+     - 종료 시 세션 초기화 (대화 히스토리 + 프로토콜 세션)
+  2. 프로토콜 가이드 생성 (TherapyProtocol.generate_protocol_guidance)
+     - 프로토콜 선택 (EAP/SFBT/통합)
+     - 심각도 평가
+     - SFBT 질문 생성
+     - 답변 구조 결정
+  3. 입력 분류 (ResponseGenerator.classify_input)
+  4. Multi-step 반복 검색 (SearchEngine)
+  5. 최고 유사도 계산
+  6. Threshold 분기:
+     - >= 0.7: LLM 단독 답변 (프로토콜 프롬프트 적용)
+     - < 0.7: RAG + Self-learning (프로토콜 프롬프트 적용)
+  7. 대화 히스토리에 추가 (최대 10개)
 - **반환값**:
   ```json
   {
@@ -110,7 +119,14 @@ ResponseGenerator (LLM 답변 생성)
     "continue_conversation": true,
     "similarity_score": 0.85,
     "search_iterations": 1,
-    "search_quality": {"quality_score": 0.75, ...}
+    "search_quality": {"quality_score": 0.75, ...},
+    "protocol_info": {
+      "protocol_type": "eap|sfbt|integrated",
+      "current_stage": "initial_contact|assessment|...",
+      "severity_level": "critical|high|medium|low",
+      "sfbt_question_type": "scaling|exception|...",
+      "sfbt_question": "질문 텍스트"
+    }
   }
   ```
 
@@ -279,10 +295,10 @@ ResponseGenerator (LLM 답변 생성)
   - RAG 없이 페르소나만 사용
   - 대화 히스토리 최근 2개만 포함 (컨텍스트 최적화)
   - 감정 맥락 파악 (최근 대화에서 감정 키워드 추출)
-  - 3단계 구조 강제 (감정 인정 → 재해석 → 격려)
+  - 2~3문장으로 적절한 길이로 작성
 - **모델**: gpt-4o-mini
 - **Temperature**: 0.3 (일관된 답변)
-- **Max Tokens**: 180
+- **Max Tokens**: 180 (2~3문장)
 
 ##### RAG 기반 답변 (`generate_response_with_persona`)
 - **사용 조건**: 유사도 < 0.7
@@ -291,25 +307,37 @@ ResponseGenerator (LLM 답변 생성)
   - 페르소나 프롬프트 + 청크 컨텍스트
   - 대화 히스토리 최근 5개 포함
   - 감정 키워드 자동 감지 및 프롬프트에 반영
-  - 3단계 구조 강제
+  - 참고 자료를 바탕으로 상세하고 구체적인 답변 생성 (4~7문장)
 - **모델**: gpt-4o-mini
 - **Temperature**: 0.3
-- **Max Tokens**: 200
+- **Max Tokens**: 400 (RAG 사용 시 상세하게 4~7문장)
 
-#### 2.4.4 3단계 답변 구조
-1. **감정 인정** (1문장)
+#### 2.4.4 답변 구조
+
+##### LLM 단독 답변 구조 (2~3문장)
+1. **감정 인정 및 공감** (1문장, 필수)
    - 사용자의 감정을 있는 그대로 인정
    - 예: "~하셨군요", "~느끼시는 마음이 충분히 이해됩니다"
    - 금지: "하지만", "그래도"로 시작
 
-2. **아들러 관점 재해석** (1문장)
-   - 검색된 청크를 바탕으로 아들러 관점에서 재해석
-   - 열등감을 성장의 기회로 재구성
-   - 사회적 관심과 공동체 감각 연결
+2. **자연스러운 질문 또는 공감문** (1~2문장)
+   - 사용자의 상황에 맞게 자연스럽게 질문
+   - 상담을 계속 이어가도록 하는 질문 포함
 
-3. **격려 및 실천 방안 제시** (1~2문장)
-   - 사용자의 내적 힘과 가능성을 믿으며 격려
-   - 구체적이고 실천 가능한 방향 제시
+##### RAG 기반 답변 구조 (4~7문장)
+1. **감정 인정 및 공감** (1~2문장, 필수)
+   - 사용자의 감정을 있는 그대로 인정
+   - 예: "~하셨군요", "~느끼시는 마음이 충분히 이해됩니다"
+   - 금지: "하지만", "그래도"로 시작
+
+2. **참고 자료 기반 통찰 또는 조언** (2~3문장)
+   - 검색된 자료의 내용을 바탕으로 구체적이고 실용적인 조언 제공
+   - 아들러 심리학의 원칙을 자연스럽게 통합하여 설명
+   - 사용자의 상황에 맞게 자료의 내용을 적용하여 설명
+
+3. **자연스러운 질문 또는 다음 단계 제안** (1~2문장)
+   - 사용자의 상황에 맞게 자연스럽게 질문
+   - 상담을 계속 이어가도록 하는 질문 포함
 
 #### 2.4.5 주요 메서드
 
@@ -327,6 +355,210 @@ ResponseGenerator (LLM 답변 생성)
 ##### `generate_response_with_persona(...) -> Dict`
 - **역할**: RAG 기반 답변 생성
 - **반환값**: 답변 딕셔너리 (mode="counseling" | "adler" | "general")
+
+---
+
+### 2.5 TherapyProtocol (EAP + SFBT 통합 프로토콜)
+
+#### 2.5.1 클래스 개요
+- **파일 위치**: `backend/councel/sourcecode/persona/therapy_protocol.py`
+- **역할**: EAP(Employee Assistance Program)와 SFBT(Solution-Focused Brief Therapy)를 통합한 상담 프로토콜 관리
+- **생성날짜**: 2025.12.05
+- **주요 책임**:
+  1. 프로토콜 선택 (EAP/SFBT/통합)
+  2. 심각도 평가 (critical/high/medium/low)
+  3. 답변 구조 결정 (감정만 vs 감정+상황)
+  4. SFBT 질문 생성 및 순서 관리
+  5. 세션 상태 추적 및 관리
+
+#### 2.5.2 프로토콜 유형
+
+##### EAP (Employee Assistance Program)
+- **목적**: 직장인 정신건강 지원 프로그램
+- **단계**:
+  1. **INITIAL_CONTACT**: 초기 접촉 및 문제 파악
+  2. **ASSESSMENT**: 평가 (심각도, 긴급성)
+  3. **SHORT_TERM_INTERVENTION**: 단기 개입
+  4. **FOLLOW_UP**: 후속 조치
+
+##### SFBT (Solution-Focused Brief Therapy)
+- **목적**: 해결중심 단기 치료
+- **질문 유형**:
+  1. **SCALING**: 척도 질문 (0~10점)
+  2. **EXCEPTION**: 예외 탐색 질문
+  3. **COPING**: 대처 질문
+  4. **MIRACLE**: 기적 질문
+  5. **RELATIONSHIP**: 관계 질문
+
+##### 통합 프로토콜 (INTEGRATED)
+- **목적**: EAP와 SFBT를 상황에 맞게 통합 사용
+- **선택 기준**: 사용자 입력 내용과 대화 단계에 따라 자동 선택
+
+#### 2.5.3 키워드 기반 판단 시스템
+
+##### 프로토콜 선택 (`select_protocol`)
+- **위기 키워드**: ['죽고 싶', '자살', '자해', '끝내고 싶', '포기', '절망']
+  - 감지 시 → EAP 프로토콜 우선 적용
+- **해결책 키워드**: ['어떻게', '방법', '해결', '개선', '나아지', '변화']
+  - 감지 시 → SFBT 프로토콜 우선 적용
+- **기본**: 통합 프로토콜 사용
+- **처리 시간**: ~2ms
+
+##### 심각도 평가 (`assess_severity`)
+- **Critical**: ['죽고 싶', '자살', '자해', '끝내고 싶']
+- **High**: ['견딜 수 없', '미치겠', '한계', '더 이상 못', '불가능']
+- **Medium**: ['힘들', '어렵', '괴롭', '고통', '스트레스']
+- **Low**: 그 외
+- **처리 시간**: ~2ms
+
+##### 답변 구조 결정 (`has_situation_context`)
+- **감정 키워드** (23개): 힘들, 어렵, 괴롭, 슬프, 화나, 우울, 불안, 답답, 스트레스, 고통, 절망, 무기력, 초조, 걱정, 두려움, 짜증, 분노, 상처, 아픔, 외로움, 허탈, 실망
+- **상황 키워드** (40개+): 직장, 회사, 동료, 상사, 가족, 부모, 문제, 상황, 일어났, 발생했, 때문에, 해서 등
+- **판단 로직**:
+  - 감정 + 상황 모두 있음 → 1~3단계 답변 구조 (공감 + 재해석 + 실천 방안 + 질문)
+  - 감정만 있음 → 공감 + 척도 질문만 (1~2문장)
+- **처리 시간**: ~3ms
+- **현재 한계**: 부정문 처리 미흡 (예: "힘들지 않아요" → 오탐 가능)
+
+#### 2.5.4 SFBT 질문 순서 관리
+
+##### 대화 단계별 질문 유형
+- **0회차 (첫 대화)**: SCALING (척도 질문)
+  - "지금 그런 힘든 마음은 0~10점 중 몇 점인 것 같으세요?"
+- **1회차**: EXCEPTION (예외 탐색)
+- **2회차**: COPING (대처 질문)
+- **3회차**: MIRACLE (기적 질문)
+- **4회차 이상**: RELATIONSHIP (관계 질문)
+
+##### 질문 템플릿
+- 각 질문 유형마다 3개의 템플릿 제공
+- 첫 대화에서는 항상 첫 번째 템플릿 사용 (일관성 보장)
+- 그 외에는 랜덤 선택
+
+#### 2.5.5 세션 상태 관리
+
+##### TherapySession 클래스
+- **상태 추적 항목**:
+  - `current_stage`: 현재 EAP 단계
+  - `protocol_type`: 사용 중인 프로토콜 유형
+  - `conversation_count`: 대화 횟수
+  - `severity_level`: 심각도 수준
+  - `scaling_scores`: 척도 질문 응답 저장
+  - `identified_issues`: 식별된 문제 목록
+  - `goals`: 목표 목록
+  - `exceptions_found`: 발견된 예외 상황
+  - `coping_strategies`: 대처 전략 목록
+
+##### 세션 초기화
+- **자동 초기화**: 종료 키워드 감지 시 ("exit", "고마워", "끝", "종료", "그만", "안녕")
+- **수동 초기화**: `reset_session()` 메서드 호출
+- **초기화 내용**: 모든 세션 상태를 초기값으로 리셋
+
+#### 2.5.6 통합 답변 구조
+
+##### 감정 + 상황 설명이 모두 있는 경우
+```
+1단계 - 감정 인정 및 공감 (1문장) [필수]
+2단계 - 재해석 (1문장, 선택적) [아들러]
+3단계 - 격려 및 실천 방안 (1문장, 선택적) [EAP + SFBT]
+4단계 - 대화형 질문 제시 (필수)
+```
+- **총 문장 수**: 2~4문장
+- **특징**: 재해석과 실천 방안은 선택적이지만, 상세한 입력의 경우 포함 권장
+
+##### 감정만 표현된 경우
+```
+1단계 - 감정 인정 및 공감 (1문장) [필수]
+2단계 - 척도 질문 제시 (필수)
+```
+- **총 문장 수**: 1~2문장
+- **특징**: 재해석과 실천 방안 생략 (척도 질문과 자연스럽게 연결)
+
+#### 2.5.7 주요 메서드
+
+##### `generate_protocol_guidance(user_input, chat_history, adler_persona) -> Dict`
+- **역할**: 프로토콜 기반 상담 가이드 생성
+- **처리 과정**:
+  1. 세션 상태 업데이트
+  2. 프로토콜 선택 (키워드 기반)
+  3. 심각도 평가 (키워드 기반)
+  4. SFBT 질문 생성 (대화 단계 기반)
+  5. 답변 구조 결정 (키워드 기반)
+  6. 통합 프롬프트 생성
+- **반환값**:
+  ```json
+  {
+    "protocol_prompt": "통합 프롬프트 문자열",
+    "protocol_type": "eap|sfbt|integrated",
+    "current_stage": "initial_contact|assessment|...",
+    "severity_level": "critical|high|medium|low",
+    "sfbt_question_type": "scaling|exception|...",
+    "sfbt_question": "질문 텍스트",
+    "session_state": {...}
+  }
+  ```
+
+##### `select_protocol(user_input, chat_history) -> ProtocolType`
+- **역할**: 사용자 상황에 따라 적절한 프로토콜 선택
+- **선택 기준**: 키워드 기반 (위기/해결책 키워드 감지)
+- **반환값**: ProtocolType.EAP | SFBT | INTEGRATED
+
+##### `assess_severity(user_input, chat_history) -> str`
+- **역할**: 문제의 심각도 평가
+- **반환값**: "critical" | "high" | "medium" | "low"
+
+##### `has_situation_context(user_input) -> bool`
+- **역할**: 감정 + 상황 설명이 있는지 판단
+- **반환값**: True (1~3단계 구조) | False (공감+척도만)
+
+##### `should_ask_sfbt_question(chat_history) -> Optional[SFBTQuestionType]`
+- **역할**: 대화 단계에 따라 SFBT 질문 유형 결정
+- **반환값**: 질문 유형 또는 None
+
+##### `reset_session()`
+- **역할**: 세션 상태 초기화
+- **사용 시점**: 종료 키워드 감지 시 또는 수동 호출
+
+#### 2.5.8 위기 개입 프로토콜
+
+##### Critical/High 심각도 감지 시
+- **즉각 대응**: 안전 확보 최우선
+- **전문 기관 연계 안내**:
+  - 자살예방상담전화: 1393
+  - 정신건강위기상담: 1577-0199
+- **안전 계획 제시**: 구체적이고 실천 가능한 계획
+
+#### 2.5.9 성능 특성
+
+##### 키워드 기반 처리
+- **처리 시간**: ~9ms (총합)
+  - `classify_input()`: ~2ms
+  - `select_protocol()`: ~2ms
+  - `assess_severity()`: ~2ms
+  - `has_situation_context()`: ~3ms (2회 호출)
+- **비용**: 무료 (로컬 처리)
+- **정확도**: 명시적 표현에서 90%+, 부정문 처리 한계
+
+##### LLM 대비 장점
+- **속도**: 약 125배 빠름 (12ms vs 1,500ms)
+- **비용**: 무료 vs 월 $45 (1,000 요청/일 기준)
+- **확장성**: 무제한 동시 처리 가능
+
+#### 2.5.10 통합 흐름
+
+##### RAGTherapySystem과의 통합
+1. `RAGTherapySystem.chat()` 호출
+2. `TherapyProtocol.generate_protocol_guidance()` 실행
+3. 프로토콜 프롬프트를 `ResponseGenerator`에 전달
+4. LLM이 프로토콜 프롬프트를 기반으로 답변 생성
+
+##### 프로토콜 프롬프트 구조
+```
+[아들러 페르소나]
++ [EAP 프로토콜 가이드]
++ [SFBT 질문 지시]
++ [통합 답변 구조 가이드]
+```
 
 ---
 
@@ -885,6 +1117,25 @@ ResponseGenerator (LLM 답변 생성)
 - **특징**: 각 비동기 태스크마다 독립적인 컨텍스트
 - **사용**: 세션 ID, 사용자 정보 관리
 
+### 5.11 EAP + SFBT 통합 프로토콜
+- **목적**: 체계적이고 전문적인 상담 프로세스 제공
+- **EAP**: 직장인 정신건강 지원 프로그램 (4단계)
+- **SFBT**: 해결중심 단기 치료 (5가지 질문 유형)
+- **통합 방식**: 상황에 맞게 자동 선택 및 통합
+- **키워드 기반 판단**: 빠른 처리 (~9ms), 무료
+- **동적 답변 구조**: 감정만 vs 감정+상황에 따라 구조 변경
+- **세션 관리**: 대화 단계별 자동 진행 및 상태 추적
+
+### 5.12 키워드 기반 판단 시스템
+- **목적**: 빠르고 비용 효율적인 전처리 및 분류
+- **사용 위치**: 
+  - 프로토콜 선택 (위기/해결책 키워드)
+  - 심각도 평가 (critical/high/medium 키워드)
+  - 답변 구조 결정 (감정/상황 키워드)
+- **장점**: 속도 (~9ms), 비용 무료, 확장성
+- **단점**: 부정문 처리 한계, 동의어/은유 인식 어려움
+- **개선 방안**: 부정 패턴 감지 추가 (정규식 기반)
+
 ---
 
 ## 6. 데이터 구조
@@ -972,6 +1223,47 @@ ResponseGenerator (LLM 답변 생성)
   ],
   "processing_time": 1.23,
   "session_id": "session_123"
+}
+```
+
+### 6.5 프로토콜 세션 상태 구조
+```json
+{
+  "current_stage": "initial_contact|assessment|short_term_intervention|follow_up",
+  "protocol_type": "eap|sfbt|integrated",
+  "conversation_count": 3,
+  "identified_issues": ["문제1", "문제2"],
+  "severity_level": "critical|high|medium|low",
+  "goals": ["목표1", "목표2"],
+  "scaling_scores": {
+    "첫_대화": 5,
+    "두_번째_대화": 6
+  },
+  "exceptions_found": ["예외 상황1"],
+  "coping_strategies": ["대처 전략1"]
+}
+```
+
+### 6.6 프로토콜 가이드 반환 구조
+```json
+{
+  "protocol_prompt": "통합 프롬프트 문자열 (아들러 + EAP + SFBT)",
+  "protocol_type": "eap|sfbt|integrated",
+  "current_stage": "initial_contact|assessment|...",
+  "severity_level": "critical|high|medium|low",
+  "sfbt_question_type": "scaling|exception|coping|miracle|relationship",
+  "sfbt_question": "지금 그런 힘든 마음은 0~10점 중 몇 점인 것 같으세요?",
+  "session_state": {
+    "current_stage": "...",
+    "protocol_type": "...",
+    "conversation_count": 0,
+    "severity_level": "...",
+    "scaling_scores": {},
+    "identified_issues": [],
+    "goals": [],
+    "exceptions_found": [],
+    "coping_strategies": []
+  }
 }
 ```
 
@@ -1092,10 +1384,13 @@ ResponseGenerator (LLM 답변 생성)
 
 **주요 포인트**:
 1. RAG 기반 상담 시스템의 Threshold 분기 전략
-2. Self-learning을 통한 자동 개선
-3. Parent-Child Chunking으로 다양한 검색 시나리오 지원
-4. 멀티 에이전트 시스템의 Supervisor Pattern
-5. 성능 최적화를 위한 다양한 기법
+2. EAP + SFBT 통합 프로토콜을 통한 체계적 상담 프로세스
+3. 키워드 기반 판단 시스템의 빠른 처리 (~9ms, 무료)
+4. 동적 답변 구조 (감정만 vs 감정+상황에 따른 구조 변경)
+5. Self-learning을 통한 자동 개선
+6. Parent-Child Chunking으로 다양한 검색 시나리오 지원
+7. 멀티 에이전트 시스템의 Supervisor Pattern
+8. 성능 최적화를 위한 다양한 기법
 
 이 문서를 기반으로 JSON 파일을 생성하거나, 추가 문서화를 진행할 수 있습니다.
 

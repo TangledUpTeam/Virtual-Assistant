@@ -67,6 +67,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="chromadb")
 from .persona.persona_manager import PersonaManager
 from .persona.search_engine import SearchEngine
 from .persona.response_generator import ResponseGenerator
+from .persona.therapy_protocol import TherapyProtocol
 
 # .env 파일 로드
 load_dotenv()
@@ -225,8 +226,9 @@ class RAGTherapySystem:
 
         ]
         
-        # 대화 히스토리 (단기 기억)
-        self.chat_history = []
+        # 대화 히스토리 (단기 기억) - 사용자별 세션 관리
+        self.chat_history = []  # 기본 히스토리 (하위 호환성)
+        self.user_sessions: Dict[str, List[Dict[str, str]]] = {}  # {user_id: chat_history}
         
         # ========================================
         # 스코어링 관련 코드 (주석처리됨 - 필요시 주석 해제)
@@ -250,7 +252,8 @@ class RAGTherapySystem:
         self.persona_manager = PersonaManager(
             openai_client=self.openai_client,
             collection=self.collection,
-            base_dir=base_dir
+            base_dir=base_dir,
+            async_openai_client=self.async_openai_client
         )
         self.adler_persona = self.persona_manager.adler_persona
         
@@ -263,7 +266,14 @@ class RAGTherapySystem:
         
         self.response_generator = ResponseGenerator(
             openai_client=self.openai_client,
-            counseling_keywords=self.counseling_keywords
+            counseling_keywords=self.counseling_keywords,
+            async_openai_client=self.async_openai_client
+        )
+        
+        # 상담 프로토콜 초기화 (EAP + SFBT)
+        self.therapy_protocol = TherapyProtocol(
+            openai_client=self.openai_client,
+            async_openai_client=self.async_openai_client
         )
         
         # 백그라운드 작업용 스레드 풀 (Self-learning 저장용)
@@ -275,8 +285,35 @@ class RAGTherapySystem:
     # 상담 관련 기능
     # ============================================================
     
+    # 사용자별 chat_history 가져오기(없으면 생성)
+    def _get_user_chat_history(self, user_id: Optional[str] = None) -> List[Dict[str, str]]:
+
+        if user_id is None:
+            # 하위 호환성: 기본 chat_history 반환
+            return self.chat_history
+        
+        if user_id not in self.user_sessions:
+            self.user_sessions[user_id] = []
+        
+        return self.user_sessions[user_id]
+    
+    # 사용자 세션 초기화
+    def _reset_user_session(self, user_id: str):
+
+        if user_id in self.user_sessions:
+            self.user_sessions[user_id] = []
+    
+    # 사용자 세션 초기화 (공개 메서드)
+    def reset_session(self, user_id: Optional[str] = None):
+
+        if user_id is None:
+            # 기본 chat_history 초기화
+            self.chat_history = []
+        else:
+            self._reset_user_session(user_id)
+    
     # Self-learning: Q&A를 Vector DB에 저장 (비동기)
-    # 자가학습 RAG
+    # 자가학습
     async def _save_qa_to_vectordb_async(self, user_query: str, llm_response: str):
 
         try:
@@ -332,79 +369,151 @@ class RAGTherapySystem:
             # 저장 실패해도 답변은 계속 진행
     
     # 상담 함수(사용자 입력 -> 답변 생성)
-    async def chat(self, user_input: str) -> Dict[str, Any]:
+    async def chat(self, user_input: str, user_id: Optional[str] = None) -> Dict[str, Any]:
 
+        # 사용자별 chat_history 가져오기
+        current_chat_history = self._get_user_chat_history(user_id)
+        
         # 종료 키워드 확인 (exit, 고마워, 끝)
         user_input_lower = user_input.strip().lower()
-        exit_keywords = ["exit", "고마워", "끝"]
+        exit_keywords = ["exit", "고마워", "끝", "종료", "그만", "안녕"]
         if any(keyword in user_input_lower for keyword in exit_keywords):
+            # 세션 초기화
+            if user_id:
+                self._reset_user_session(user_id)
+            else:
+                # user_id가 없을 때도 기본 chat_history 초기화
+                self.chat_history = []
+            
+            # therapy_protocol 세션도 초기화
+            self.therapy_protocol.reset_session()
+            
             return {
                 "answer": "상담을 마무리하겠습니다. 오늘 함께 시간을 보내주셔서 감사합니다. 언제든 다시 찾아주세요.",
                 "used_chunks": [],
                 "used_chunks_detailed": [],
                 "mode": "exit",
-                "continue_conversation": False
+                "continue_conversation": False,
+                "protocol_info": None
             }
         
-        # 1. 입력 분류
+        # 1. 프로토콜 가이드 생성 (EAP + SFBT)
+        protocol_guidance = await self.therapy_protocol.generate_protocol_guidance(
+            user_input=user_input,
+            chat_history=current_chat_history,
+            adler_persona=self.adler_persona
+        )
+        
+        # 2. 입력 분류
         input_type = self.response_generator.classify_input(user_input)
         
-        # 2. Threshold 고정 (0.7)
-        threshold = 0.7
+        # 3. 감정 + 상황 포함 여부 체크 (Vector DB 검색 조건)
+        has_situation_context = self.response_generator.has_situation_context(user_input)
         
-        # 3. Multi-step 반복 검색 시스템 사용 (비동기 함수 직접 호출)
-        search_result = await self.search_engine._iterative_search_with_query_expansion_async(user_input, max_iterations=1, n_results=5)
-        retrieved_chunks = search_result['chunks']
-        quality_info = search_result['quality_info']
-        iterations_used = search_result['iterations_used']
+        # 4. RAG 강제 사용 키워드 체크 (방법/해결 관련 질문)
+        rag_required_keywords = [
+            '어떻게 해야', '어떻게 하면', '어떻게 해야할까', '어떻게 해야하나',
+            '어떻게 해야', '어떻게 하면', '해야할까', '해야하나', '해야 하는',
+            '방법', '해결', '어떻게', '어떤 방법', '무엇을 해야',
+            '어떻게 해결', '어떻게 해야', '어떻게 대처', '어떻게 처리',
+            '해야', '해야할지', '해야하는지', '해결 방법', '대처 방법'
+        ]
+        user_input_lower = user_input.lower()
+        force_use_rag = any(keyword in user_input_lower for keyword in rag_required_keywords)
         
-        # 5. 최고 유사도 계산 (감정 가중치 적용된 값 사용)
-        max_similarity = 0.0
-        for chunk in retrieved_chunks:
-            # 하이브리드 검색에서 계산된 final_similarity 사용
-            if 'final_similarity' in chunk:
-                max_similarity = max(max_similarity, chunk['final_similarity'])
-            elif 'distance' in chunk and chunk['distance'] is not None:
-                similarity = self.search_engine.get_distance_to_similarity(chunk['distance'])
-                max_similarity = max(max_similarity, similarity)
+        # 5. Vector DB 검색 조건: 감정+상황 포함 OR RAG 강제 키워드
+        should_search_vector_db = has_situation_context or force_use_rag
         
-        # 6. Threshold 분기
-        if max_similarity >= threshold:
-            # Case A: 유사도 ≥ threshold -> RAG 없이 LLM 단독 답변
-            response = self.response_generator._generate_llm_only_response(
-                user_input, 
-                self.adler_persona, 
-                self.chat_history,
-                self.counseling_keywords
-            )
-            response['similarity_score'] = max_similarity
-            response['search_iterations'] = iterations_used
+        # 6. 프로토콜 정보 준비
+        protocol_info = {
+            'protocol_type': protocol_guidance['protocol_type'],
+            'current_stage': protocol_guidance['current_stage'],
+            'severity_level': protocol_guidance['severity_level'],
+            'stage_guideline': protocol_guidance.get('stage_guideline')
+        }
+        
+        # 7. Vector DB 검색 수행 여부 결정
+        if should_search_vector_db:
+            # 히스토리에 이미 상황이 설명되어 있고 해결 방법을 묻는 질문인 경우, 검색 쿼리에 히스토리 상황 포함
+            search_query = user_input
+            if force_use_rag:
+                has_situation_in_history = self.response_generator.has_situation_in_history(current_chat_history)
+                if has_situation_in_history:
+                    situation_from_history = self.response_generator.extract_situation_from_history(current_chat_history)
+                    # 히스토리의 상황을 검색 쿼리에 포함
+                    search_query = f"{situation_from_history} {user_input}"
+            
+            # 7-1. Multi-step 반복 검색 시스템 사용 (비동기 함수 직접 호출)
+            search_result = await self.search_engine._iterative_search_with_query_expansion_async(search_query, max_iterations=1, n_results=5)
+            retrieved_chunks = search_result['chunks']
+            quality_info = search_result['quality_info']
+            iterations_used = search_result['iterations_used']
+            
+            # 7-2. 최고 유사도 계산 (감정 가중치 적용된 값 사용)
+            max_similarity = 0.0
+            for chunk in retrieved_chunks:
+                # 하이브리드 검색에서 계산된 final_similarity 사용
+                if 'final_similarity' in chunk:
+                    max_similarity = max(max_similarity, chunk['final_similarity'])
+                elif 'distance' in chunk and chunk['distance'] is not None:
+                    similarity = self.search_engine.get_distance_to_similarity(chunk['distance'])
+                    max_similarity = max(max_similarity, similarity)
+            
+            threshold = 0.7
+            
+            # 7-3. Threshold 분기 (키워드 체크 포함)
+            if not force_use_rag and max_similarity >= threshold:
+                # Case A: 유사도 ≥ threshold -> RAG 없이 LLM 단독 답변 (프로토콜 적용)
+                response = await self.response_generator._generate_llm_only_response(
+                    user_input, 
+                    protocol_guidance['protocol_prompt'],  # 프로토콜 통합 페르소나 사용
+                    current_chat_history,
+                    self.counseling_keywords,
+                    protocol_info=protocol_info  # 프로토콜 정보 전달
+                )
+                response['similarity_score'] = max_similarity
+                response['search_iterations'] = iterations_used
+            else:
+                # Case B: 유사도 < threshold OR RAG 강제 키워드 -> RAG + Self-learning (프로토콜 적용)
+                
+                # RAG 기반 답변 생성
+                response = await self.response_generator.generate_response_with_persona(
+                    user_input, 
+                    retrieved_chunks, 
+                    protocol_guidance['protocol_prompt'],  # 프로토콜 통합 페르소나 사용
+                    current_chat_history,
+                    mode=input_type,
+                    distance_to_similarity_func=self.search_engine.get_distance_to_similarity,
+                    protocol_info=protocol_info  # 프로토콜 정보 전달
+                )
+                response['similarity_score'] = max_similarity
+                response['search_iterations'] = iterations_used
+                response['search_quality'] = quality_info['quality_score']
+                
+                # Self-learning: Multi-step으로 개선된 후에도 threshold를 넘지 못하면 저장
+                # 백그라운드 태스크로 실행 (답변 반환을 기다리지 않음)
+                if max_similarity < 0.7:
+                    # 비동기로 실행 (답변 반환을 기다리지 않음)
+                    asyncio.create_task(self._save_qa_to_vectordb_async(user_input, response["answer"]))
         else:
-            # Case B: 유사도 < threshold -> RAG + Self-learning
-            
-            # 6-1. RAG 기반 답변 생성
-            response = self.response_generator.generate_response_with_persona(
+            # Case C: 감정+상황 없음 -> Vector DB 검색 없이 LLM 단독 답변
+            response = await self.response_generator._generate_llm_only_response(
                 user_input, 
-                retrieved_chunks, 
-                self.adler_persona,
-                self.chat_history,
-                mode=input_type,
-                distance_to_similarity_func=self.search_engine.get_distance_to_similarity
+                protocol_guidance['protocol_prompt'],  # 프로토콜 통합 페르소나 사용
+                current_chat_history,
+                self.counseling_keywords,
+                protocol_info=protocol_info  # 프로토콜 정보 전달
             )
-            response['similarity_score'] = max_similarity
-            response['search_iterations'] = iterations_used
-            response['search_quality'] = quality_info['quality_score']
-            
-            # 6-2. Self-learning: Multi-step으로 개선된 후에도 threshold를 넘지 못하면 저장
-            # 백그라운드 태스크로 실행 (답변 반환을 기다리지 않음)
-            if max_similarity < 0.7:
-                # 비동기로 실행 (답변 반환을 기다리지 않음)
-                asyncio.create_task(self._save_qa_to_vectordb_async(user_input, response["answer"]))
+            response['similarity_score'] = None
+            response['search_iterations'] = 0
+        
+        # 8. 프로토콜 정보 추가
+        response['protocol_info'] = protocol_info
         
         # ========================================
         # 스코어링 관련 코드 (주석처리됨 - 필요시 주석 해제)
         # ========================================
-        # 7. 로그 저장 (TherapyLogger 사용)
+        # 8. 로그 저장 (TherapyLogger 사용)
         # response = self.therapy_logger.log_conversation(
         #     user_input=user_input,
         #     response=response,
@@ -413,15 +522,22 @@ class RAGTherapySystem:
         # )
         # ========================================
         
-        # 대화 히스토리에 추가 (단기 기억)
-        self.chat_history.append({
+        # 9. 대화 히스토리에 추가 (단기 기억)
+        current_chat_history.append({
             "user": user_input,
             "assistant": response["answer"]
         })
         
         # 히스토리가 너무 길어지면 오래된 것 제거 (최대 10개 유지)
-        if len(self.chat_history) > 10:
-            self.chat_history = self.chat_history[-10:]
+        if len(current_chat_history) > 10:
+            current_chat_history[:] = current_chat_history[-10:]
+        
+        # 사용자별 세션에 저장
+        if user_id:
+            self.user_sessions[user_id] = current_chat_history
+        else:
+            # 하위 호환성: 기본 chat_history도 업데이트
+            self.chat_history = current_chat_history
         
         return response
     
