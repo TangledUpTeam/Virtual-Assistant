@@ -90,6 +90,15 @@ def get_email_agent():
         _email_agent = EmailAgent()
     return _email_agent
 
+# Insurance RAG 에이전트 호출
+_insurance_agent = None
+def get_insurance_agent():
+    global _insurance_agent
+    if _insurance_agent is None:
+        from multi_agent.agents.insurance_rag_agent import InsuranceRAGAgent
+        _insurance_agent = InsuranceRAGAgent()
+    return _insurance_agent
+
 def _parse_history_markdown(markdown: str) -> List[Dict[str, Any]]:
     """MemoryManager의 마크다운 히스토리를 파싱하여 리스트로 변환"""
     messages = []
@@ -231,6 +240,31 @@ async def email_tool(query: str) -> str:
         return result.get("answer", str(result))
     return str(result)
 
+# 보험/의료급여 문서 기반 정보 제공
+@tool
+async def insurance_tool(query: str) -> str:
+    """
+    보험/의료급여 법규 및 정책 문서 기반 정보 제공.
+    
+    사용 대상:
+    - 보험 상품, 의료급여 규정, 청구 절차, 보장 범위, 환수 기준 등의 법적/정책 정보 필요
+    - 민법, 의료급여법, 형법, 도로교통법 등 법령 관련 질문
+    - 상해요인 판단, 부당이득, 손해배상, 도급인 책임 등의 법적 판단 필요
+    - 판례, 선례, 사례 기반의 구체적 기준 확인 필요
+    
+    예시 질문:
+    - "민법 741조와 의료급여법 23조의 부당이득 개념의 차이는?"
+    - "의료급여비용 환수 기준은?"
+    - "자살시도자 의료급여 적용 기준은?"
+    - "도급인의 책임이 인정되는 경우는?"
+    - "부도/파산 시 결손처분 대상이 되는 조건은?"
+    
+    참고: 보험 상품 설명, 일반 상식, 감정 표현, 계획 수립 등은 다른 도구를 사용합니다.
+    """
+    agent = get_insurance_agent()
+    context = get_current_context()
+    return await agent.process(query, context=context)
+
 
 # 모든 에이전트를 도구로 해서 도구 리스트 리턴
 def get_all_agent_tools() -> List[Tool]:
@@ -243,4 +277,5 @@ def get_all_agent_tools() -> List[Tool]:
         therapy_tool,
         notion_tool,
         email_tool,
+        insurance_tool,
     ]
