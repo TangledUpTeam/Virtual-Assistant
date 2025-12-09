@@ -149,7 +149,6 @@ class PersonaManager:
                 self.adler_persona = rag_persona
                 self._rag_persona_ready = True
                 self._save_persona_cache(rag_persona)
-                print("[정보] RAG 페르소나 로딩 완료!")
             except Exception as e:
                 print(f"[경고] 백그라운드 페르소나 생성 실패: {e}")
                 print("[정보] 기본 페르소나를 계속 사용합니다.")

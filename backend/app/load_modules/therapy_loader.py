@@ -21,7 +21,6 @@ def init_therapy() -> bool:
     try:
         from sourcecode.automatic_save import automatic_save
         
-        print("\n🧠 [심리 상담] RAG 초기화 체크...")
         success = automatic_save()
         
         if success:
