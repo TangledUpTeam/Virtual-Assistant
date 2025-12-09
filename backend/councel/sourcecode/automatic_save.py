@@ -62,14 +62,14 @@ class AutomaticSaveManager:
                 try:
                     shutil.rmtree(dir_path)
                 except Exception as e:
-                    print(f"삭제 실패: {dir_path} - {e}") # 배포 전 삭제 예정
+                    print(f"삭제 실패") # 배포 전 삭제 예정
     
     # Python 스크립트 실행
     def run_script(self, script_path: Path) -> bool:
 
         # 스크립트 파일이 없으면 False 리턴
         if not script_path.exists():
-            print(f"오류: 스크립트 파일을 찾을 수 없습니다: {script_path}") # 배포 전 삭제 예정
+            print(f"오류: 스크립트 파일을 찾을 수 없습니다") # 배포 전 삭제 예정
             return False
         
         try:
@@ -83,7 +83,7 @@ class AutomaticSaveManager:
             )
             return result.returncode == 0
         except Exception as e:
-            print(f"스크립트 실행 중 오류: {e}") # 배포 전 삭제 예정
+            print(f"스크립트 실행 중 오류") # 배포 전 삭제 예정
             return False
     
     # 청크 파일 생성 함수(create_chunk_files.py 실행)
@@ -111,7 +111,7 @@ class AutomaticSaveManager:
                 print("\n청크 파일 생성 실패!") # 배포 전 삭제 예정
                 return False
         except Exception as e:
-            print(f"\n청크 파일 생성 중 오류 발생: {e}") # 배포 전 삭제 예정
+            print(f"\n청크 파일 생성 중 오류 발생") # 배포 전 삭제 예정
             import traceback
             traceback.print_exc()
             return False
@@ -141,7 +141,7 @@ class AutomaticSaveManager:
                 print("\n임베딩 파일 생성 실패!") # 배포 전 삭제 예정
                 return False
         except Exception as e:
-            print(f"\n임베딩 파일 생성 중 오류 발생: {e}") # 배포 전 삭제 예정
+            print(f"\n임베딩 파일 생성 중 오류 발생") # 배포 전 삭제 예정
             import traceback
             traceback.print_exc()
             return False
@@ -191,7 +191,7 @@ class AutomaticSaveManager:
                 print("\nVector DB 저장 실패!")
                 return False
         except Exception as e:
-            print(f"\nVector DB 저장 중 오류 발생: {e}")
+            print(f"\nVector DB 저장 중 오류 발생")
             import traceback
             traceback.print_exc()
             return False
@@ -216,7 +216,7 @@ class AutomaticSaveManager:
             return True
             
         except Exception as e:
-            print(f"\n프로세스 실패: {e}")
+            print(f"\n프로세스 실패")
             self.rollback()
             return False
 
