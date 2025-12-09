@@ -50,7 +50,7 @@ def get_brainstorming_agent():
     return _brainstorming_agent
 
 
-# 업무 리포트 생성 및 실적 분석 에이전트 호출
+# 보고서 에이전트
 def get_report_agent():
     global _report_agent
     if _report_agent is None:

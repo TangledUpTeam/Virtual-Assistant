@@ -3,6 +3,7 @@ Report Agent Tools
 
 각 보고서 전문 에이전트를 LangChain Tool로 래핑합니다.
 ReportMainRouterAgent가 이 도구들을 호출하여 작업을 수행합니다.
+서브 에이전트 호출 전문
 
 LangChain 1.1.0 호환
 """

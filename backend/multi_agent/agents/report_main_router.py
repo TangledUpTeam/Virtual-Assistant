@@ -526,7 +526,7 @@ class ReportMainRouterAgent(ReportBaseAgent):
     @property
     def planning_agent(self):
         if self._planning_agent is None:
-            from multi_agent.agents.report_tools import get_planning_agent
+            from multi_agent.tools.report_tools import get_planning_agent
 
             self._planning_agent = get_planning_agent()
             if hasattr(self._planning_agent, "configure_prompts"):
@@ -536,7 +536,7 @@ class ReportMainRouterAgent(ReportBaseAgent):
     @property
     def report_agent(self):
         if self._report_agent is None:
-            from multi_agent.agents.report_tools import get_report_generation_agent
+            from multi_agent.tools.report_tools import get_report_generation_agent
 
             self._report_agent = get_report_generation_agent()
             if hasattr(self._report_agent, "configure_prompts"):
@@ -546,7 +546,7 @@ class ReportMainRouterAgent(ReportBaseAgent):
     @property
     def rag_agent(self):
         if self._rag_agent is None:
-            from multi_agent.agents.report_tools import get_report_rag_agent
+            from multi_agent.tools.report_tools import get_report_rag_agent
 
             self._rag_agent = get_report_rag_agent()
             if hasattr(self._rag_agent, "configure_prompts"):

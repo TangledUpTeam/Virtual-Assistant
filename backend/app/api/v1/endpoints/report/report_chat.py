@@ -61,7 +61,7 @@ async def chat_with_reports(
     try:
         # 인증 비활성화: current_user가 없어도 동작
         resolved_owner = current_user.name if current_user and current_user.name else "사용자"
-        from multi_agent.agents.report_tools import get_report_rag_agent
+        from multi_agent.tools.report_tools import get_report_rag_agent
         
         intent_router = IntentRouter()
 

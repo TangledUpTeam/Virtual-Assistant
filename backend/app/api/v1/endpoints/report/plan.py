@@ -40,7 +40,7 @@ async def generate_today_plan(
         target_date = request.target_date or date.today()
 
         # ReportPlanningAgent 사용
-        from multi_agent.agents.report_tools import get_planning_agent
+        from multi_agent.tools.report_tools import get_planning_agent
 
         planning_agent = get_planning_agent()
 
