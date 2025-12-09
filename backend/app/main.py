@@ -22,6 +22,9 @@ sys.path.insert(0, str(COUNCEL_DIR))
 
 from sourcecode.automatic_save import automatic_save
 
+# 모듈 RAG 초기화
+from app.load_modules import init_all_modules
+
 # Tools Router 추가
 import sys
 from pathlib import Path
@@ -60,6 +63,12 @@ async def lifespan(app: FastAPI):
             print("⚠️  Therapy Vector DB initialization failed")
     except Exception as e:
         print(f"⚠️  Therapy Vector DB initialization error: {e}")
+    
+    # 모듈별 RAG 초기화 (load_modules)
+    try:
+        init_all_modules()
+    except Exception as e:
+        print(f"⚠️  Module initialization error: {e}")
     
     yield
     
