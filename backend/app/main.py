@@ -17,10 +17,9 @@ warnings.filterwarnings("ignore", message=".*Future versions will require UUID v
 
 # 경로 설정
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Virtual-Assistant 루트
-COUNCEL_DIR = BASE_DIR / "backend" / "councel"
-sys.path.insert(0, str(COUNCEL_DIR))
 
-from sourcecode.automatic_save import automatic_save
+# 모듈 RAG 초기화
+from app.load_modules import init_all_modules
 
 # Tools Router 추가
 import sys
@@ -51,15 +50,11 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created")
     
-    # Vector DB 자동 생성 (심리 상담 시스템용)
+    # 모듈별 RAG 초기화 (load_modules)
     try:
-        success = automatic_save()
-        if success:
-            pass
-        else:
-            print("⚠️  Therapy Vector DB initialization failed")
+        init_all_modules()
     except Exception as e:
-        print(f"⚠️  Therapy Vector DB initialization error: {e}")
+        print(f"⚠️  Module initialization error: {e}")
     
     yield
     

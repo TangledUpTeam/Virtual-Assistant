@@ -97,7 +97,6 @@ class AutomaticSaveManager:
         
         # 폴더가 있고 파일도 있으면 건너뛰기
         if folder_exists and files_exist:
-            print("파일이 존재합니다. 건너뛰겠습니다.") # 배포 전 삭제 예정
             return True
         
         # 폴더가 없으면 생성
@@ -128,7 +127,6 @@ class AutomaticSaveManager:
         
         # 폴더가 있고 파일도 있으면 건너뛰기
         if folder_exists and files_exist:
-            print("파일이 존재합니다. 건너뛰겠습니다.") # 배포 전 삭제 예정
             return True
         
         # 폴더가 없으면 생성
@@ -174,7 +172,6 @@ class AutomaticSaveManager:
                     collection = client.get_collection(name="vector_adler")
                     count = collection.count()
                     if count > 0:
-                        print(f"Vector DB에 이미 데이터가 존재합니다 ({count}개). 건너뛰기...") # 배포 전 삭제 예정
                         return True
                 except Exception:
                     # 컬렉션이 없으면 계속 진행
@@ -216,9 +213,6 @@ class AutomaticSaveManager:
                 raise Exception("Vector DB 저장 실패")
             
             # 성공
-            print("\n" + "="*60)
-            print("전체 프로세스 완료!")
-            print("="*60)
             return True
             
         except Exception as e:

@@ -13,7 +13,7 @@ COUNCEL_DIR = Path(__file__).parent.parent.parent.parent / "councel"
 sys.path.insert(0, str(COUNCEL_DIR))
 
 # RAG 심리 상담 시스템 메인코드 임포트
-from sourcecode.persona.rag_therapy import RAGTherapySystem
+from sourcecode.rag_therapy import RAGTherapySystem
 
 # 심리 상담 서비스 클래스(싱글톤 인스턴스)
 class TherapyService:
@@ -51,7 +51,7 @@ class TherapyService:
     
     # 상담 응답 생성
     # 사용자의 입력을 받아 응답 생성 -> RAG 심리 상담 시스템의 chat 함수 호출
-    async def chat(self, user_input: str, enable_scoring: bool = True) -> Dict[str, Any]:
+    async def chat(self, user_input: str, enable_scoring: bool = True, user_id: Optional[str] = None) -> Dict[str, Any]:
 
         # 상담 시스템 사용 가능 여부가 불가능하면 return 반환
         if not self.is_available():
@@ -65,7 +65,7 @@ class TherapyService:
         
         try:
             # RAG 시스템으로 상담 진행
-            response = await self._rag_system.chat(user_input)
+            response = await self._rag_system.chat(user_input, user_id=user_id)
             return response
         except Exception as e:
             print(f"상담 처리 중 오류: {e}")
@@ -78,4 +78,17 @@ class TherapyService:
                 "continue_conversation": True,
                 "scoring": None,
             }
+    
+    # 사용자 세션 초기화
+    def reset_session(self, user_id: Optional[str] = None) -> bool:
+        """사용자 세션 초기화"""
+        if not self.is_available():
+            return False
+        
+        try:
+            self._rag_system.reset_session(user_id=user_id)
+            return True
+        except Exception as e:
+            print(f"세션 초기화 중 오류: {e}")
+            return False
 
