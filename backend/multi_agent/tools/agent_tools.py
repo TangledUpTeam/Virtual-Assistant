@@ -22,6 +22,7 @@ _report_agent = None
 _therapy_agent = None
 _notion_agent = None
 _email_agent = None
+_insurance_agent = None
 
 # MemoryManager 초기화
 memory_manager = MemoryManager()
@@ -89,6 +90,14 @@ def get_email_agent():
         from backend.multi_agent.agents.email_agent import EmailAgent
         _email_agent = EmailAgent()
     return _email_agent
+
+# Insurance RAG 에이전트 호출
+def get_insurance_agent():
+    global _insurance_agent
+    if _insurance_agent is None:
+        from backend.multi_agent.agents.insurance_rag_agent import InsuranceRAGAgent
+        _insurance_agent = InsuranceRAGAgent()
+    return _insurance_agent
 
 def _parse_history_markdown(markdown: str) -> List[Dict[str, Any]]:
     """MemoryManager의 마크다운 히스토리를 파싱하여 리스트로 변환"""
@@ -231,6 +240,14 @@ async def email_tool(query: str) -> str:
         return result.get("answer", str(result))
     return str(result)
 
+# 보험/의료급여 관련 문서 검색 및 답변
+@tool
+async def insurance_tool(query: str) -> str:
+    """보험 상품, 의료급여 법규, 청구 절차, 보장 범위 등 보험 관련 정보를 제공합니다. 의료급여법, 보험약관, 특약 조건 등을 검색하여 답변합니다."""
+    agent = get_insurance_agent()
+    context = get_current_context()
+    return await agent.process(query, context=context)
+
 
 # 모든 에이전트를 도구로 해서 도구 리스트 리턴
 def get_all_agent_tools() -> List[Tool]:
@@ -243,4 +260,5 @@ def get_all_agent_tools() -> List[Tool]:
         therapy_tool,
         notion_tool,
         email_tool,
+        insurance_tool,
     ]
