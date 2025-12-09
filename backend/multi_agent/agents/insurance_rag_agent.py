@@ -34,11 +34,15 @@ class InsuranceRAGAgent(BaseAgent):
     # 문서 검색 및 답변을 생성해주는 비동기 함수
     async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> str:
 
+        print(f"\n[INSURANCE AGENT] Processing query: {query[:100]}...")
+        
         try:
             # 컨텍스트에서 top_k 추출 (기본값: 5)
             top_k = 5
             if context and "top_k" in context:
                 top_k = context["top_k"]
+            
+            print(f"[INSURANCE AGENT] Using top_k={top_k}")
             
             # RAG 파이프라인으로 답변 생성
             result = self.rag_pipeline.run(
@@ -46,11 +50,18 @@ class InsuranceRAGAgent(BaseAgent):
                 top_k=top_k
             )
             
+            print(f"[INSURANCE AGENT] Generated answer length: {len(result.answer)} chars")
+            print(f"[INSURANCE AGENT] Answer: {result.answer[:200]}...")  # 첫 200자만 출력
+            
             # 답변 반환
             return result.answer
             
         except Exception as e:
-            return f"보험 문서 검색 중 오류가 발생했습니다: {str(e)}"
+            error_msg = f"보험 문서 검색 중 오류가 발생했습니다: {str(e)}"
+            print(f"[INSURANCE AGENT ERROR] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return error_msg
     
     # 에이전트 기능 목록 리턴 함수
     def get_capabilities(self) -> list:

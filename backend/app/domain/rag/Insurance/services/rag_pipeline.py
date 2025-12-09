@@ -3,21 +3,16 @@ RAG Pipeline - Orchestrator
 """
 import time
 from typing import Optional, Dict, Any
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 
-from ..core.models import Query, GenerationResult
-from ..core.config import config
-from ..core.exceptions import InsuranceRAGException
+from .models import Query, GenerationResult
+from ..config import insurance_config
+from .exceptions import InsuranceRAGException
+from .providers import SimpleVectorStore, SimpleEmbeddingProvider, SimpleLLMProvider
 
-from ..infrastructure.vectorstore.base import BaseVectorStore
-from ..infrastructure.vectorstore.chroma import ChromaVectorStore
-from ..infrastructure.embeddings.base import BaseEmbeddingProvider
-from ..infrastructure.embeddings.openai import OpenAIEmbeddingProvider
-from ..infrastructure.llm.base import BaseLLMProvider
-from ..infrastructure.llm.openai import OpenAILLMProvider
-
-from .document_processor import DocumentProcessor
 from .retriever import Retriever
 from .generator import Generator
+
 
 
 class RAGPipeline:
@@ -25,10 +20,9 @@ class RAGPipeline:
     
     def __init__(
         self,
-        vector_store: Optional[BaseVectorStore] = None,
-        embedding_provider: Optional[BaseEmbeddingProvider] = None,
-        llm_provider: Optional[BaseLLMProvider] = None,
-        document_processor: Optional[DocumentProcessor] = None,
+        vector_store: Optional[SimpleVectorStore] = None,
+        embedding_provider: Optional[SimpleEmbeddingProvider] = None,
+        llm_provider: Optional[SimpleLLMProvider] = None,
         retriever: Optional[Retriever] = None,
         generator: Optional[Generator] = None
     ):
@@ -39,7 +33,6 @@ class RAGPipeline:
             vector_store: 벡터 스토어 (None이면 기본 ChromaDB 사용)
             embedding_provider: 임베딩 제공자 (None이면 기본 OpenAI 사용)
             llm_provider: LLM 제공자 (None이면 기본 OpenAI 사용)
-            document_processor: 문서 처리기
             retriever: 검색기
             generator: 답변 생성기
         """
@@ -49,7 +42,6 @@ class RAGPipeline:
         self.llm_provider = llm_provider or self._create_default_llm_provider()
         
         # Service 레이어 초기화
-        self.document_processor = document_processor or DocumentProcessor()
         self.retriever = retriever or Retriever(
             vector_store=self.vector_store,
             embedding_provider=self.embedding_provider
@@ -159,41 +151,39 @@ class RAGPipeline:
             "embedding_dimension": self.embedding_provider.get_embedding_dimension(),
             "llm_model": self.llm_provider.get_model_name(),
             "config": {
-                "top_k": config.top_k,
-                "similarity_threshold": config.similarity_threshold,
-                "chunk_size": config.chunk_size,
-                "chunk_overlap": config.chunk_overlap
+                "top_k": insurance_config.RAG_TOP_K,
+                "similarity_threshold": insurance_config.RAG_MIN_SIMILARITY_THRESHOLD,
+                "chunk_size": insurance_config.RAG_CHUNK_SIZE,
+                "chunk_overlap": insurance_config.RAG_CHUNK_OVERLAP
             }
         }
     
-    def _create_default_vector_store(self) -> BaseVectorStore:
+    def _create_default_vector_store(self) -> SimpleVectorStore:
         """기본 벡터 스토어 생성 (ChromaDB)"""
-        from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
-        
         embedding_function = OpenAIEmbeddingFunction(
-            api_key=config.openai_api_key,
-            model_name=config.embedding_model
+            api_key=insurance_config.OPENAI_API_KEY,
+            model_name=insurance_config.EMBEDDING_MODEL
         )
         
-        return ChromaVectorStore(
-            collection_name=config.collection_name,
-            persist_directory=config.vector_store_path,
+        return SimpleVectorStore(
+            collection_name=insurance_config.CHROMA_COLLECTION_NAME,
+            persist_directory=insurance_config.CHROMA_PERSIST_DIRECTORY,
             embedding_function=embedding_function
         )
     
-    def _create_default_embedding_provider(self) -> BaseEmbeddingProvider:
+    def _create_default_embedding_provider(self) -> SimpleEmbeddingProvider:
         """기본 임베딩 제공자 생성 (OpenAI)"""
-        return OpenAIEmbeddingProvider(
-            model=config.embedding_model,
-            dimensions=config.embedding_dimensions
+        return SimpleEmbeddingProvider(
+            model=insurance_config.EMBEDDING_MODEL,
+            dimensions=insurance_config.EMBEDDING_DIMENSION
         )
     
-    def _create_default_llm_provider(self) -> BaseLLMProvider:
+    def _create_default_llm_provider(self) -> SimpleLLMProvider:
         """기본 LLM 제공자 생성 (OpenAI)"""
-        return OpenAILLMProvider(
-            model=config.llm_model,
-            temperature=config.llm_temperature,
-            max_tokens=config.llm_max_tokens
+        return SimpleLLMProvider(
+            model=insurance_config.OPENAI_MODEL,
+            temperature=insurance_config.OPENAI_TEMPERATURE,
+            max_tokens=insurance_config.OPENAI_MAX_TOKENS
         )
 
 
