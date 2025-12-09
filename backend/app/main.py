@@ -20,7 +20,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Virtual-Assistant �
 
 # 모듈 RAG 초기화
 from app.load_modules import init_all_modules
-from app.load_modules.report_loader import init_reports
 
 # Tools Router 추가
 import sys
@@ -56,12 +55,6 @@ async def lifespan(app: FastAPI):
         init_all_modules()
     except Exception as e:
         print(f"⚠️  Module initialization error: {e}")
-    
-    # 보고서 모듈 초기화 (ChromaDB + PostgreSQL)
-    try:
-        init_reports()
-    except Exception as e:
-        print(f"⚠️  Report initialization error: {e}")
     
     yield
     
@@ -100,17 +93,13 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 PUBLIC_DIR = BASE_DIR / "public"
 RENDERER_DIR = BASE_DIR / "renderer"
 
-# 정적 파일 서빙
-app.mount("/public", StaticFiles(directory=str(PUBLIC_DIR)), name="public")
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
-app.mount("/renderer", StaticFiles(directory=str(RENDERER_DIR)), name="renderer")
-
 # 보고서 HTML 파일 서빙 (타입별로 분리)
+# 중요: 더 구체적인 경로를 먼저 마운트해야 함
 REPORTS_BASE_DIR = BASE_DIR / "backend" / "output"
 # 디렉토리가 없으면 생성
 REPORTS_BASE_DIR.mkdir(parents=True, exist_ok=True)
 
-# 일일보고서
+# 일일보고서 (더 구체적인 경로를 먼저 마운트)
 daily_dir = REPORTS_BASE_DIR / "daily"
 daily_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static/reports/daily", StaticFiles(directory=str(daily_dir)), name="reports_daily")
@@ -124,6 +113,11 @@ app.mount("/static/reports/weekly", StaticFiles(directory=str(weekly_dir)), name
 monthly_dir = REPORTS_BASE_DIR / "monthly"
 monthly_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static/reports/monthly", StaticFiles(directory=str(monthly_dir)), name="reports_monthly")
+
+# 정적 파일 서빙 (보고서 경로 이후에 마운트)
+app.mount("/public", StaticFiles(directory=str(PUBLIC_DIR)), name="public")
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.mount("/renderer", StaticFiles(directory=str(RENDERER_DIR)), name="renderer")
 
 print(f"✅ 보고서 HTML 서빙 경로 등록:")
 print(f"   - /static/reports/daily -> {daily_dir}")

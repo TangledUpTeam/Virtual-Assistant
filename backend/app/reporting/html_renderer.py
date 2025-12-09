@@ -14,14 +14,16 @@ from app.domain.report.core.schemas import CanonicalReport
 class HTMLReportRenderer:
     """HTML 보고서 렌더러"""
     
-    # 프로젝트 루트 찾기
-    _BASE_DIR = Path(__file__).resolve().parent.parent.parent
+    # 프로젝트 루트 찾기 (Virtual-Assistant 루트)
+    # backend/app/reporting/html_renderer.py -> parent.parent.parent.parent = Virtual-Assistant 루트
+    _BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
     
     # 템플릿 디렉토리
-    TEMPLATE_DIR = _BASE_DIR / "Data" / "reports" / "html"
+    TEMPLATE_DIR = _BASE_DIR / "backend" / "Data" / "reports" / "html"
     
     # 출력 디렉토리 (타입별로 분리)
-    OUTPUT_BASE_DIR = _BASE_DIR / "output"
+    # main.py와 동일한 경로: Virtual-Assistant/backend/output
+    OUTPUT_BASE_DIR = _BASE_DIR / "backend" / "output"
     
     def __init__(self):
         """Jinja2 Environment 초기화"""
