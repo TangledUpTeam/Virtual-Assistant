@@ -21,8 +21,10 @@ if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') else None
 
 # 프로젝트 루트를 Python path에 추가
-backend_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(backend_dir))
+backend_dir = Path(__file__).resolve().parent.parent  # backend/
+project_root = backend_dir.parent  # Virtual-Assistant 루트
+sys.path.insert(0, str(project_root))  # tools 모듈 import를 위해 프로젝트 루트 추가
+sys.path.insert(0, str(backend_dir))  # app 모듈 import를 위해 backend 추가
 
 # 환경 변수 로드 (config 설정을 위해 필요)
 from dotenv import load_dotenv
@@ -175,7 +177,7 @@ def convert_to_canonical_report(raw_json: Dict[str, Any], owner: str) -> Canonic
     report = CanonicalReport(
         report_id=str(uuid.uuid4()),
         report_type="daily",
-        owner=성명,
+        owner=owner,  # owner 파라미터 사용
         period_start=period_date,
         period_end=period_date,
         daily=canonical_daily
