@@ -4,7 +4,6 @@
  */
 
 import { sendMultiAgentMessage, initChatbotService } from './chatbotService.js';
-import { getTodayPlan, saveSelectedTasks } from '../tasks/taskService.js';
 
 // 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
 const accessToken = sessionStorage.getItem('access_token');
@@ -27,6 +26,7 @@ let messagesContainer = null;
 let chatInput = null;
 let sendBtn = null;
 let isChatPanelInitialized = false;
+let userDisplayEl = null;
 
 /**
  * 채팅 패널 초기화
@@ -43,6 +43,12 @@ export function initChatPanel() {
   messagesContainer = document.getElementById('messages');
   chatInput = document.getElementById('chat-input');
   sendBtn = document.getElementById('send-btn');
+  userDisplayEl = document.getElementById('user-display');
+  
+  // 사용자 표시 숨기기 (보고서 기능에서만 사용자 이름 필요)
+  if (userDisplayEl) {
+    userDisplayEl.style.display = 'none';
+  }
 
   if (!chatPanel || !messagesContainer || !chatInput || !sendBtn) {
     console.error('❌ 채팅 패널 요소를 찾을 수 없습니다.');
@@ -50,7 +56,7 @@ export function initChatPanel() {
   }
 
   // 초기 메시지 추가
-  addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊\n\n💡 Tip: Ctrl+Shift+R을 눌러 보고서 & 업무 관리 패널을 열 수 있습니다!');
+  addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊');
 
   // 이벤트 리스너 등록
   sendBtn.addEventListener('click', handleSendMessage);
@@ -244,8 +250,9 @@ async function handleSendMessage() {
 
   try {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
+    // 키워드 기반 하드코딩 제거: 백엔드 인텐트 분류에 맡김
     const result = await sendMultiAgentMessage(text);
-
+    
     // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
     const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
 
@@ -253,33 +260,81 @@ async function handleSendMessage() {
     if (result.agent_used) {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
     }
+    
+    // Intent 기준 UI 분기 (백엔드 응답 기반)
+    const intent = result.intent;
+    const agent = result.agent_used;
+    let answer = result.answer;
 
-    // 브레인스토밍 에이전트인 경우 (특수 처리)
+    // 디버깅: 응답 내용 확인
+    console.log('[DEBUG] 프론트엔드 응답 확인:', {
+      intent,
+      agent,
+      answer_preview: answer ? answer.substring(0, 100) : 'null',
+      has_marker: answer ? answer.includes('__INTENT_LOOKUP__') : false
+    });
+
+    // report_tool이 lookup intent를 처리한 경우 감지 (특수 마커)
+    // agent가 'report' 또는 'report_tool'이고, answer에 마커가 있으면 RAG 응답으로 처리
+    if ((agent === 'report' || agent === 'report_tool') && answer) {
+      if (answer.includes('__INTENT_LOOKUP__')) {
+        // lookup intent인 경우: 마커 제거하고 RAG 응답으로 처리
+        answer = answer.replace('__INTENT_LOOKUP__', '');
+        console.log('[DEBUG] ✅ RAG 응답으로 처리 (마커 감지됨)');
+        // RAG 응답이므로 마크다운 렌더링 적용
+        addMessage('assistant', answer, true); // isMarkdown = true
+        return;
+      }
+      // 마커가 없으면 보고서 도구 버튼 표시 (아래 조건문에서 처리)
+    }
+
+    // 1. RAG(intent === 'lookup' 또는 'rag')면 → LLM 응답만 보여주고 종료
+    if (intent === 'lookup' || intent === 'rag') {
+      addMessage('assistant', answer, isMarkdown);
+      return;
+    }
+
+    // 2. Planning(intent === 'planning')이면 → 업무 카드 UI 표시
+    if (intent === 'planning' || agent === 'planning' || agent === 'planning_tool') {
+      await loadAndDisplayTaskCardsInChat();
+      return;
+    }
+
+    // 3. 보고서 작성(intent === 'report')이면 → 보고서 도구 열기 버튼만 제공
+    if (intent === 'report' || intent === 'report_write' || agent === 'report' || agent === 'report_tool') {
+      addMessage('assistant', '네 보고서 작성 기능을 도와드리겠습니다!');
+      addConfirmationButton('📝 보고서 도구 열기', () => {
+        openReportPopup();
+        addMessage('assistant', '보고서 도구를 열었습니다! 📝');
+      });
+      return;
+    }
+    
+    // 브레인스토밍 에이전트가 사용되었으면
     if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
+      addMessage('assistant', result.answer);
+
       // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
       if (result.answer.includes('SUGGESTION:')) {
         const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
-        addMessage('assistant', cleanMessage, isMarkdown);
-
+        // 메시지는 이미 addMessage로 출력되었으므로 버튼만 추가
         addConfirmationButton('브레인스토밍 시작하기', () => {
           openBrainstormingPopup();
           addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
         });
       }
-      // 2. 그 외 (일반 답변 + 도구 열기 버튼)
+      // 2. 그 외 (RAG 답변 등) - 자동 실행하지 않고 버튼 표시
       else {
-        addMessage('assistant', result.answer, isMarkdown);
-
         addConfirmationButton('브레인스토밍 도구 열기', () => {
           openBrainstormingPopup();
           addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
         });
       }
+      return;
     }
+    
     // 그 외 일반 에이전트
-    else {
-      addMessage('assistant', result.answer, isMarkdown);
-    }
+    addMessage('assistant', result.answer, isMarkdown);
   } catch (error) {
     console.error('❌ 채팅 오류:', error);
     addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
@@ -290,16 +345,37 @@ async function handleSendMessage() {
 }
 
 /**
+ * 메인 챗봇에서 업무 카드 UI 로드 및 표시
+ */
+async function loadAndDisplayTaskCardsInChat() {
+  try {
+    // taskUI.js의 함수들을 동적으로 import
+    const { addTaskRecommendations } = await import('../report/taskUI.js');
+    const { getTodayPlan } = await import('../report/taskService.js');
+    
+    const planResult = await getTodayPlan();
+    
+    if (planResult.type === 'task_recommendations' && planResult.data.tasks && planResult.data.tasks.length > 0) {
+      addTaskRecommendations(
+        planResult.data,
+        addMessage,
+        messagesContainer
+      );
+    } else {
+      addMessage('assistant', '추천할 업무가 없습니다. 직접 작성해주세요! 😊');
+    }
+  } catch (error) {
+    console.error('❌ 업무 카드 로드 오류:', error);
+    addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
+  }
+}
+
+/**
  * 간단한 응답 처리
  */
 async function handleSimpleResponse(text) {
   const lower = text.toLowerCase();
 
-  // 보고서/업무 관련 요청은 다른 패널로 안내
-  if (lower.includes('보고서') || lower.includes('추천') || lower.includes('업무')) {
-    addMessage('assistant', '보고서 및 업무 관리는 **Ctrl+Shift+R**을 눌러\n보고서 & 업무 패널을 열어주세요! 📝');
-    return;
-  }
 
   // 브레인스토밍 안내
   if (lower.includes('브레인') || lower.includes('아이디어')) {
@@ -308,7 +384,7 @@ async function handleSimpleResponse(text) {
   }
 
   // 일반 응답
-  addMessage('assistant', `"${text}" - 답변을 준비 중입니다! 😊\n\n사용 가능한 기능:\n• Ctrl+Shift+R - 보고서 & 업무 관리\n• Ctrl+Shift+B - 브레인스토밍`);
+  addMessage('assistant', `"${text}" - 답변을 준비 중입니다! 😊\n\n사용 가능한 기능:\n• Ctrl+Shift+B - 브레인스토밍`);
 }
 
 /**
@@ -331,7 +407,14 @@ function addMessage(role, text, isMarkdown = false) {
 
   // 마크다운 렌더링 (HR RAG 등)
   if (isMarkdown && role === 'assistant' && typeof marked !== 'undefined') {
-    bubble.innerHTML = marked.parse(text);
+    // marked.js 버전 호환성 처리
+    if (typeof marked.parse === 'function') {
+      bubble.innerHTML = marked.parse(text);
+    } else if (typeof marked === 'function') {
+      bubble.innerHTML = marked(text);
+    } else {
+      bubble.textContent = text;
+    }
   } else {
     bubble.textContent = text;
   }
@@ -342,6 +425,7 @@ function addMessage(role, text, isMarkdown = false) {
 
   console.log(`💬 [${role}]: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
 }
+
 
 /**
  * 확인 버튼 추가
@@ -526,6 +610,38 @@ function openBrainstormingPopup() {
   } else {
     console.error('❌ Electron IPC를 사용할 수 없습니다.');
     addMessage('assistant', '❌ 브레인스토밍 팝업을 열 수 없습니다.');
+  }
+}
+
+/**
+ * 보고서 팝업 열기
+ */
+function openReportPopup() {
+  console.log('📝 보고서 팝업 열기');
+
+  // Electron IPC로 메인 프로세스에 팝업 요청
+  if (window.require) {
+    const { ipcRenderer } = window.require('electron');
+    ipcRenderer.send('open-report-popup');
+
+    // 챗봇 패널 숨기기
+    chatPanel.style.display = 'none';
+    isPanelVisible = false;
+
+    // 팝업 종료 이벤트 리스너
+    ipcRenderer.once('report-closed', (event, data) => {
+      console.log('📝 보고서 팝업 완료:', data);
+
+      // 챗봇 패널 복구
+      chatPanel.style.display = 'flex';
+      isPanelVisible = true;
+
+      // 완료 메시지 추가
+      addMessage('assistant', '보고서 작성이 종료되었습니다.');
+    });
+  } else {
+    console.error('❌ Electron IPC를 사용할 수 없습니다.');
+    addMessage('assistant', '❌ 보고서 팝업을 열 수 없습니다.');
   }
 }
 

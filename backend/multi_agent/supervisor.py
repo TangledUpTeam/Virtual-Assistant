@@ -118,15 +118,27 @@ class SupervisorAgent:
      * "아이디어를 만든다는 게 뭐야?" → 정보 질문
      * "브레인스토밍 방법 알려줘" → 기법 설명 요청
 
-4. **planner_tool**: 일정 관리, 계획 수립
-   - 키워드: 일정, 계획, 스케줄, 할 일, 업무, 작업, 정리, 관리, 시간, 오늘, 내일, 이번 주, 다음 주, 우선순위, 마감, 데드라인, 목표, 생산성, 효율, 타임라인, 일과
-   - 예시: "오늘 할 일을 정리해줘", "일정 관리 방법 알려줘", "업무 우선순위 정하는 법"
+4. **report_tool**: 보고서 기능 전반 (업무 플래닝, 보고서 생성, 보고서 기반 Q&A)
 
-5. **report_tool**: 리포트 생성, 실적 분석
-   - 키워드: 리포트, 보고서, 실적, 성과, 분석, 통계, 데이터, 결과, 평가, 지표, KPI, 매출, 수치, 추이, 트렌드, 요약, 정리, 일간, 주간, 월간, 분기, 연간
-   - 예시: "이번 주 실적을 분석해줘", "월간 리포트 작성해줘", "성과 평가 자료 만들어줘"
+   다음과 같은 경우에 report_tool로 라우팅합니다:
 
-6. **therapy_tool**: 심리 상담, 정신 건강 지원
+   **(1) 금일 업무 플래닝 / 오늘 업무 추천**
+   - 키워드: 오늘 할 일, 오늘 업무, 플래닝, 업무 추천, 계획 추천, 업무 정리
+   - 예시: "오늘 할 일 추천해줘", "금일 업무 어떻게 정리하지?"
+
+   **(2) 보고서 생성(일일/주간/월간)**
+   - 키워드: 보고서, 리포트, 일일보고서, 주간보고서, 월간보고서, 작성, 생성
+   - 예시: "일일보고서 작성해줘", "이번 주 보고서 만들어줘"
+
+   **(3) 보고서 기반 질의응답(RAG 검색)**
+   - 키워드: 지난주, 전날, 미종결, 기록 찾아줘, 보고서에서, 언제 했었지?, 과거 업무
+   - 예시: "지난주 미종결 업무 뭐였지?", "어제 누구 상담했었어?"
+
+   상세한 판단, 프롬프트 엔지니어링, 보고서 흐름 FSM, RAG 처리 등은 모두 report_tool 내부의 Router가 담당합니다.
+   Supervisor는 단순히 '보고서 관련 요청'을 식별해 report_tool로 넘기기만 합니다.
+
+
+5. **therapy_tool**: 심리 상담, 정신 건강 지원
    - 키워드: 
      * 기본 감정: 힘들어, 상담, 짜증, 우울, 불안, 스트레스, 고민, 걱정, 슬프, 외로, 화나, 답답, 심리, 아들러, 슬퍼, 슬프다
      * 부정적 감정: 절망, 포기, 무기력, 자책, 후회, 미안, 두려움, 공포, 불안감, 초조, 분노, 화남, 짜증나, 성가심, 불쾌, 슬픔, 비참, 절망적, 우울함, 침체, 외로움, 고독, 쓸쓸, 허전, 외톨이, 답답함, 막막, 난처, 곤란, 피곤, 지침, 무력감, 의욕없음, 수치, 수치심, 열받, 열받아, 화낼, 미치, 미쳐, 억울, 억울해, 멍하
@@ -142,7 +154,7 @@ class SupervisorAgent:
      * 영어: counseling, therapy, help, depressed, anxious, sad, angry, lonely, frustrated, stressed, worried, scared, afraid, fear, panic, hopeless, helpless, worthless, empty, guilt, shame, regret, remorse, jealous, envy, tired, exhausted, burnout, overwhelmed, confused, lost, psychology, mental health, counselor, therapist, support, comfort, encouragement, empathy, trauma, alcoholic, drunk, abusive, violence, trust, mistrust, trustworthy, parent, family, perfect, perfectionism, insecure, instability, inflexible, overbearing, control
    - 예시: "스트레스가 많아서 힘들어", "우울한 기분이 들어", "대인관계 문제로 고민이야", "번아웃이 와", "상사가 무서워", "자존감이 낮아", "트라우마가 있어"
 
-7. **notion_tool**: Notion 페이지 관리 (검색, 생성, 대화 내용 저장)
+6. **notion_tool**: Notion 페이지 관리 (검색, 생성, 대화 내용 저장)
    - **핵심 의도**: 사용자가 Notion에 무언가를 **저장, 기록, 메모**하거나, 기존 페이지를 **검색, 조회, 수정**하려는 경우
    - **사용 조건**:
      * 사용자가 Notion에 **실제로 페이지를 만들거나 내용을 저장**하려는 명확한 의도가 있을 때
@@ -255,8 +267,9 @@ class SupervisorAgent:
                     answer = msg.content
                     break
             
-            # 사용된 도구 추출
+            # 사용된 도구 추출 및 intent 추출
             intermediate_steps = []
+            detected_intent = None
             for msg in messages:
                 if hasattr(msg, 'tool_calls') and msg.tool_calls:
                     for tool_call in msg.tool_calls:
@@ -272,6 +285,22 @@ class SupervisorAgent:
                             "result": "success"
                         })
             
+            # report_tool이 사용된 경우, answer에서 intent 마커 확인
+            if agent_used == "report" and answer and answer.startswith("__INTENT_LOOKUP__"):
+                detected_intent = "lookup"
+                # 마커 제거 (프론트엔드에서도 처리하지만, 백엔드에서도 정리)
+                answer = answer.replace("__INTENT_LOOKUP__", "", 1)
+            elif agent_used == "report" and answer:
+                # report_tool이 사용되었지만 마커가 없는 경우, ReportAgent에서 intent 확인
+                try:
+                    from multi_agent.tools.agent_tools import get_report_agent
+                    report_agent = get_report_agent()
+                    if hasattr(report_agent, 'router'):
+                        detected_intent = await report_agent.router.classify_intent(request.query)
+                        print(f"[DEBUG] Supervisor - report_tool intent 추출: {detected_intent}")
+                except Exception as e:
+                    print(f"[WARNING] Intent 추출 실패: {e}")
+            
             # 처리 시간 계산
             processing_time = time.time() - start_time
             
@@ -280,6 +309,7 @@ class SupervisorAgent:
                 query=request.query,
                 answer=answer,
                 agent_used=agent_used,
+                intent=detected_intent,  # intent 필드 추가
                 intermediate_steps=intermediate_steps if intermediate_steps else [
                     {
                         "agent": agent_used,
@@ -362,4 +392,3 @@ class SupervisorAgent:
             })
         
         return agents
-
