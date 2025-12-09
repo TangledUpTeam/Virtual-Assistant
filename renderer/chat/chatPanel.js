@@ -142,7 +142,14 @@ function addMessage(role, text, agent = null) {
 
   // RAG(HR) 에이전트인 경우 마크다운 렌더링
   if (agent === 'rag' && typeof marked !== 'undefined') {
-    bubble.innerHTML = marked.parse(text);
+    // marked.js 버전 호환성 처리
+    if (typeof marked.parse === 'function') {
+      bubble.innerHTML = marked.parse(text);
+    } else if (typeof marked === 'function') {
+      bubble.innerHTML = marked(text);
+    } else {
+      bubble.textContent = text;
+    }
   } else {
     bubble.textContent = text;
   }

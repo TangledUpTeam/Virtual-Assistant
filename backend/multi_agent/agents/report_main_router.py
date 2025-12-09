@@ -16,17 +16,18 @@ from app.llm.client import LLMClient
 class ReportPromptRegistry:
     """
     Central registry for all report-related LLM prompts.
-
-    Unified structure:
-    - SYSTEM_PROMPT: global guardrails
-    - INTENT_PROMPT: classification instructions
-    - DOMAIN_GUIDANCE: per-domain guidance (planning/report/rag)
-    - ROUTING_INSTRUCTION: delegation guidance
+    Prompts are intentionally lightweight to avoid over-constraining the LLM.
     """
 
+    # ========================================
+    # 1. 라우팅 및 의도 분류 프롬프트
+    # ========================================
+
     SYSTEM_PROMPT = (
-        "You are the routing brain for all report workflows. Follow the rules, keep outputs deterministic, "
-        "and only use the provided tools or sub-agents. Do not invent new actions."
+        "You route user requests to one of the report agents. "
+        "Use simple reasoning. Do not force rigid rules. "
+        "Your job is to classify the user intent into one of: "
+        "lookup (RAG search), report_write, planning, or other."
     )
 
     ROUTING_INSTRUCTION = (
@@ -34,21 +35,89 @@ class ReportPromptRegistry:
         "and provide the minimal inputs required. Always keep context consistent."
     )
 
-    INTENT_PROMPT = """당신은 사용자의 요청을 분석하여 적절한 에이전트로 라우팅하는 전문가입니다.
+    INTENT_PROMPT = """사용자의 요청을 아래 네 가지 중 하나로 분류하세요:
 
-아래 3가지 에이전트 중 선택하세요:
-1. **planning**: 업무 플래닝/오늘 할 일 추천, 일정 관련
-2. **report**: 보고서 생성/작성 (일일/주간/월간)
-3. **rag**: 과거 업무 이력 검색·조회 (보고서 기반 QA)
+1) lookup  
+   - 과거 보고서 기반 조회  
+   - '누구', '언제', '무엇을 했었는지', '미종결', '조회', '검색', '찾아' 등  
+   - 날짜/고객/업무 내용 회상, 확인, 탐색
 
-반드시 JSON 형식으로만 답변하세요:
+2) report_write  
+   - 일일/주간/월간 보고서 생성 또는 수정  
+   - '보고서 작성', '일일보고서', '주간보고서', '정리해줘'
+
+3) planning  
+   - 오늘 할 일 추천, 일정 계획  
+   - '오늘 할 일', '업무 추천', '플랜', '계획', '일정'
+
+4) other  
+   - 위에 해당하지 않는 일반 대화
+
+너무 엄격한 규칙을 적용하지 말고, 자연스럽고 직관적으로 판단하세요.
+
+출력은 반드시 다음 JSON 형식:
 {
-  "intent": "planning|report|rag|unknown",
+  "intent": "lookup | report_write | planning | other",
   "confidence": 0.0 ~ 1.0,
-  "reason": "선택 이유"
+  "reason": "왜 그렇게 판단했는지 간단히"
 }
 """
     INTENT_USER_TEMPLATE = "사용자 요청: {query}"
+
+    # ========================================
+    # 2. 업무 플래닝 프롬프트
+    # ========================================
+
+    PLAN_SYSTEM_PROMPT = """당신은 사용자의 하루 업무 계획을 추천하는 AI 업무 플래너입니다.
+
+당신의 목표는 "오늘 수행할 업무를 3개 추천"하는 것입니다.
+
+사용 가능한 입력 데이터:
+1) 익일(next_day_plan): 전날 보고서에서 사용자가 직접 적어둔 내일 할 일 (최우선)
+2) 미종결(unresolved): 어제 처리되지 못한 업무 (2순위)
+3) 최근 3일 세부 업무 기록(similar_tasks): 사용자의 반복 업무 패턴 (보조 자료)
+4) 추가 업무 추천이 필요한 경우에만 ChromaDB 데이터를 사용
+
+업무 추천 규칙:
+- 반드시 3개 추천
+- next_day_plan → unresolved → similar_tasks 우선순위
+- 고객 이름 포함된 항목은 제외
+- title/description/priority/category/expected_time 포함
+
+출력은 반드시 JSON 형식:
+{
+  "tasks": [ {
+      "title": "업무 제목",
+      "description": "업무 설명",
+      "priority": "high|medium|low",
+      "expected_time": "예상 시간",
+      "category": "카테고리"
+    }],
+  "summary": "오늘 일정 요약"
+}
+"""
+
+    PLAN_USER_TEMPLATE = """날짜: {today}
+고객명: {owner}
+
+이전날 수행업무(업무 로그):
+{tasks_text}
+
+이전날 내일 업무 계획(next_day_plan) - **최우선**
+{next_day_plan_text}
+
+이전날 미종결업무(unresolved) - **2순위**
+{unresolved_text}
+
+최근3일업무기록(similar_tasks) (VectorDB) - **3순위**
+{similar_tasks_text}
+
+위 정보를 바탕으로 오늘 할 일 계획을 JSON 형식으로 작성하세요.
+"""
+
+    # ========================================
+    # 3. 일일보고서 작성 프롬프트
+    # ========================================
 
     TASK_PARSER_SYSTEM = """당신은 업무 기록을 구조화하는 AI입니다.
 
@@ -82,86 +151,25 @@ class ReportPromptRegistry:
 
 위 업무를 분석하여 JSON으로 변환해주세요."""
 
-    PLAN_SYSTEM_PROMPT = """너는 AI 업무 플래너이다.
+    # ========================================
+    # 4. 보고서 검색 (RAG) 프롬프트
+    # ========================================
 
-**우선순위 원서**:
-1. **내일 완성해야 할 업무 계획(next_day_plan) - 최우선*** (내일 마감이라면 필수)
-2. **미종결업무(unresolved)** (2순위)
-3. **최근 5일간 미완료 업무(similar_tasks)에서 미완료된 업무** (3순위)
+    RAG_SYSTEM_PROMPT = """당신은 일일보고서 데이터를 기반으로 사용자의 질문에 답변하는 AI 어시스턴트입니다.
 
-규칙:
-1. **최소 3개 이상 업무를 반드시 작성** (매우 중요!)
-2. **당일 업무 계획은최우선*: 내일 완성해야 할 업무 계획을반드시 포함 (내일 마감이라면 필수)
-3. **미종결업무**: 내일 미종결업무가 있으면2순위로 포함
-4. **미완료업무분석*: 최근 5일간 있었던 미종결업무 다음에 올릴 업무만을 포함하여 제공해야 함
-5. **반복 업무 우선 추천*: 최근 5일간 여러 번 발생한 업무 유형/고객/카테고리
-6. **긴급히 할 일 우선**: 
-   - 고객 상담 관련 업무 (현재 진행 중인 고객)
-   - 계약/보장 관련 업무
-   - 마감이 임박한 업무
-7. **우선순위가 높은 카테고리**: "고객 상담" > "계약 처리" > "문서 업무" > 기획
-8. **오늘 배치 가능한 업무**: 구체적이어야 하고 계획 가능해야 함
-9. 최근 업무 로그가 부족할 경우 부분적인 업무 추천:
-   - 고객 연락 연락
-   - 기존 고객 관계/계약 검토
-   - 신규 고객 발견 연락 준비
-   - 제품 정보 숙지 업무
-   - 보고서 작성/문서 처리
-10. 우선순위: high(긴급/중요), medium(보통), low(여유)
-11. 예상 시간: "30분", "1시간", "2시간" 등
-12. 카테고리: "고객 상담", "계약 처리", "문서 작업", "기획", "기술" 등
+**답변 규칙:**
+1. 주어진 청크(일일보고서 데이터)만 사용하여 답변하세요.
+2. 청크에 관련 정보가 있으면 반드시 그 내용을 바탕으로 구체적으로 답변하세요.
+3. 청크에 날짜 정보가 있으면 해당 날짜를 명시하세요.
+4. 여러 청크가 있으면 모두 종합하여 답변하세요.
+5. 청크에 정확한 정보가 없거나 관련성이 전혀 없을 때만 "해당 기간의 정보를 찾을 수 없습니다"라고 답변하세요.
 
-**중요**: 
-- **내일 업무 계획은최우선*이며, 반드시반드시 포함해야 함(내일 마감이라면 필수)
-- 활용된 최근 5일간 미완료 업무 텍스트만 포함하고, 그 외 다른 업무는 제외
-- 미완료 반복, 긴급 우선순위 카테고리, 배치 가능성을 기준으로 추천
-- 업무가 3개 미만이면 부족한 개수만큼 기본 업무를 채워야 합니다.
-
-반드시 JSON 형식으로 답변:
-{
-  "tasks": [
-    {
-      "title": "업무 제목",
-      "description": "업무 설명",
-      "priority": "high|medium|low",
-      "expected_time": "예상 시간",
-      "category": "카테고리"
-    }
-  ],
-  "summary": "오늘 일정 간단 요약 (1-2문장)"
-}
-
-중요: tasks 배열에는 최소 3개 이상의 작업을 포함해야 합니다.
-"""
-
-    PLAN_USER_TEMPLATE = """날짜: {today}
-고객명: {owner}
-
-이전날 수행업무(업무 로그):
-{tasks_text}
-
-이전날 내일 업무 계획(next_day_plan) - **최우선**
-{next_day_plan_text}
-
-이전날 미종결업무(unresolved) - **2순위**
-{unresolved_text}
-
-최근5일미완료업무(similar_tasks) (VectorDB) - **3순위**
-{similar_tasks_text}
-
-위 정보를 바탕으로 오늘 할 일 계획을 JSON 형식으로 작성하세요.
-
-**출력조건**:
-- 최소 3개 이상 업무를 반드시 작성
-- 내일 업무 계획 포함 (내일 마감이라면 필수)
-- 미종결/미완료 업무 우선 반영
-- 반복/긴급/우선순위 카테고리 고려, 배치 가능성 고려"""
-
-    RAG_SYSTEM_PROMPT = (
-        "주어진일일 보고서 청크만 사용하여 사용자의 질문에 답변하세요. "
-        "문장이 없는 경우 청크가 없다고 명시하세요."
-    )
+**중요:** 청크가 제공되었으면 반드시 그 내용을 바탕으로 답변을 생성하세요. "청크가 없습니다"라고 답변하지 마세요."""
     RAG_USER_TEMPLATE = "질문: {query}\n\n청크:\n{context}"
+
+    # ========================================
+    # 5. 주간보고서 작성 프롬프트
+    # ========================================
 
     WEEKLY_REPORT_SYSTEM = """당신은 일일보고서를 기반으로 주간보고서를 작성하는 지시서입니다.
 
@@ -180,7 +188,7 @@ ChromaDB에서 검색된 일일보고서 청크 배열이 주어집니다.
   }
 }
 
-검색조건: week = "{week_number}", level = "daily"
+검색조건: week = "{week_number_placeholder}", level = "daily"
 총 20개청크가 제공됩니다.
 
 ## 주간보고서 작성 규칙
@@ -200,8 +208,12 @@ ChromaDB에서 검색된 일일보고서 청크 배열이 주어집니다.
 - **반드시 해당 주의 월요일~금요일 5일 모두 포함** ("2025-11-03", "2025-11-04", "2025-11-05", "2025-11-06", "2025-11-07")
 - 날짜는 YYYY-MM-DD 형식으로 통일
 - 각 날짜별로 업무 3개이상을 요약 (배열이어도 무방)
-- 시간 정보(예: [09:00-10:00])가 있으면 유지하고 업무 내용만 추출
-- 업무 내용은 간결하고 구체적으로 작성
+- **중요 규칙**:
+  * 시간 정보(예: [09:00-10:00])는 **반드시 제거**하고 업무 내용만 추출
+  * 고객 이름은 **반드시 제거**하고 업무 내용만 작성
+  * 예: "[09:00-10:00] 박서연 고객 상담 자료 정리" → "상담 자료 정리"
+  * 예: "[10:00-11:00] 김태은 고객 보장 점검" → "보장 점검"
+- 업무 내용은 간결하고 구체적으로 작성 (고객명 없이)
 
 출력 형식:
 {
@@ -215,9 +227,13 @@ ChromaDB에서 검색된 일일보고서 청크 배열이 주어집니다.
 ### 3. 주간 중요 업무 (weekly_highlights)
 - chunk_type="pending"의 모든 청크를 분석
 - 다음 키워드와 관련된 항목만 선별: "미종결", "지연", "콜백", "진행중", "미완료", "처리 못함"
-- 반복적인 항목은 제거
-- 3개이상 요약
-- 각 항목은 구조화된 업무 문장으로 작성
+- **중요 규칙**:
+  * **고객 이름은 반드시 제거**하고 업무 내용만 작성
+  * **반복적으로 나타나는 업무 패턴만 추출** (3개)
+  * 예: "문은가 고객 추가 자료 대기" → "추가 자료 대기"
+  * 예: "박이린 고객 상담 자료 정리 필요" → "상담 자료 정리"
+  * 동일한 업무 패턴이 여러 고객에 대해 반복되면 하나로 통합
+- 각 항목은 구조화된 업무 문장으로 작성 (고객명 없이)
 
 ### 4. 메모/비고 (notes)
 - chunk_type="plan"의 청크 중 notes 성격 문장을 추출
@@ -255,6 +271,10 @@ ChromaDB에서 검색된 일일보고서 청크 배열이 주어집니다.
 3. 날짜는 YYYY-MM-DD 형식만 사용하세요.
 4. 배열이나 문자열이어도 동일한 필드는 모두 반환하세요.
 """
+
+    # ========================================
+    # 6. 월간보고서 작성 프롬프트
+    # ========================================
 
     MONTHLY_REPORT_SYSTEM = """당신은 주간보고서와 일일보고서 청크를 기반으로 월간보고서를 작성하는 지시서입니다.
 
@@ -296,18 +316,37 @@ PostgreSQL에서 조회한 월간 KPI 원시 데이터입니다.
 ## 월간보고서 작성 규칙
 
 ### 1. 월간 핵심 지표
-- KPI JSON의 숫자 값만 사용하세요. 별도 추론/보정 없이 작성합니다.
-- 값이 없으면 필드를 생략합니다.
-- 변화 추세, 원인 분석 등을 간결하게 작성합니다.
-- 주간보고서의 weekly_highlights를 참고하여 업무 성과와 연결하세요.
+### [중요] 월간 KPI 자동 집계 규칙
 
-출력 예시:
+주간보고서, 일일보고서(detail/pending/plan 청크)를 분석하여 아래 3가지 KPI를 계산하세요.
+숫자 값은 반드시 청크에 존재하는 텍스트를 기반으로 “직접 카운트”해야 하며, 추론하거나 생성하면 안 됩니다.
+
+1) 신규 계약 건수(new_contracts)
+- 아래 키워드가 포함된 업무가 등장할 때마다 +1
+  키워드: ["신규 리드", "신규 계약", "신규", "신규고객", "신규 리드 생성"]
+- 고객 이름 포함 여부와 무관하게 키워드만으로 카운트
+
+2) 유지 계약 건수(renewals)
+- 아래 키워드가 포함된 업무가 등장할 때마다 +1
+  키워드: ["유지 계약", "유지", "갱신", "리텐션"]
+- 단순 “유지보수”, “유지 관리”와 같은 단어는 제외
+
+3) 상담 진행 건수(consultations)
+- 아래 키워드가 포함된 업무가 등장할 때마다 +1
+  키워드: ["상담", "상담진행", "상담 진행", "상담 예약"]
+- “콜백 요청”, “문의”는 상담으로 계산하지 않음
+
+### KPI 출력 규칙
+- 없는 데이터는 0으로 계산
+- 계산 근거는 보고서 청크의 실제 텍스트만 사용
+- 분석 결과는 아래와 같은 JSON에 포함:
+
 {
   "key_metrics": {
-    "total_customers": 10,
-    "new_contracts": 5,
-    "renewals": 3,
-    "analysis": "이번 주간 계약 5건을 달성하였고, 전월 대비 20% 증가했습니다. 주요 원인은..."
+    "new_contracts": <정수>,
+    "renewals": <정수>,
+    "consultations": <정수>,
+    "analysis": "핵심 지표 요약 분석"
   }
 }
 
@@ -366,6 +405,10 @@ PostgreSQL에서 조회한 월간 KPI 원시 데이터입니다.
 4. 주간보고서 중심으로 작성하고, 일일 청크는 보강 자료로만 사용하세요.
 5. 배열/문자열 필드는 비어 있어도 반드시 포함하세요.
 """
+
+    # ========================================
+    # 7. Vision (PDF 처리) 프롬프트
+    # ========================================
 
     VISION_DETECT_SYSTEM = "너는 문서 종류별로 분류하는 AI야."
     VISION_DETECT_USER = """어떤 문서가 주어진 보고서인지 판단해라.
@@ -439,7 +482,7 @@ daily / weekly / monthly
 
     @classmethod
     def weekly_system(cls, week_number: str) -> str:
-        return cls.WEEKLY_REPORT_SYSTEM.format(week_number=week_number)
+        return cls.WEEKLY_REPORT_SYSTEM.replace("{week_number_placeholder}", week_number)
 
     @classmethod
     def weekly_user(cls, search_results_json: str, monday: date, friday: date) -> str:
@@ -508,9 +551,9 @@ class ReportMainRouterAgent(ReportBaseAgent):
     """ReportMainRouterAgent - Intent Classification + routing with centralized prompts."""
 
     INTENT_PLANNING = "planning"
-    INTENT_REPORT = "report"
-    INTENT_RAG = "rag"
-    INTENT_UNKNOWN = "unknown"
+    INTENT_REPORT = "report_write"  # 프롬프트에서 사용하는 값과 일치
+    INTENT_RAG = "lookup"  # 프롬프트에서 사용하는 값과 일치
+    INTENT_UNKNOWN = "other"  # 프롬프트에서 사용하는 값과 일치
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
         super().__init__(
@@ -554,67 +597,6 @@ class ReportMainRouterAgent(ReportBaseAgent):
         return self._rag_agent
 
     def _classify_intent_by_rule(self, query: str) -> Optional[str]:
-        query_lower = query.lower()
-
-        planning_keywords = [
-            "오늘",
-            "업무",
-            "플래닝",
-            "계획",
-            "일정",
-            "추천",
-            "조정",
-            "today",
-            "plan",
-            "planning",
-            "schedule",
-            "todo",
-        ]
-
-        report_keywords = [
-            "보고서",
-            "작성",
-            "생성",
-            "일일",
-            "주간",
-            "월간",
-            "report",
-            "daily",
-            "weekly",
-            "monthly",
-            "generate",
-        ]
-
-        rag_keywords = [
-            "조회",
-            "찾아",
-            "검색",
-            "있었",
-            "미종결",
-            "고객",
-            "주소",
-            "번주",
-            "이번주",
-            "지난주",
-            "이번달",
-            "지난달",
-            "이번해",
-            "last week",
-            "last month",
-            "last year",
-            "unresolved",
-        ]
-
-        if any(kw in query_lower for kw in planning_keywords):
-            if any(kw in query_lower for kw in ["추천", "계획", "플랜", "일정"]):
-                return self.INTENT_PLANNING
-
-        if any(kw in query_lower for kw in report_keywords):
-            return self.INTENT_REPORT
-
-        if any(kw in query_lower for kw in rag_keywords):
-            return self.INTENT_RAG
-
         return None
 
     async def _classify_intent_by_llm(self, query: str) -> str:
@@ -661,15 +643,34 @@ class ReportMainRouterAgent(ReportBaseAgent):
         enriched_context["prompt_registry"] = self.prompt_registry
 
         try:
-            if intent == self.INTENT_PLANNING:
-                return await self.planning_agent.process(query, enriched_context)
-
-            if intent == self.INTENT_REPORT:
-                return await self.report_agent.process(query, enriched_context)
-
-            if intent == self.INTENT_RAG:
+            # intent 값 정규화 (공백 제거, 소문자 변환)
+            intent_normalized = str(intent).strip().lower() if intent else ""
+            
+            # 디버깅: intent 값과 상수 값 확인
+            print(f"[DEBUG] Intent 원본: '{intent}' (type: {type(intent)})")
+            print(f"[DEBUG] Intent 정규화: '{intent_normalized}'")
+            print(f"[DEBUG] INTENT_RAG 상수: '{self.INTENT_RAG}'")
+            print(f"[DEBUG] INTENT_PLANNING 상수: '{self.INTENT_PLANNING}'")
+            print(f"[DEBUG] INTENT_REPORT 상수: '{self.INTENT_REPORT}'")
+            
+            # RAG/lookup을 먼저 체크 (질문형 쿼리 우선)
+            if (intent == self.INTENT_RAG or intent == "lookup" or 
+                intent_normalized == "lookup" or intent_normalized == self.INTENT_RAG.lower()):
+                print(f"[DEBUG] ✅ RAG 에이전트로 라우팅")
                 return await self.rag_agent.process(query, enriched_context)
 
+            # LLM이 반환한 intent를 내부 상수로 매핑 (프롬프트 값과 코드 값 호환)
+            if (intent == self.INTENT_PLANNING or intent == "planning" or 
+                intent_normalized == "planning" or intent_normalized == self.INTENT_PLANNING.lower()):
+                print(f"[DEBUG] ✅ Planning 에이전트로 라우팅")
+                return await self.planning_agent.process(query, enriched_context)
+
+            if (intent == self.INTENT_REPORT or intent == "report_write" or 
+                intent_normalized == "report_write" or intent_normalized == self.INTENT_REPORT.lower()):
+                print(f"[DEBUG] ✅ Report 에이전트로 라우팅")
+                return await self.report_agent.process(query, enriched_context)
+
+            print(f"[DEBUG] ❌ 알 수 없는 인텐트: '{intent}' (정규화: '{intent_normalized}')")
             return "죄송합니다. 요청을 이해하지 못했습니다. 업무 플래닝, 보고서 생성, 혹은 과거 업무 검색 중에서 말씀해 주세요."
 
         except Exception as e:

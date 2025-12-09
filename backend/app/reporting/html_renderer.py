@@ -21,7 +21,7 @@ class HTMLReportRenderer:
     TEMPLATE_DIR = _BASE_DIR / "Data" / "reports" / "html"
     
     # 출력 디렉토리 (타입별로 분리)
-    OUTPUT_BASE_DIR = _BASE_DIR / "Data" / "reports"
+    OUTPUT_BASE_DIR = _BASE_DIR / "output"
     
     def __init__(self):
         """Jinja2 Environment 초기화"""
@@ -358,7 +358,7 @@ class HTMLReportRenderer:
         elif report_type == "monthly":
             output_dir = self.OUTPUT_BASE_DIR / "monthly"
         else:
-            output_dir = self.OUTPUT_BASE_DIR / "output_html"  # 기본값
+            output_dir = self.OUTPUT_BASE_DIR  # 기본값
         
         # HTML 파일 저장
         output_path = output_dir / output_filename

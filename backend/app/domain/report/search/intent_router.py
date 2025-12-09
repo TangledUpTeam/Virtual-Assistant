@@ -45,8 +45,8 @@ class IntentRouter:
             end = start + timedelta(days=6)
             return {"start": start, "end": end}
 
-        # 지난주 / 지난 주
-        if "지난주" in lower or "지난 주" in lower:
+        # 지난주 / 지난 주 / 저번주 / 저번 주
+        if "지난주" in lower or "지난 주" in lower or "저번주" in lower or "저번 주" in lower:
             start = ref - timedelta(days=ref.weekday() + 7)
             end = start + timedelta(days=6)
             return {"start": start, "end": end}

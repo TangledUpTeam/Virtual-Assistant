@@ -608,7 +608,7 @@ class TodayPlanGenerator:
             similar_tasks_text=similar_tasks_text,
         )
 
-def _track_task_sources(
+    def _track_task_sources(
         self,
         tasks: List[TaskItem],
         next_day_plan: list,

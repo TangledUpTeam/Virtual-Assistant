@@ -16,7 +16,7 @@ class BaseHTMLGenerator:
     
     # 기본 템플릿 경로 (절대 경로)
     TEMPLATE_DIR = _BASE_DIR / "Data" / "reports" / "html"
-    OUTPUT_DIR = _BASE_DIR / "output" / "report_result"
+    OUTPUT_DIR = _BASE_DIR / "output"
     
     def __init__(self, template_filename: str):
         """
@@ -88,9 +88,9 @@ class BaseHTMLGenerator:
             저장된 파일 경로
         """
         if subdirectory:
-            output_dir = self.OUTPUT_DIR / subdirectory / "html"
+            output_dir = self.OUTPUT_DIR / subdirectory
         else:
-            output_dir = self.OUTPUT_DIR / "html"
+            output_dir = self.OUTPUT_DIR
         
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / output_filename

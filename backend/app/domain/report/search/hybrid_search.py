@@ -197,14 +197,12 @@ class HybridSearcher:
         #     conditions.append({"owner": owner})
 
         if normalized_date_range:
-            conditions.append(
-                {
-                    "date": {
-                        "$gte": normalized_date_range["start"],
-                        "$lte": normalized_date_range["end"],
-                    }
-                }
-            )
+            # ChromaDB는 하나의 연산자만 허용하므로 날짜 리스트를 생성하여 $in 사용
+            start_date = datetime.strptime(normalized_date_range["start"], "%Y-%m-%d").date()
+            end_date = datetime.strptime(normalized_date_range["end"], "%Y-%m-%d").date()
+            date_list = self._build_date_list(start_date, end_date)
+            if date_list:
+                conditions.append({"date": {"$in": date_list}})
         elif keywords.single_date:
             conditions.append({"date": keywords.single_date})
 

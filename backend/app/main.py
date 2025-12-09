@@ -103,11 +103,30 @@ app.mount("/public", StaticFiles(directory=str(PUBLIC_DIR)), name="public")
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.mount("/renderer", StaticFiles(directory=str(RENDERER_DIR)), name="renderer")
 
-# 보고서 HTML 파일 서빙
-REPORTS_HTML_DIR = BASE_DIR / "backend" / "Data" / "reports" / "output_html"
-if REPORTS_HTML_DIR.exists():
-    app.mount("/static/reports", StaticFiles(directory=str(REPORTS_HTML_DIR)), name="reports")
-    print(f"✅ 보고서 HTML 서빙 경로 등록: /static/reports -> {REPORTS_HTML_DIR}")
+# 보고서 HTML 파일 서빙 (타입별로 분리)
+REPORTS_BASE_DIR = BASE_DIR / "backend" / "output"
+# 디렉토리가 없으면 생성
+REPORTS_BASE_DIR.mkdir(parents=True, exist_ok=True)
+
+# 일일보고서
+daily_dir = REPORTS_BASE_DIR / "daily"
+daily_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/reports/daily", StaticFiles(directory=str(daily_dir)), name="reports_daily")
+
+# 주간보고서
+weekly_dir = REPORTS_BASE_DIR / "weekly"
+weekly_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/reports/weekly", StaticFiles(directory=str(weekly_dir)), name="reports_weekly")
+
+# 월간보고서
+monthly_dir = REPORTS_BASE_DIR / "monthly"
+monthly_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/reports/monthly", StaticFiles(directory=str(monthly_dir)), name="reports_monthly")
+
+print(f"✅ 보고서 HTML 서빙 경로 등록:")
+print(f"   - /static/reports/daily -> {daily_dir}")
+print(f"   - /static/reports/weekly -> {weekly_dir}")
+print(f"   - /static/reports/monthly -> {monthly_dir}")
 
 
 # Health Check

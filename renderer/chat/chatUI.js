@@ -259,27 +259,27 @@ async function handleSendMessage() {
     if (result.agent_used) {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
     }
+    
+    // Intent 기준 UI 분기
+    const intent = result.intent;
+    const agent = result.agent_used;
 
-    // 업무 플래닝 요청인지 확인 (쿼리 내용 기반)
-    const isPlanningQuery = (text) => {
-      const lower = text.toLowerCase();
-      const planningKeywords = ['오늘', '금일', '업무', '추천', '할일', '플래닝', '계획', '뭐해야', '뭐해', '해야'];
-      const hasPlanningKeyword = planningKeywords.some(keyword => lower.includes(keyword));
-      const isNotReportQuery = !lower.includes('보고서') && !lower.includes('리포트');
-      return hasPlanningKeyword && isNotReportQuery;
-    };
-
-    // 업무 플래닝 요청이면 업무 카드 UI 직접 표시
-    if (isPlanningQuery(text) && (result.agent_used === 'report' || result.agent_used === 'report_tool' || 
-        result.agent_used === 'planning' || result.intent === 'planning')) {
+    // 1. 업무 플래닝 요청이면 → 업무 카드 UI 표시
+    if (intent === 'planning') {
       await loadAndDisplayTaskCardsInChat();
       return;
     }
 
-    // 보고서 관련 에이전트가 사용되었으면 팝업 열기 버튼 추가
-    if (result.agent_used === 'planner' || result.agent_used === 'report' || 
-        result.agent_used === 'planner_tool' || result.agent_used === 'report_tool') {
-      // 고정 메시지 표시 (LLM 응답 대신)
+    // 2. RAG(intent === 'lookup' 또는 'rag')면 → LLM 응답만 보여주고 종료
+    // 팝업 띄우지 않음
+    if (intent === 'lookup' || intent === 'rag') {
+      addMessage('assistant', result.answer, isMarkdown);
+      return;
+    }
+
+    // 3. 보고서 작성(intent === 'report')이면 → 보고서 도구 열기 버튼만 제공
+    // 답변은 팝업에서 처리하므로 여기서는 버튼만 생성
+    if (intent === 'report' || intent === 'report_write' || agent === 'report' || agent === 'report_tool') {
       addMessage('assistant', '네 보고서 작성 기능을 도와드리겠습니다!');
       addConfirmationButton('📝 보고서 도구 열기', () => {
         openReportPopup();
@@ -385,7 +385,14 @@ function addMessage(role, text, isMarkdown = false) {
 
   // 마크다운 렌더링 (HR RAG 등)
   if (isMarkdown && role === 'assistant' && typeof marked !== 'undefined') {
-    bubble.innerHTML = marked.parse(text);
+    // marked.js 버전 호환성 처리
+    if (typeof marked.parse === 'function') {
+      bubble.innerHTML = marked.parse(text);
+    } else if (typeof marked === 'function') {
+      bubble.innerHTML = marked(text);
+    } else {
+      bubble.textContent = text;
+    }
   } else {
     bubble.textContent = text;
   }

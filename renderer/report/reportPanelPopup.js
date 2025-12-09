@@ -98,7 +98,14 @@ function addMessage(role, content, isMarkdown = false) {
     if (isMarkdown) {
       // 마크다운 렌더링 (간단한 처리)
       const marked = window.marked || ((text) => text);
-      bubble.innerHTML = marked.parse(content);
+      // marked.js 버전 호환성 처리
+      if (typeof marked.parse === 'function') {
+        bubble.innerHTML = marked.parse(content);
+      } else if (typeof marked === 'function') {
+        bubble.innerHTML = marked(content);
+      } else {
+        bubble.textContent = content;
+      }
     } else {
       bubble.textContent = content;
     }

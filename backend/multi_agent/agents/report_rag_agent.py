@@ -13,7 +13,7 @@ from datetime import date
 from multi_agent.agents.report_base import ReportBaseAgent
 from multi_agent.agents.report_main_router import ReportPromptRegistry
 from app.domain.report.core.rag_chain import ReportRAGChain
-from app.domain.report.search.retriever import UnifiedRetriever
+from app.domain.report.search.hybrid_search import HybridSearcher
 from app.domain.report.search.intent_router import IntentRouter
 from app.infrastructure.vector_store_report import get_report_vector_store
 from app.llm.client import LLMClient
@@ -35,10 +35,8 @@ class ReportRAGAgent(ReportBaseAgent):
         vector_store = get_report_vector_store()
         collection = vector_store.get_collection()
         
-        self.retriever = UnifiedRetriever(
-            collection=collection,
-            openai_api_key=None,
-        )
+        # HybridSearcher 사용 (rag_chain.py가 기대하는 타입)
+        self.retriever = HybridSearcher(collection=collection)
         
         # RAG Chain은 owner별로 생성되므로, 여기서는 초기화하지 않음
         self.rag_chains: Dict[str, ReportRAGChain] = {}
@@ -102,13 +100,17 @@ class ReportRAGAgent(ReportBaseAgent):
         REPORT_OWNER = settings.REPORT_WORKSPACE_OWNER
         rag_chain = self._get_rag_chain(REPORT_OWNER)
         
+        print(f"[DEBUG] ReportRAGAgent.process 시작: query='{query}', date_range={date_range}")
+        
         try:
             # RAG 파이프라인 실행
+            print(f"[DEBUG] rag_chain.generate_response 호출 전")
             result = await rag_chain.generate_response(
                 query=query,
                 date_range=date_range,
                 reference_date=reference_date
             )
+            print(f"[DEBUG] rag_chain.generate_response 완료: answer 길이={len(result.get('answer', ''))}")
             
             # 응답 포맷팅
             answer = result["answer"]
@@ -119,6 +121,7 @@ class ReportRAGAgent(ReportBaseAgent):
                 for idx, source in enumerate(result["sources"][:3], 1):  # 최대 3개만
                     answer += f"\n{idx}. [{source['date']}] {source['text_preview']}"
             
+            print(f"[DEBUG] ReportRAGAgent.process 완료: answer 반환 (길이={len(answer)})")
             return answer
             
         except Exception as e:

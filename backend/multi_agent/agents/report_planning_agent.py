@@ -2,7 +2,7 @@
 Report Planning Agent
 
 업무 플래닝 전문 에이전트
-- 최근 5일 일일보고서 기반 오늘 업무 추천
+- 최근 3일 일일보고서 기반 오늘 업무 추천
 - today_plan_chain.py 기능 완전 이관
 - RAG 미사용, 순수 LLM + rule 기반
 """
