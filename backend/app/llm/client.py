@@ -20,7 +20,7 @@ class LLMClient:
     
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-4o",
         api_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2000
@@ -168,7 +168,7 @@ class LLMClient:
 
 
 def get_llm(
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-4o",
     api_key: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 2000
@@ -191,4 +191,3 @@ def get_llm(
         temperature=temperature,
         max_tokens=max_tokens
     )
-

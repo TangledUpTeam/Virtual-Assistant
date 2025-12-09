@@ -42,7 +42,7 @@ email-validator==2.2.0
 openai==1.109.1
 
 # ========================================
-# LangChain & RAG
+# LangChain & RAG (보고서 Agent 시스템 포함)
 # ========================================
 langchain==1.1.0
 langchain-core==1.1.0
@@ -56,7 +56,6 @@ langgraph-sdk==0.2.10
 ormsgpack==1.12.0
 xxhash==3.6.0
 langsmith==0.4.43
-
 
 # ========================================
 # Vector Database & Search
@@ -102,25 +101,33 @@ google-auth-oauthlib==1.2.1
 # Notion 공식 SDK
 notion-client==2.2.1
 
-# pip install reportlab
-reportlab==4.4.5
+# ========================================
+# HTML Template Engine (보고서 HTML 생성)
+# ========================================
+jinja2==3.1.4
 
-# pip install pypdf2
-pypdf2==3.0.1
+# ========================================
+# Embedding Models (보고서 RAG)
+# ========================================
+sentence-transformers==3.3.1
 
 # ========================================
 # Notes
 # ========================================
-# 통합 버전 (2025-11-21)
+# 통합 버전 (2025-12-03)
 # - chromadb==0.5.23: 브레인스토밍 데이터 호환성
 # - pydantic==2.12.4: 최신 안정 버전
-# - langchain==0.3.27: 최신 안정 버전
+# - langchain==1.1.0: LangChain 1.x 버전 업그레이드 (보고서 Agent 시스템)
+# - langgraph==1.0.4: LangGraph 지원 추가
+# - langchain-community>=0.3.0: 보고서 Agent 호환
+# - langchain-openai>=0.2.0: 보고서 Agent 호환
+# - pydantic-settings>=2.10.1: 보고서 Agent 호환
+# - jinja2==3.1.4: HTML 보고서 생성 (추가됨)
+# - sentence-transformers==3.3.1: HuggingFace 임베딩 모델 (보고서 RAG용 추가됨)
 #
 # 제거된 패키지 (확인된 미사용):
-# - sentence-transformers: OpenAI 임베딩 사용
 # - torch: 미사용
 # - redis: 설정만 있고 미사용
-# - slack-sdk: 미사용
 
 # ========================================
 # NPM Dependencies (Node.js)

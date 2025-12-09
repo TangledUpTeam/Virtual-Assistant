@@ -17,7 +17,6 @@ from app.domain.chatbot.memory_manager import MemoryManager
 _chatbot_agent = None
 _rag_agent = None
 _brainstorming_agent = None
-_planner_agent = None
 _report_agent = None
 _therapy_agent = None
 _notion_agent = None
@@ -31,7 +30,7 @@ memory_manager = MemoryManager()
 def get_chatbot_agent():
     global _chatbot_agent
     if _chatbot_agent is None:
-        from backend.multi_agent.agents.chatbot_agent import ChatbotAgent
+        from multi_agent.agents.chatbot_agent import ChatbotAgent
         _chatbot_agent = ChatbotAgent()
     return _chatbot_agent
 
@@ -39,7 +38,7 @@ def get_chatbot_agent():
 def get_rag_agent():
     global _rag_agent
     if _rag_agent is None:
-        from backend.multi_agent.agents.rag_agent import RAGAgent
+        from multi_agent.agents.rag_agent import RAGAgent
         _rag_agent = RAGAgent()
     return _rag_agent
 
@@ -47,23 +46,16 @@ def get_rag_agent():
 def get_brainstorming_agent():
     global _brainstorming_agent
     if _brainstorming_agent is None:
-        from backend.multi_agent.agents.brainstorming_agent import BrainstormingAgent
+        from multi_agent.agents.brainstorming_agent import BrainstormingAgent
         _brainstorming_agent = BrainstormingAgent()
     return _brainstorming_agent
 
-# 일정 관리 및 계획 수립 에이전트 호출
-def get_planner_agent():
-    global _planner_agent
-    if _planner_agent is None:
-        from backend.multi_agent.agents.planner_agent import PlannerAgent
-        _planner_agent = PlannerAgent()
-    return _planner_agent
 
-# 업무 리포트 생성 및 실적 분석 에이전트 호출
+# 보고서 에이전트
 def get_report_agent():
     global _report_agent
     if _report_agent is None:
-        from backend.multi_agent.agents.report_agent import ReportAgent
+        from multi_agent.agents.report_agent import ReportAgent
         _report_agent = ReportAgent()
     return _report_agent
 
@@ -71,7 +63,7 @@ def get_report_agent():
 def get_therapy_agent():
     global _therapy_agent
     if _therapy_agent is None:
-        from backend.multi_agent.agents.therapy_agent import TherapyAgent
+        from multi_agent.agents.therapy_agent import TherapyAgent
         _therapy_agent = TherapyAgent()
     return _therapy_agent
 
@@ -183,20 +175,30 @@ async def brainstorming_tool(query: str) -> str:
     return await agent.process(query, context=context)
 
 # 일정 관리와 계획 수립을 도와줌
+# 주의: planner_tool은 report_tool로 통합되었습니다.
+# report_tool이 업무 플래닝을 처리하므로, planner_tool은 report_tool로 리다이렉트합니다.
 @tool
 async def planner_tool(query: str) -> str:
     """일정 관리와 계획 수립을 도와줍니다. 오늘의 할 일, 업무 일정 관리, 시간 관리 조언을 제공합니다."""
-    agent = get_planner_agent()
-    context = get_current_context()
-    return await agent.process(query, context=context)
+    # report_tool로 리다이렉트 (업무 플래닝은 report_tool이 처리)
+    return await report_tool(query)
 
-# 업무 리포트와 실적 분석을 생성
+# 업무 플래닝, 보고서 작성, 보고서 검색/대화를 수행
 @tool
 async def report_tool(query: str) -> str:
-    """업무 리포트와 실적 분석을 생성합니다. 일간/주간/월간 리포트, 성과 평가 자료를 제공합니다."""
+    """
+    업무 플래닝, 보고서 작성, 보고서 검색을 수행합니다.
+    - 금일 추천 업무 및 업무 플래닝
+    - 일일/주간/월간 보고서 작성 및 HTML 생성
+    - 과거 보고서 검색 및 실적 조회 (RAG 기반 대화)
+    """
     agent = get_report_agent()
     context = get_current_context()
-    return await agent.process(query, context=context)
+    response = await agent.process(query, context=context)
+    
+    # intent 정보는 ReportAgent.process에서 마커로 포함되거나
+    # supervisor에서 answer를 분석하여 추출하므로 여기서는 처리하지 않음
+    return response
 
 # 심리 상담 제공
 @tool
@@ -255,7 +257,6 @@ def get_all_agent_tools() -> List[Tool]:
         chatbot_tool,
         rag_tool,
         brainstorming_tool,
-        planner_tool,
         report_tool,
         therapy_tool,
         notion_tool,
