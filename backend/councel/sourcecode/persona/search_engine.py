@@ -83,7 +83,7 @@ class SearchEngine:
         if use_reranker and retrieved_chunks:
             max_similarity = self._get_max_similarity(retrieved_chunks)
             if max_similarity < 0.55:
-                retrieved_chunks = self.rerank_chunks(user_input, retrieved_chunks)
+                retrieved_chunks = await self.rerank_chunks(user_input, retrieved_chunks)
         
         return retrieved_chunks
     
@@ -95,8 +95,8 @@ class SearchEngine:
         # distance가 클수록 similarity는 0에 가까워짐
         return 1.0 / (1.0 + distance)
     
-    # Re-ranker 사용 -> 검색된 청크들을 관련성 기준으로 재정렬 (LLM 사용)
-    def rerank_chunks(self, user_input: str, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    # Re-ranker 사용 -> 검색된 청크들을 관련성 기준으로 재정렬 (LLM 사용, 비동기)
+    async def rerank_chunks(self, user_input: str, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         if not chunks or len(chunks) <= 1:
             return chunks
@@ -120,21 +120,41 @@ class SearchEngine:
 
                 번호만 출력해주세요. 다른 설명은 불필요합니다."""
             
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert at evaluating document relevance. Rank documents by their relevance to the user's question."
-                    },
-                    {
-                        "role": "user",
-                        "content": evaluation_prompt
-                    }
-                ],
-                temperature=0.1,  # 매우 낮은 temperature로 일관된 평가
-                max_tokens=50
-            )
+            # 비동기 OpenAI API 호출
+            if self.async_openai_client:
+                response = await self.async_openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert at evaluating document relevance. Rank documents by their relevance to the user's question."
+                        },
+                        {
+                            "role": "user",
+                            "content": evaluation_prompt
+                        }
+                    ],
+                    temperature=0.1,  # 매우 낮은 temperature로 일관된 평가
+                    max_tokens=50
+                )
+            else:
+                # Fallback: 동기 클라이언트 사용 (스레드 풀에서 실행)
+                response = await asyncio.to_thread(
+                    self.openai_client.chat.completions.create,
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert at evaluating document relevance. Rank documents by their relevance to the user's question."
+                        },
+                        {
+                            "role": "user",
+                            "content": evaluation_prompt
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=50
+                )
             
             # 순위 파싱
             ranking_text = response.choices[0].message.content.strip()
@@ -308,8 +328,8 @@ class SearchEngine:
             print(f"[경고] 쿼리 확장 실패: {e}")
             return []
     
-    # Multi-step 학습 최종 처리 (공통 로직)
-    def _finalize_search_results(
+    # Multi-step 학습 최종 처리 (공통 로직, 비동기)
+    async def _finalize_search_results(
         self,
         user_input: str,
         all_chunks: List[Dict[str, Any]],
@@ -320,7 +340,7 @@ class SearchEngine:
         # 조건부 Re-ranker: 최고 유사도가 0.55 이상이면 생략
         max_similarity = self._get_max_similarity(all_chunks)
         if all_chunks and max_similarity < 0.55:
-            all_chunks = self.rerank_chunks(user_input, all_chunks)
+            all_chunks = await self.rerank_chunks(user_input, all_chunks)
         
         # 상위 n_results개만 반환
         final_chunks = all_chunks[:n_results]
@@ -388,7 +408,7 @@ class SearchEngine:
                     break
         
         # 최종 처리 및 반환
-        return self._finalize_search_results(user_input, all_chunks, iteration, n_results)
+        return await self._finalize_search_results(user_input, all_chunks, iteration, n_results)
     
     # Multi-step 학습(동기 함수, 비동기 함수 호출 위한 래퍼 함수)
     def _iterative_search_with_query_expansion(self, user_input: str, max_iterations: int = 1, n_results: int = 5) -> Dict[str, Any]:
@@ -456,8 +476,17 @@ class SearchEngine:
                 if not quality_info['needs_improvement']:
                     break
         
-        # 최종 처리 및 반환
-        return self._finalize_search_results(user_input, all_chunks, iteration, n_results)
+        # 최종 처리 및 반환 (동기 함수에서는 비동기 함수를 asyncio.run으로 실행)
+        try:
+            loop = asyncio.get_running_loop()
+            # 이미 실행 중인 루프가 있으면 동기적으로 실행할 수 없으므로 새 이벤트 루프에서 실행
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._finalize_search_results(user_input, all_chunks, iteration, n_results))
+                return future.result()
+        except RuntimeError:
+            # 이벤트 루프가 없으면 새로 생성하여 실행
+            return asyncio.run(self._finalize_search_results(user_input, all_chunks, iteration, n_results))
     
     # 하이브리드 검색 함수(벡터 검색 + 키워드 검색)
     def _hybrid_search(self, user_input: str, n_results: int = 5) -> List[Dict[str, Any]]:
@@ -526,10 +555,20 @@ class SearchEngine:
                 retrieved_chunks.append(chunk)
         
         # 조건부 Re-ranker: 최고 유사도가 0.55 이상이면 생략
+        # 동기 함수에서는 비동기 rerank_chunks를 asyncio.run으로 실행
         if use_reranker and retrieved_chunks:
             max_similarity = self._get_max_similarity(retrieved_chunks)
             if max_similarity < 0.55:
-                retrieved_chunks = self.rerank_chunks(user_input, retrieved_chunks)
+                try:
+                    # 이미 실행 중인 이벤트 루프가 있으면 새 이벤트 루프에서 실행
+                    loop = asyncio.get_running_loop()
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, self.rerank_chunks(user_input, retrieved_chunks))
+                        retrieved_chunks = future.result()
+                except RuntimeError:
+                    # 이벤트 루프가 없으면 새로 생성하여 실행
+                    retrieved_chunks = asyncio.run(self.rerank_chunks(user_input, retrieved_chunks))
         
         return retrieved_chunks
     

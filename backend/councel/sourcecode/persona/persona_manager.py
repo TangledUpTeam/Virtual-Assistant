@@ -7,19 +7,22 @@
 
 import json
 import time
+import asyncio
 from pathlib import Path
 from typing import Optional
 from threading import Thread
 from openai import OpenAI
+from openai import AsyncOpenAI
 
 # 페르소나 생성 및 관리 클래스
 class PersonaManager:
     
     # 초기화 함수
-    def __init__(self, openai_client: OpenAI, collection, base_dir: Path):
+    def __init__(self, openai_client: OpenAI, collection, base_dir: Path, async_openai_client: Optional[AsyncOpenAI] = None):
 
         # OpenAI, 컬렉션, 기본 경로 설정
         self.openai_client = openai_client
+        self.async_openai_client = async_openai_client
         self.collection = collection
         self.base_dir = base_dir
         
@@ -39,7 +42,6 @@ class PersonaManager:
             self.adler_persona = cached_persona
             self._persona_ready = True
             self._rag_persona_ready = True
-            print("[정보] 캐시된 RAG 페르소나 로드 완료")
         else:
             # 기본 페르소나로 빠르게 시작
             self.adler_persona = self._get_default_persona()
@@ -58,7 +60,8 @@ class PersonaManager:
 
         return """
 
-            당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자입니다.
+            당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자이며,
+            EAP(Employee Assistance Program)와 SFBT(Solution-Focused Brief Therapy) 기법을 통합하여 상담합니다.
 
             핵심 원칙:
             1. 열등감과 보상: 모든 인간은 열등감을 느끼며, 이를 극복하려는 우월성 추구가 성장의 동력입니다.
@@ -66,33 +69,37 @@ class PersonaManager:
             3. 생활양식: 개인의 독특한 생활양식이 행동과 사고를 결정합니다.
             4. 목적론적 관점: 과거보다는 미래의 목표가 현재 행동을 결정합니다.
             5. 격려: 용기를 북돋우는 것이 치료의 핵심입니다.
+            6. 해결 중심: 문제보다는 해결책과 강점에 초점을 맞춥니다. (SFBT)
+            7. 단기 개입: 즉각적이고 실천 가능한 지원을 제공합니다. (EAP)
 
-            답변 방식 (3단계 구조 필수):
-            1단계 - 감정 인정: 먼저 상대방의 감정을 있는 그대로 인정하고 공감합니다.
+            답변 방식 (2단계 구조):
+            1단계 - 감정 인정 및 공감 (아들러 + EAP):
+               - 먼저 상대방의 감정을 있는 그대로 인정하고 공감합니다.
                - "~하셨군요", "~느끼시는군요", "~한 마음이 드셨겠어요"
                - 감정을 판단하지 않고 있는 그대로 받아들입니다.
+               - 상황의 심각도를 파악하고 필요시 즉각적 지원을 고려합니다.
             
-            2단계 - 아들러 관점 재해석: 그 감정과 상황을 성장의 기회로 재해석합니다.
-               - 열등감을 성장 동력으로 재구성
-               - 사회적 관심과 공동체 감각 연결
-               - 목표 지향적 관점 제시
-            
-            3단계 - 격려 및 실천 방안 제시: 상대방의 내적 힘과 가능성을 믿으며 격려하고 실천 가능한 방향을 제시합니다.
-               - "~할 수 있습니다", "~의 기회입니다"
-               - 구체적이고 실천 가능한 방향 제시
+            2단계 - 자연스러운 질문 또는 공감문 (아들러 + SFBT):
+               - 상황에 맞는 자연스러운 질문이나 공감을 제시합니다.
+               - 고정된 질문이 아니라 사용자의 상황에 맞게 자연스럽게 질문합니다.
+               - SFBT 원칙에 따라 강점, 자원, 해결책을 탐색하도록 돕습니다.
+               - 사용자가 스스로 답을 찾을 수 있도록 격려합니다.
 
             말투:
             - 따뜻하고 수용적인 톤 유지
             - 경청하고 있음을 느끼게 하는 표현 사용
             - "~하셨군요", "~느끼시는군요" 등 반영적 경청 기법 활용
             - 판단하지 않고 이해하려는 자세
-            - 2~3문장으로 간결하되 공감이 느껴지도록 작성
+            - 1~2문장으로 간결하되 공감과 희망이 느껴지도록 작성
 
             중요사항:
-            - 반드시 감정 인정 → 재해석 → 격려 순서로 답변
+            - 반드시 감정 인정 → 자연스러운 질문 순서로 답변
             - 상대방의 감정을 최소화하거나 무시하지 않기
             - "하지만", "그래도" 등 감정을 부정하는 표현 자제
             - 상대방이 자신의 감정을 충분히 표현했다고 느끼게 하기
+            - 문제보다는 해결책, 약점보다는 강점에 초점
+            - 사용자의 자율성과 주도성을 존중
+            - 고정된 질문이 아니라 상황에 맞는 자연스러운 질문을 하세요
 
         """
     
@@ -137,7 +144,8 @@ class PersonaManager:
         # 백그라운드에서 실행하는 함수
         def generate_in_background():
             try:
-                rag_persona = self._generate_persona_from_rag()
+                # 새 이벤트 루프 생성하여 비동기 함수 실행
+                rag_persona = asyncio.run(self._generate_persona_from_rag())
                 self.adler_persona = rag_persona
                 self._rag_persona_ready = True
                 self._save_persona_cache(rag_persona)
@@ -157,19 +165,20 @@ class PersonaManager:
         return self._rag_persona_ready
     
     # 웹 검색 -> 아들러 정보 수집(페르소나 생성 용도)
-    def _search_web_for_adler(self) -> str:
+    async def _search_web_for_adler(self) -> str:
  
         try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert on Alfred Adler's individual psychology. Provide a comprehensive summary of Adler's core principles and therapeutic approaches."
-                    },
-                    {
-                        "role": "user",
-                        "content": """Provide a detailed summary of Alfred Adler's individual psychology including:
+            if self.async_openai_client:
+                response = await self.async_openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert on Alfred Adler's individual psychology. Provide a comprehensive summary of Adler's core principles and therapeutic approaches."
+                        },
+                        {
+                            "role": "user",
+                            "content": """Provide a detailed summary of Alfred Adler's individual psychology including:
 1. Core principles (inferiority complex, superiority striving, social interest, etc.)
 2. Lifestyle and life patterns
 3. Therapeutic techniques and encouragement methods
@@ -177,18 +186,42 @@ class PersonaManager:
 5. Key concepts for counseling practice
 
 Keep it concise but comprehensive."""
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=800
-            )
+                        }
+                    ],
+                    temperature=0.3,
+                    max_tokens=800
+                )
+            else:
+                # Fallback: 동기 클라이언트 사용
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert on Alfred Adler's individual psychology. Provide a comprehensive summary of Adler's core principles and therapeutic approaches."
+                        },
+                        {
+                            "role": "user",
+                            "content": """Provide a detailed summary of Alfred Adler's individual psychology including:
+1. Core principles (inferiority complex, superiority striving, social interest, etc.)
+2. Lifestyle and life patterns
+3. Therapeutic techniques and encouragement methods
+4. Teleological perspective and goal orientation
+5. Key concepts for counseling practice
+
+Keep it concise but comprehensive."""
+                        }
+                    ],
+                    temperature=0.3,
+                    max_tokens=800
+                )
             return response.choices[0].message.content.strip()
         except Exception as e:
             print(f"[경고] 웹 검색 실패: {e}")
             return ""
     
     # RAG 사용 -> 페르소나 생성 함수
-    def _generate_persona_from_rag(self) -> str:
+    async def _generate_persona_from_rag(self) -> str:
 
         # 검색 쿼리 최적화: 6개 → 3개로 축소 (핵심 개념만 선별)
         persona_queries = [
@@ -197,24 +230,34 @@ Keep it concise but comprehensive."""
             "social interest and community feeling"
         ]
         
-        # 1. Vector DB에서 관련 청크 수집
-        all_chunks = []
-        for query in persona_queries:
+        # 1. Vector DB에서 관련 청크 수집 (병렬 처리)
+        async def search_query(query: str):
+            
             try:
                 # 임베딩 생성
-                embedding_response = self.openai_client.embeddings.create(
-                    model="text-embedding-3-large",
-                    input=query
-                )
+                if self.async_openai_client:
+                    embedding_response = await self.async_openai_client.embeddings.create(
+                        model="text-embedding-3-large",
+                        input=query
+                    )
+                else:
+                    # Fallback: 동기 클라이언트 사용 (스레드 풀에서 실행)
+                    embedding_response = await asyncio.to_thread(
+                        self.openai_client.embeddings.create,
+                        model="text-embedding-3-large",
+                        input=query
+                    )
                 query_embedding = embedding_response.data[0].embedding
                 
-                # 검색
-                results = self.collection.query(
+                # 검색 (ChromaDB는 동기식이므로 스레드 풀에서 실행)
+                results = await asyncio.to_thread(
+                    self.collection.query,
                     query_embeddings=[query_embedding],
                     n_results=3
                 )
                 
                 # 결과 포맷팅
+                chunks = []
                 if results['ids'] and results['ids'][0]:
                     for i in range(len(results['ids'][0])):
                         chunk = {
@@ -223,9 +266,20 @@ Keep it concise but comprehensive."""
                             'metadata': results['metadatas'][0][i],
                             'distance': results['distances'][0][i] if 'distances' in results else None
                         }
-                        all_chunks.append(chunk)
+                        chunks.append(chunk)
+                return chunks
             except Exception as e:
                 print(f"[경고] 페르소나 생성 중 검색 실패 ({query}): {e}")
+                return []
+        
+        # 3개 쿼리를 병렬로 처리
+        search_tasks = [search_query(query) for query in persona_queries]
+        search_results = await asyncio.gather(*search_tasks)
+        
+        # 결과 병합
+        all_chunks = []
+        for chunks in search_results:
+            all_chunks.extend(chunks)
         
         # 중복 제거 (id 기준)
         seen_ids = set()
@@ -238,8 +292,11 @@ Keep it concise but comprehensive."""
         # 상위 5개 청크만 사용 -> 10개에서 5개로 축소 -> 속도 줄이기 위함
         unique_chunks = unique_chunks[:5]
         
-        # 2. 웹 검색으로 최신 정보 수집
-        web_info = self._search_web_for_adler()
+        # 2. 웹 검색으로 최신 정보 수집 (Vector DB 검색과 병렬 처리)
+        web_info_task = self._search_web_for_adler()
+        
+        # Vector DB 청크 처리와 웹 검색을 병렬로 대기
+        web_info = await web_info_task
         
         # 3. 검색된 청크가 없으면 기본 페르소나 사용
         if not unique_chunks and not web_info:
@@ -261,35 +318,38 @@ Keep it concise but comprehensive."""
         
         # 6. LLM을 사용하여 페르소나 프롬프트 생성
         try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "You are a prompt engineering expert. Create a persona prompt for a therapist based on Adler's individual psychology."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""다음은 알프레드 아들러의 개인심리학에 관한 자료입니다:
+            if self.async_openai_client:
+                response = await self.async_openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system", 
+                            "content": "You are a prompt engineering expert. Create a persona prompt for a therapist based on Adler's individual psychology."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""다음은 알프레드 아들러의 개인심리학에 관한 자료입니다:
 
                         {context}
 
                         위 자료를 바탕으로 다음 형식으로 페르소나 프롬프트를 작성해주세요:
 
                         **형식:**
-                        당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자입니다.
+                        당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자이며,
+                        EAP(Employee Assistance Program)와 SFBT(Solution-Focused Brief Therapy) 기법을 통합하여 상담합니다.
 
                         핵심 원칙:
-                        1. [원칙 1]
-                        2. [원칙 2]
-                        3. [원칙 3]
-                        4. [원칙 4]
-                        5. [원칙 5]
+                        1. [아들러 원칙 1]
+                        2. [아들러 원칙 2]
+                        3. [아들러 원칙 3]
+                        4. [아들러 원칙 4]
+                        5. [아들러 원칙 5]
+                        6. 해결 중심: 문제보다는 해결책과 강점에 초점을 맞춥니다. (SFBT)
+                        7. 단기 개입: 즉각적이고 실천 가능한 지원을 제공합니다. (EAP)
 
-                        답변 방식 (3단계 구조 필수):
-                        1단계 - 감정 인정: [감정 인정 방법 설명]
-                        2단계 - 아들러 관점 재해석: [재해석 방법 설명]
-                        3단계 - 격려: [격려 방법 설명]
+                        답변 방식 (2단계 구조):
+                        1단계 - 감정 인정 및 공감 (아들러 + EAP): [감정 인정 및 상황 평가 방법]
+                        2단계 - 자연스러운 질문 또는 공감문 (아들러 + SFBT): [상황에 맞는 질문 방법]
 
                         말투:
                         - 따뜻하고 수용적인 톤
@@ -298,21 +358,84 @@ Keep it concise but comprehensive."""
                         - [추가 말투 특징]
 
                         **중요 사항:**
-                        - 반드시 감정 인정 → 재해석 → 격려 순서로 답변
+                        - 반드시 감정 인정 → 자연스러운 질문 순서로 답변
                         - 상대방의 감정을 최소화하거나 무시하지 않기
                         - "하지만", "그래도" 등 감정을 부정하는 표현 자제
-                        - 열등감을 성장의 기회로 재해석
                         - 사회적 관심과 공동체 감각 강조
                         - 목표 지향적 관점 제시
-                        - 2~3문장으로 간결하되 공감이 느껴지도록 작성
-                        - 공감적 경청을 최우선으로 하되 아들러 이론 통합
+                        - 문제보다는 해결책, 약점보다는 강점에 초점 (SFBT)
+                        - 구체적이고 실천 가능한 단기 전략 제시 (EAP)
+                        - 1~2문장으로 간결하되 공감과 희망이 느껴지도록 작성
+                        - 공감적 경청을 최우선으로 하되 아들러 이론과 EAP/SFBT 통합
+                        - 사용자의 자율성과 주도성을 존중
+                        - 고정된 질문이 아니라 상황에 맞는 자연스러운 질문을 하세요
 
                         페르소나 프롬프트만 출력해주세요. 다른 설명은 불필요합니다."""
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=500
-            )
+                        }
+                    ],
+                    temperature=0.3,
+                    max_tokens=500
+                )
+            else:
+                # Fallback: 동기 클라이언트 사용
+                response = await asyncio.to_thread(
+                    self.openai_client.chat.completions.create,
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system", 
+                            "content": "You are a prompt engineering expert. Create a persona prompt for a therapist based on Adler's individual psychology."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""다음은 알프레드 아들러의 개인심리학에 관한 자료입니다:
+
+                        {context}
+
+                        위 자료를 바탕으로 다음 형식으로 페르소나 프롬프트를 작성해주세요:
+
+                        **형식:**
+                        당신은 알프레드 아들러(Alfred Adler)의 개인심리학을 따르는 공감적인 심리학자이며,
+                        EAP(Employee Assistance Program)와 SFBT(Solution-Focused Brief Therapy) 기법을 통합하여 상담합니다.
+
+                        핵심 원칙:
+                        1. [아들러 원칙 1]
+                        2. [아들러 원칙 2]
+                        3. [아들러 원칙 3]
+                        4. [아들러 원칙 4]
+                        5. [아들러 원칙 5]
+                        6. 해결 중심: 문제보다는 해결책과 강점에 초점을 맞춥니다. (SFBT)
+                        7. 단기 개입: 즉각적이고 실천 가능한 지원을 제공합니다. (EAP)
+
+                        답변 방식 (2단계 구조):
+                        1단계 - 감정 인정 및 공감 (아들러 + EAP): [감정 인정 및 상황 평가 방법]
+                        2단계 - 자연스러운 질문 또는 공감문 (아들러 + SFBT): [상황에 맞는 질문 방법]
+
+                        말투:
+                        - 따뜻하고 수용적인 톤
+                        - 반영적 경청 기법 ("~하셨군요", "~느끼시는군요")
+                        - 판단하지 않고 이해하려는 자세
+                        - [추가 말투 특징]
+
+                        **중요 사항:**
+                        - 반드시 감정 인정 → 자연스러운 질문 순서로 답변
+                        - 상대방의 감정을 최소화하거나 무시하지 않기
+                        - "하지만", "그래도" 등 감정을 부정하는 표현 자제
+                        - 사회적 관심과 공동체 감각 강조
+                        - 목표 지향적 관점 제시
+                        - 문제보다는 해결책, 약점보다는 강점에 초점 (SFBT)
+                        - 구체적이고 실천 가능한 단기 전략 제시 (EAP)
+                        - 1~2문장으로 간결하되 공감과 희망이 느껴지도록 작성
+                        - 공감적 경청을 최우선으로 하되 아들러 이론과 EAP/SFBT 통합
+                        - 사용자의 자율성과 주도성을 존중
+                        - 고정된 질문이 아니라 상황에 맞는 자연스러운 질문을 하세요
+
+                        페르소나 프롬프트만 출력해주세요. 다른 설명은 불필요합니다."""
+                        }
+                    ],
+                    temperature=0.3,
+                    max_tokens=500
+                )
             
             generated_persona = response.choices[0].message.content.strip()
             return generated_persona
