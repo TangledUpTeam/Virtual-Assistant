@@ -195,7 +195,7 @@ async def _process_single_file_async(chunk_file: Path) -> Tuple[bool, str]:
             return (False, chunk_file.name)
             
     except Exception as e:
-        print(f"파일 처리 중 예외 발생: {chunk_file.name} - {e}") # 예외처리 print문은 배포 전 삭제 예정
+        print(f"파일 처리 중 예외 발생") # 예외처리 print문은 배포 전 삭제 예정
         return (False, chunk_file.name)
 
 # 메인 함수 (비동기)
