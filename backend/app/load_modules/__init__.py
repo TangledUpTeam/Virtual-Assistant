@@ -10,6 +10,7 @@
 """
 
 from app.load_modules.brainstorming_loader import init_brainstorming
+from app.load_modules.therapy_loader import init_therapy
 
 
 def init_all_modules():
@@ -26,8 +27,11 @@ def init_all_modules():
     print("\n[1] 브레인스토밍 모듈 체크 중...")
     init_brainstorming()
     
+    # 심리 상담 모듈
+    init_therapy()
+    
     # TODO: 다른 팀원 모듈 추가 시 아래 형식으로
-    # print("\n[2] OOO 모듈 체크 중...")
+    # print("\n[3] OOO 모듈 체크 중...")
     # from app.load_modules.xxx_loader import init_xxx
     # init_xxx()
     
