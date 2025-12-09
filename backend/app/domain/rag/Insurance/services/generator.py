@@ -4,30 +4,38 @@ Answer generation service
 import time
 from typing import List, Optional
 
-from ..core.models import Query, InsuranceDocument, GenerationResult
-from ..core.config import config
-from ..core.exceptions import GenerationException
-from ..infrastructure.llm.base import BaseLLMProvider
+from .models import Query, InsuranceDocument, GenerationResult
+from ..config import insurance_config
+from .exceptions import GenerationException
+from .providers import SimpleLLMProvider
+
 
 
 class Generator:
     """답변 생성 서비스"""
     
     # 시스템 프롬프트
-    SYSTEM_PROMPT = """당신은 보험 전문가입니다. 
-제공된 보험 약관과 법규를 바탕으로 정확하고 명확한 답변을 제공하세요.
+    SYSTEM_PROMPT = """당신은 보험 및 의료급여 전문가입니다. 
+제공된 보험 약관, 법규, 의료급여법 문서를 바탕으로 정확하고 명확한 답변을 제공하세요.
 
-**규칙:**
-1. 반드시 제공된 컨텍스트만 사용하여 답변
-2. 컨텍스트에서 정보를 찾을 수 없으면 "제공된 문서에서 해당 정보를 확인할 수 없습니다"라고 명시
-3. 법률 조항은 정확히 인용
-4. 일반인이 이해하기 쉽게 설명
-5. 금액, 날짜 등 숫자는 정확히 전달
-6. 추측이나 가정을 하지 말 것"""
+**핵심 규칙:**
+1. 제공된 컨텍스트에서 관련 정보를 **적극적으로 찾아서** 답변하세요
+2. 문서에 개별 조항이나 개념이 설명되어 있다면, 이를 **종합하여** 질문에 답하세요
+3. "차이", "비교", "구분" 등을 묻는 질문의 경우:
+   - 문서에 각각의 내용이 있다면 이를 비교하여 답변
+   - 명시적인 비교가 없어도 각 내용을 설명하면서 차이점을 도출
+4. 컨텍스트에 **전혀** 관련 정보가 없는 경우에만 "제공된 문서에서 해당 정보를 확인할 수 없습니다"라고 답변
+5. 법률 조항, 숫자, 날짜는 정확히 인용
+6. 일반인이 이해하기 쉽게 설명
+7. 문서의 정보를 최대한 활용하여 유용한 답변을 제공하세요
+
+**예시:**
+- 질문: "A와 B의 차이는?" → 문서에 A 설명, B 설명이 따로 있다면 → 각각을 설명하고 차이점을 정리
+- 질문: "조건은 무엇인가?" → 문서에 관련 법 조항이 있다면 → 해당 내용을 바탕으로 조건 설명"""
     
     def __init__(
         self,
-        llm_provider: BaseLLMProvider,
+        llm_provider: SimpleLLMProvider,
         system_prompt: Optional[str] = None
     ):
         """

@@ -140,3 +140,6 @@ backend/councel/test/scoring_log_*.md
 backend/councel/test/.scoring_log_*_hash
 backend/councel/test/*_backup_*.json
 backend/councel/test/*_backup_*.md
+
+# Insurance ChromaDB (auto-generated)
+backend/app/domain/rag/Insurance/chroma_db/

@@ -43,6 +43,12 @@ class SupervisorAgent:
         # 전문 에이전트 도구 가져오기
         self.tools = get_all_agent_tools()
         
+        # 도구 목록 로깅
+        print(f"\n[SUPERVISOR INIT] Loaded {len(self.tools)} tools:")
+        for tool in self.tools:
+            print(f"  - {tool.name}: {tool.description[:80]}...")
+        print()
+        
         # System message 생성
         self.system_message = self._create_system_message()
         
@@ -256,6 +262,10 @@ class SupervisorAgent:
                     for tool_call in msg.tool_calls:
                         tool_name = tool_call.get('name', 'unknown')
                         agent_used = tool_name.replace('_tool', '')
+                        
+                        # 디버깅 로그 추가
+                        print(f"[SUPERVISOR DEBUG] Tool called: {tool_name} for query: {request.query[:50]}...")
+                        
                         intermediate_steps.append({
                             "agent": agent_used,
                             "action": "process_query",

@@ -4,11 +4,11 @@ Retrieval service
 import time
 from typing import List, Tuple, Optional, Dict, Any
 
-from ..core.models import Query, InsuranceDocument, RetrievalResult
-from ..core.config import config
-from ..core.exceptions import RetrievalException
-from ..infrastructure.vectorstore.base import BaseVectorStore
-from ..infrastructure.embeddings.base import BaseEmbeddingProvider
+from .models import Query, InsuranceDocument, RetrievalResult
+from ..config import insurance_config
+from .exceptions import RetrievalException
+from .providers import SimpleEmbeddingProvider, SimpleVectorStore
+
 
 
 class Retriever:
@@ -16,8 +16,8 @@ class Retriever:
     
     def __init__(
         self,
-        vector_store: BaseVectorStore,
-        embedding_provider: BaseEmbeddingProvider,
+        vector_store: SimpleVectorStore,
+        embedding_provider: SimpleEmbeddingProvider,
         top_k: int = None,
         similarity_threshold: float = None
     ):
@@ -32,8 +32,8 @@ class Retriever:
         """
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
-        self.top_k = top_k or config.top_k
-        self.similarity_threshold = similarity_threshold or config.similarity_threshold
+        self.top_k = top_k or insurance_config.RAG_TOP_K
+        self.similarity_threshold = similarity_threshold or insurance_config.RAG_MIN_SIMILARITY_THRESHOLD
     
     def retrieve(
         self,
@@ -71,10 +71,21 @@ class Retriever:
             filtered_docs = []
             filtered_scores = []
             
+            print(f"[RETRIEVER DEBUG] Retrieved {len(documents)} documents")
+            print(f"[RETRIEVER DEBUG] Similarity threshold: {self.similarity_threshold}")
+            print(f"[RETRIEVER DEBUG] Scores: {scores[:5] if len(scores) > 0 else 'none'}")
+            
+            # 검색된 문서 내용 미리보기 (첫 번째 문서만)
+            if documents:
+                first_doc = documents[0].content[:200] if hasattr(documents[0], 'content') else str(documents[0])[:200]
+                print(f"[RETRIEVER DEBUG] Top document preview: {first_doc}...")
+            
             for doc, score in zip(documents, scores):
                 if score >= self.similarity_threshold:
                     filtered_docs.append(doc)
                     filtered_scores.append(score)
+            
+            print(f"[RETRIEVER DEBUG] Filtered: {len(filtered_docs)}/{len(documents)} documents")
             
             retrieval_time = (time.time() - start_time) * 1000  # ms
             

@@ -49,9 +49,17 @@ class InsuranceRAGConfig:
         return self._settings.LLM_MAX_TOKENS
     
     @property
+    def OPENAI_EMBEDDING_MODEL(self) -> str:
+        """Embedding 모델"""
+        return "text-embedding-3-large"
+    
+    @property
     def CHROMA_PERSIST_DIRECTORY(self) -> str:
-        """ChromaDB 저장 경로 (기존 설정 사용)"""
-        return self._settings.CHROMA_PERSIST_DIRECTORY
+        """ChromaDB 저장 경로 (Insurance 전용)"""
+        # Insurance 전용 ChromaDB 경로 (모듈 독립성)
+        from pathlib import Path
+        insurance_dir = Path(__file__).parent / "chroma_db"
+        return str(insurance_dir.absolute())
     
     @property
     def CHROMA_COLLECTION_NAME(self) -> str:
