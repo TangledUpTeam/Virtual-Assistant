@@ -33,6 +33,7 @@ class MultiAgentResponse(BaseModel):
     query: str = Field(..., description="원본 질문")
     answer: str = Field(..., description="최종 답변")
     agent_used: str = Field(..., description="사용된 에이전트")
+    intent: Optional[str] = Field(None, description="인텐트 분류 결과 (lookup, planning, report_write 등)")
     intermediate_steps: Optional[List[Dict[str, Any]]] = Field(
         default_factory=list, 
         description="중간 단계 (디버깅용)"

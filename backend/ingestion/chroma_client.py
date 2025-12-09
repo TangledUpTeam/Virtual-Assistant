@@ -13,7 +13,6 @@ CHROMA_PERSIST_DIR = Path(__file__).resolve().parent.parent / "Data" / "chroma"
 
 # 컬렉션 이름
 COLLECTION_REPORTS = "reports"
-COLLECTION_KPI = "kpi"
 
 
 class ChromaLocalService:
@@ -79,15 +78,6 @@ class ChromaLocalService:
         """
         return self.get_or_create_collection(name=COLLECTION_REPORTS)
     
-    def get_kpi_collection(self) -> Collection:
-        """
-        KPI 컬렉션 가져오기
-        
-        Returns:
-            KPI Collection
-        """
-        return self.get_or_create_collection(name=COLLECTION_KPI)
-    
     def get_collection_info(self, collection: Collection) -> dict:
         """
         컬렉션 정보 조회
@@ -141,10 +131,4 @@ def get_reports_collection() -> Collection:
     """Reports 컬렉션 가져오기 (헬퍼 함수)"""
     service = get_chroma_service()
     return service.get_reports_collection()
-
-
-def get_kpi_collection() -> Collection:
-    """KPI 컬렉션 가져오기 (헬퍼 함수)"""
-    service = get_chroma_service()
-    return service.get_kpi_collection()
 

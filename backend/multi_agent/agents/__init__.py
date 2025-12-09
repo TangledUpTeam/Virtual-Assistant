@@ -6,7 +6,6 @@ from .base_agent import BaseAgent
 from .chatbot_agent import ChatbotAgent
 from .rag_agent import RAGAgent
 from .brainstorming_agent import BrainstormingAgent
-from .planner_agent import PlannerAgent
 from .report_agent import ReportAgent
 from .therapy_agent import TherapyAgent
 from .notion_agent import NotionAgent
@@ -16,7 +15,6 @@ __all__ = [
     "ChatbotAgent",
     "RAGAgent",
     "BrainstormingAgent",
-    "PlannerAgent",
     "ReportAgent",
     "TherapyAgent",
     "NotionAgent",
