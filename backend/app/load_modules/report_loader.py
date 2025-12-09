@@ -36,7 +36,7 @@ def check_chromadb_has_data() -> bool:
 
 def run_ingestion() -> bool:
     """
-    ingestion 모듈 실행
+    ingestion 모듈 실행 (ChromaDB + PostgreSQL)
     
     Returns:
         bool: 성공 여부
@@ -49,10 +49,16 @@ def run_ingestion() -> bool:
         
         # Python 실행 경로
         python_exe = sys.executable
+        project_root = BASE_DIR.parent  # Virtual-Assistant 루트
+        env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
         
-        # ingestion 모듈 실행
-        # backend 디렉토리에서 실행해야 하므로 cwd 설정
-        result = subprocess.run(
+        print(f"   📍 실행 경로: {BASE_DIR}")
+        print(f"   📍 Python: {python_exe}")
+        print(f"   📍 REPORT_OWNER: {env.get('REPORT_OWNER', 'N/A')}")
+        
+        # 1. ChromaDB ingestion
+        print("   🔄 ChromaDB 목업 데이터 로드 중...")
+        result1 = subprocess.run(
             [python_exe, "-m", "ingestion.ingest_mock_reports"],
             cwd=str(BASE_DIR),
             env=env,
@@ -61,23 +67,80 @@ def run_ingestion() -> bool:
             encoding="utf-8"
         )
         
-        if result.returncode == 0:
-            print("   ✅ Ingestion 완료")
-            if result.stdout:
-                # 출력이 있으면 마지막 몇 줄만 표시
-                lines = result.stdout.strip().split('\n')
+        if result1.returncode != 0:
+            print(f"   ❌ ChromaDB Ingestion 실패 (exit code: {result1.returncode})")
+            if result1.stderr:
+                print(f"      오류 메시지:")
+                for line in result1.stderr.strip().split('\n'):
+                    if line.strip():
+                        print(f"         {line}")
+            if result1.stdout:
+                print(f"      stdout:")
+                for line in result1.stdout.strip().split('\n')[-10:]:
+                    if line.strip():
+                        print(f"         {line}")
+            return False
+        
+        print("   ✅ ChromaDB Ingestion 완료")
+        if result1.stdout:
+            # 출력이 있으면 마지막 몇 줄만 표시
+            lines = result1.stdout.strip().split('\n')
+            for line in lines[-3:]:
+                if line.strip():
+                    print(f"      {line}")
+        
+        # 2. PostgreSQL ingestion
+        print("   🔄 PostgreSQL 목업 데이터 로드 중...")
+        bulk_ingest_script = BASE_DIR / "tools" / "bulk_daily_ingest.py"
+        
+        result2 = subprocess.run(
+            [python_exe, str(bulk_ingest_script)],
+            cwd=str(project_root),  # 프로젝트 루트에서 실행
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8"
+        )
+        
+        if result2.returncode != 0:
+            print(f"   ⚠️  PostgreSQL Ingestion 실패 (exit code: {result2.returncode})")
+            if result2.stderr:
+                print(f"      오류 메시지:")
+                for line in result2.stderr.strip().split('\n'):
+                    if line.strip():
+                        print(f"         {line}")
+            if result2.stdout:
+                print(f"      stdout:")
+                for line in result2.stdout.strip().split('\n')[-10:]:
+                    if line.strip():
+                        print(f"         {line}")
+            # ChromaDB는 성공했으므로 부분 성공으로 처리
+            print("   ⚠️  ChromaDB는 성공했지만 PostgreSQL 초기화 실패")
+            return True
+        
+        print("   ✅ PostgreSQL Ingestion 완료")
+        if result2.stdout:
+            # 출력이 있으면 전체 표시 (에러 확인을 위해)
+            lines = result2.stdout.strip().split('\n')
+            # 에러가 있는지 확인
+            has_errors = any("에러" in line or "ERROR" in line or "❌" in line for line in lines)
+            if has_errors:
+                print("      전체 출력:")
+                for line in lines:
+                    if line.strip():
+                        print(f"         {line}")
+            else:
+                # 에러가 없으면 마지막 몇 줄만 표시
                 for line in lines[-5:]:
                     if line.strip():
                         print(f"      {line}")
-            return True
-        else:
-            print(f"   ❌ Ingestion 실패 (exit code: {result.returncode})")
-            if result.stderr:
-                print(f"      오류: {result.stderr[:200]}")
-            return False
+        
+        return True
             
     except Exception as e:
         print(f"   ❌ Ingestion 실행 오류: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
