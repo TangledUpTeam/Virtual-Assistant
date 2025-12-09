@@ -46,7 +46,7 @@ class ReportAgent(BaseAgent):
             context: 추가 컨텍스트 (owner, target_date 등)
             
         Returns:
-            str: 리포트 응답
+            str: 리포트 응답 (intent 정보 포함 가능)
         """
         try:
             # 기본 컨텍스트 설정
@@ -58,6 +58,19 @@ class ReportAgent(BaseAgent):
                 context["target_date"] = date.today()
             
             # ReportMainRouterAgent에게 라우팅
+            # intent를 확인하기 위해 classify_intent 사용
+            intent = await self.router.classify_intent(query)
+            
+            print(f"[DEBUG] ReportAgent.process - Intent: {intent}, Query: {query}")
+            
+            # intent가 lookup이면 특수 마커 추가 (프론트엔드에서 파싱)
+            if intent == "lookup" or intent == "lookup":
+                response = await self.router.process(query, context)
+                marked_response = f"__INTENT_LOOKUP__{response}"
+                print(f"[DEBUG] ReportAgent - Lookup intent 감지, 마커 추가 (응답 길이: {len(marked_response)})")
+                return marked_response
+            
+            # 그 외의 경우는 일반 처리
             response = await self.router.process(query, context)
             return response
                 

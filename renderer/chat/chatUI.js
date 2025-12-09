@@ -250,6 +250,7 @@ async function handleSendMessage() {
 
   try {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
+    // 키워드 기반 하드코딩 제거: 백엔드 인텐트 분류에 맡김
     const result = await sendMultiAgentMessage(text);
     
     // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
@@ -260,25 +261,46 @@ async function handleSendMessage() {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
     }
     
-    // Intent 기준 UI 분기
+    // Intent 기준 UI 분기 (백엔드 응답 기반)
     const intent = result.intent;
     const agent = result.agent_used;
+    let answer = result.answer;
 
-    // 1. 업무 플래닝 요청이면 → 업무 카드 UI 표시
-    if (intent === 'planning') {
+    // 디버깅: 응답 내용 확인
+    console.log('[DEBUG] 프론트엔드 응답 확인:', {
+      intent,
+      agent,
+      answer_preview: answer ? answer.substring(0, 100) : 'null',
+      has_marker: answer ? answer.includes('__INTENT_LOOKUP__') : false
+    });
+
+    // report_tool이 lookup intent를 처리한 경우 감지 (특수 마커)
+    // agent가 'report' 또는 'report_tool'이고, answer에 마커가 있으면 RAG 응답으로 처리
+    if ((agent === 'report' || agent === 'report_tool') && answer) {
+      if (answer.includes('__INTENT_LOOKUP__')) {
+        // lookup intent인 경우: 마커 제거하고 RAG 응답으로 처리
+        answer = answer.replace('__INTENT_LOOKUP__', '');
+        console.log('[DEBUG] ✅ RAG 응답으로 처리 (마커 감지됨)');
+        // RAG 응답이므로 마크다운 렌더링 적용
+        addMessage('assistant', answer, true); // isMarkdown = true
+        return;
+      }
+      // 마커가 없으면 보고서 도구 버튼 표시 (아래 조건문에서 처리)
+    }
+
+    // 1. RAG(intent === 'lookup' 또는 'rag')면 → LLM 응답만 보여주고 종료
+    if (intent === 'lookup' || intent === 'rag') {
+      addMessage('assistant', answer, isMarkdown);
+      return;
+    }
+
+    // 2. Planning(intent === 'planning')이면 → 업무 카드 UI 표시
+    if (intent === 'planning' || agent === 'planning' || agent === 'planning_tool') {
       await loadAndDisplayTaskCardsInChat();
       return;
     }
 
-    // 2. RAG(intent === 'lookup' 또는 'rag')면 → LLM 응답만 보여주고 종료
-    // 팝업 띄우지 않음
-    if (intent === 'lookup' || intent === 'rag') {
-      addMessage('assistant', result.answer, isMarkdown);
-      return;
-    }
-
     // 3. 보고서 작성(intent === 'report')이면 → 보고서 도구 열기 버튼만 제공
-    // 답변은 팝업에서 처리하므로 여기서는 버튼만 생성
     if (intent === 'report' || intent === 'report_write' || agent === 'report' || agent === 'report_tool') {
       addMessage('assistant', '네 보고서 작성 기능을 도와드리겠습니다!');
       addConfirmationButton('📝 보고서 도구 열기', () => {

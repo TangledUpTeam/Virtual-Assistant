@@ -56,11 +56,15 @@ async def generate_weekly(
         # 인증 비활성화: current_user가 없어도 동작
         resolved_owner = current_user.name if current_user and current_user.name else "사용자"
 
-        report = generate_weekly_report(
+        # ReportGenerationAgent 사용
+        from multi_agent.tools.report_tools import get_report_generation_agent
+        
+        generation_agent = get_report_generation_agent()
+        report = generation_agent.generate_weekly_report(
             db=db,
-            owner=resolved_owner,  # 호환성 유지용
+            owner=resolved_owner,
             target_date=request.target_date,
-            display_name=resolved_owner  # HTML 보고서에 표시할 이름
+            display_name=resolved_owner
         )
 
         if report.owner != resolved_owner:

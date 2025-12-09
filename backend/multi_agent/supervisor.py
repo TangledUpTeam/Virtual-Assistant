@@ -261,8 +261,9 @@ class SupervisorAgent:
                     answer = msg.content
                     break
             
-            # 사용된 도구 추출
+            # 사용된 도구 추출 및 intent 추출
             intermediate_steps = []
+            detected_intent = None
             for msg in messages:
                 if hasattr(msg, 'tool_calls') and msg.tool_calls:
                     for tool_call in msg.tool_calls:
@@ -274,6 +275,22 @@ class SupervisorAgent:
                             "result": "success"
                         })
             
+            # report_tool이 사용된 경우, answer에서 intent 마커 확인
+            if agent_used == "report" and answer and answer.startswith("__INTENT_LOOKUP__"):
+                detected_intent = "lookup"
+                # 마커 제거 (프론트엔드에서도 처리하지만, 백엔드에서도 정리)
+                answer = answer.replace("__INTENT_LOOKUP__", "", 1)
+            elif agent_used == "report" and answer:
+                # report_tool이 사용되었지만 마커가 없는 경우, ReportAgent에서 intent 확인
+                try:
+                    from multi_agent.tools.agent_tools import get_report_agent
+                    report_agent = get_report_agent()
+                    if hasattr(report_agent, 'router'):
+                        detected_intent = await report_agent.router.classify_intent(request.query)
+                        print(f"[DEBUG] Supervisor - report_tool intent 추출: {detected_intent}")
+                except Exception as e:
+                    print(f"[WARNING] Intent 추출 실패: {e}")
+            
             # 처리 시간 계산
             processing_time = time.time() - start_time
             
@@ -282,6 +299,7 @@ class SupervisorAgent:
                 query=request.query,
                 answer=answer,
                 agent_used=agent_used,
+                intent=detected_intent,  # intent 필드 추가
                 intermediate_steps=intermediate_steps if intermediate_steps else [
                     {
                         "agent": agent_used,

@@ -35,32 +35,41 @@ class ReportPromptRegistry:
         "and provide the minimal inputs required. Always keep context consistent."
     )
 
-    INTENT_PROMPT = """사용자의 요청을 아래 네 가지 중 하나로 분류하세요:
+    INTENT_PROMPT = """
+사용자의 요청을 아래 네 가지 중 하나로 분류하세요:
 
-1) lookup  
-   - 과거 보고서 기반 조회  
-   - '누구', '언제', '무엇을 했었는지', '미종결', '조회', '검색', '찾아' 등  
-   - 날짜/고객/업무 내용 회상, 확인, 탐색
+1) lookup
+   - 과거 보고서 내용을 조회하거나 회상하는 요청
+   - 과거 시점 표현이 함께 등장하는 질문
+   - 예: "뭐였지?", "했었지?", "언제 했더라?", "저번주", "지난주", "어제", "지난달"
+   - 미종결 업무 조회 또한 lookup에 해당합니다.
+   - 예시:
+     * "저번주 미종결 업무 뭐였지?" → lookup
+     * "지난주 상담한 고객 누구였지?" → lookup
+     * "어제 처리 못한 업무 알려줘" → lookup
 
-2) report_write  
-   - 일일/주간/월간 보고서 생성 또는 수정  
-   - '보고서 작성', '일일보고서', '주간보고서', '정리해줘'
+2) report_write
+   - 일일/주간/월간 보고서를 생성, 정리, 수정하려는 요청
 
-3) planning  
-   - 오늘 할 일 추천, 일정 계획  
-   - '오늘 할 일', '업무 추천', '플랜', '계획', '일정'
+3) planning
+   - 오늘 또는 미래의 할 일을 추천하거나 계획하려는 요청
+   - 현재/미래 중심 표현 ("오늘", "금일", "할 일", "추천", "계획")
 
-4) other  
-   - 위에 해당하지 않는 일반 대화
+4) other
+   - 위 분류에 속하지 않는 일반 대화
 
-너무 엄격한 규칙을 적용하지 말고, 자연스럽고 직관적으로 판단하세요.
+중요 기준:
+- 과거 조회(저번주, 지난달, 뭐였지) → lookup
+- 미종결 업무 조회 → lookup
+- 오늘/미래 일 정리 및 추천 → planning
 
-출력은 반드시 다음 JSON 형식:
+아래 JSON 형식으로만 출력하세요:
 {
   "intent": "lookup | report_write | planning | other",
   "confidence": 0.0 ~ 1.0,
-  "reason": "왜 그렇게 판단했는지 간단히"
+  "reason": "간단한 판단 근거"
 }
+
 """
     INTENT_USER_TEMPLATE = "사용자 요청: {query}"
 
@@ -68,7 +77,7 @@ class ReportPromptRegistry:
     # 2. 업무 플래닝 프롬프트
     # ========================================
 
-    PLAN_SYSTEM_PROMPT = """당신은 사용자의 하루 업무 계획을 추천하는 AI 업무 플래너입니다.
+    PLAN_SYSTEM_PROMPT = """당신은 사용자의 오늘 할 일을 추천하는 AI 업무 플래너입니다.
 
 당신의 목표는 "오늘 수행할 업무를 3개 추천"하는 것입니다.
 
@@ -98,7 +107,6 @@ class ReportPromptRegistry:
 """
 
     PLAN_USER_TEMPLATE = """날짜: {today}
-고객명: {owner}
 
 이전날 수행업무(업무 로그):
 {tasks_text}
@@ -112,7 +120,7 @@ class ReportPromptRegistry:
 최근3일업무기록(similar_tasks) (VectorDB) - **3순위**
 {similar_tasks_text}
 
-위 정보를 바탕으로 오늘 할 일 계획을 JSON 형식으로 작성하세요.
+위 정보를 바탕으로 오늘 할 일 계획을 작성하세요.
 """
 
     # ========================================

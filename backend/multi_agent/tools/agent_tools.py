@@ -166,12 +166,13 @@ async def brainstorming_tool(query: str) -> str:
     return await agent.process(query, context=context)
 
 # 일정 관리와 계획 수립을 도와줌
+# 주의: planner_tool은 report_tool로 통합되었습니다.
+# report_tool이 업무 플래닝을 처리하므로, planner_tool은 report_tool로 리다이렉트합니다.
 @tool
 async def planner_tool(query: str) -> str:
     """일정 관리와 계획 수립을 도와줍니다. 오늘의 할 일, 업무 일정 관리, 시간 관리 조언을 제공합니다."""
-    agent = get_planner_agent()
-    context = get_current_context()
-    return await agent.process(query, context=context)
+    # report_tool로 리다이렉트 (업무 플래닝은 report_tool이 처리)
+    return await report_tool(query)
 
 # 업무 플래닝, 보고서 작성, 보고서 검색/대화를 수행
 @tool
@@ -184,7 +185,11 @@ async def report_tool(query: str) -> str:
     """
     agent = get_report_agent()
     context = get_current_context()
-    return await agent.process(query, context=context)
+    response = await agent.process(query, context=context)
+    
+    # intent 정보는 ReportAgent.process에서 마커로 포함되거나
+    # supervisor에서 answer를 분석하여 추출하므로 여기서는 처리하지 않음
+    return response
 
 # 심리 상담 제공
 @tool

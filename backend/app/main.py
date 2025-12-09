@@ -20,6 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Virtual-Assistant �
 
 # 모듈 RAG 초기화
 from app.load_modules import init_all_modules
+from app.load_modules.report_loader import init_reports
 
 # Tools Router 추가
 import sys
@@ -55,6 +56,12 @@ async def lifespan(app: FastAPI):
         init_all_modules()
     except Exception as e:
         print(f"⚠️  Module initialization error: {e}")
+    
+    # 보고서 모듈 초기화 (ChromaDB + PostgreSQL)
+    try:
+        init_reports()
+    except Exception as e:
+        print(f"⚠️  Report initialization error: {e}")
     
     yield
     

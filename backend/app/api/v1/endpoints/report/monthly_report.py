@@ -62,13 +62,16 @@ async def generate_monthly(
         # 인증 비활성화: current_user가 없어도 동작
         resolved_owner = current_user.name if current_user and current_user.name else "사용자"
 
-        target_date = date(request.year, request.month, 1)
-
-        report = generate_monthly_report(
+        # ReportGenerationAgent 사용
+        from multi_agent.tools.report_tools import get_report_generation_agent
+        
+        generation_agent = get_report_generation_agent()
+        report = generation_agent.generate_monthly_report(
             db=db,
-            owner=resolved_owner,  # 호환성 유지용
-            target_date=target_date,
-            display_name=resolved_owner  # HTML 보고서에 표시할 이름
+            owner=resolved_owner,
+            year=request.year,
+            month=request.month,
+            display_name=resolved_owner
         )
 
         report_dict = report.model_dump(mode="json")
