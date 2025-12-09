@@ -213,9 +213,6 @@ class AutomaticSaveManager:
                 raise Exception("Vector DB 저장 실패")
             
             # 성공
-            print("\n" + "="*60)
-            print("전체 프로세스 완료!")
-            print("="*60)
             return True
             
         except Exception as e:
