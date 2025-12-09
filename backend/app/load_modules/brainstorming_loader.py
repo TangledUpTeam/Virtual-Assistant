@@ -39,12 +39,10 @@ def init_brainstorming() -> bool:
     
     # 2. ChromaDB 클라이언트 초기화
     try:
+        # idea_generator.py와 동일한 설정 사용 (충돌 방지)
         client = chromadb.PersistentClient(
             path=str(chroma_dir),
-            settings=ChromaSettings(
-                anonymized_telemetry=False,
-                allow_reset=True
-            )
+            settings=ChromaSettings(anonymized_telemetry=False)
         )
     except Exception as e:
         print(f"   ❌ ChromaDB 초기화 실패: {e}")
