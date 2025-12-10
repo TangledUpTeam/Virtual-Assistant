@@ -191,6 +191,16 @@ async def main_page():
         return {"error": "Main page not found"}
 
 
+@app.get("/report")
+async def report_page():
+    """보고서 팝업 페이지 (일렉트론용)"""
+    report_page = BASE_DIR / "report-popup.html"
+    if report_page.exists():
+        return FileResponse(report_page)
+    else:
+        return {"error": "Report page not found"}
+
+
 if __name__ == "__main__":
     import uvicorn
     
