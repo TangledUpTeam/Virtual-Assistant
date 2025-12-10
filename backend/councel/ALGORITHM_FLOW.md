@@ -159,8 +159,8 @@ Vector DB 검색 조건 결정
   ├─→ Multi-step 반복 검색
   │     └─→ search_engine._iterative_search_with_query_expansion_async
   ├─→ 최고 유사도 계산
-  │     ├─→ [final_similarity 있음] → final_similarity 중 최댓값 사용
-  │     └─→ [final_similarity 없음] → distance를 similarity로 변환 후 최댓값 사용
+  │     └─→ final_similarity 중 최댓값 사용 (하이브리드 검색 적용)
+  │           └─→ final_similarity = base_similarity + emotion_boost
   └─→ Threshold 분기 (0.7)
       ├─→ [유사도 ≥ 0.7 AND RAG 강제 아님]
       │     └─→ LLM 단독 답변 생성
@@ -325,16 +325,22 @@ LLM 기반 상담 단계 선택
   ↓
 초기화 (all_chunks = [], seen_ids = set(), iteration = 0)
   ↓
-Step 1: 초기 검색
+Step 1: 초기 검색 (하이브리드 검색)
   └─→ retrieve_chunks_async
       ├─→ 임베딩 생성
       │     └─→ create_query_embedding_async
       ├─→ ChromaDB query 실행 (비동기 스레드 풀)
-      ├─→ 결과 포맷팅 (distance 포함)
+      │     └─→ n_results × 2개 검색 (더 많이 검색 후 필터링)
+      ├─→ 결과 포맷팅
+      ├─→ 하이브리드 검색 스코어링 적용
+      │     └─→ _apply_hybrid_scoring (공통 함수)
+      │           ├─→ base_similarity 계산 (distance → similarity 변환)
+      │           ├─→ emotion_boost 계산 (감정 키워드 매칭 보너스)
+      │           ├─→ final_similarity = base_similarity + emotion_boost (최대 1.0)
+      │           └─→ final_similarity 기준으로 정렬
+      ├─→ 상위 n_results개만 선택
       └─→ 조건부 Re-ranker 실행
-          ├─→ 최고 유사도 계산 (distance → similarity 변환)
-          │     └─→ _get_max_similarity
-          │           └─→ 각 청크의 distance를 similarity로 변환 후 최댓값 반환
+          ├─→ 최고 유사도 계산 (final_similarity 사용)
           └─→ [최고 유사도 < 0.55] → Re-ranker 실행
                 └─→ rerank_chunks
                     ├─→ 평가 프롬프트 구성
@@ -371,7 +377,7 @@ Step 3: 반복 검색 (조건부)
 Step 4: 최종 처리
   └─→ _finalize_search_results
       ├─→ 최고 유사도 계산
-      │     └─→ _get_max_similarity (각 청크의 distance → similarity 변환 후 최댓값)
+      │     └─→ final_similarity 중 최댓값 사용 (하이브리드 검색 결과)
       ├─→ 조건부 Re-ranker 실행
       │     └─→ [최고 유사도 < 0.55] → rerank_chunks 실행
       ├─→ 상위 n_results개만 반환
@@ -504,15 +510,12 @@ OpenAI API 호출
 **목적**: 검색된 청크들 중에서 가장 높은 유사도를 가진 청크의 유사도 값
 
 **계산 방법**:
-1. **하이브리드 검색이 적용된 경우** (`final_similarity`가 있는 경우):
-   - `final_similarity = base_similarity + emotion_boost`
-   - `base_similarity = distance → similarity 변환 (1 / (1 + distance))`
-   - `emotion_boost = 감정 키워드 매칭 보너스 (최대 0.2)`
-   - 최고 유사도 = 모든 청크의 `final_similarity` 중 최댓값
-
-2. **일반 벡터 검색만 사용된 경우** (`final_similarity`가 없는 경우):
-   - 각 청크의 `distance`를 `similarity`로 변환: `similarity = 1 / (1 + distance)`
-   - 최고 유사도 = 모든 청크의 `similarity` 중 최댓값
+- **하이브리드 검색 적용** (기본적으로 모든 검색에 적용):
+  - `base_similarity = distance → similarity 변환 (1 / (1 + distance))`
+  - `emotion_boost = 감정 키워드 매칭 보너스 (최대 0.2)`
+  - `final_similarity = base_similarity + emotion_boost` (최대 1.0)
+  - 최고 유사도 = 모든 청크의 `final_similarity` 중 최댓값
+  - `retrieve_chunks_async` 함수에서 자동으로 하이브리드 검색이 적용됨
 
 **사용 용도**:
 - Threshold 분기 결정 (0.7 기준)

@@ -54,17 +54,18 @@ class SearchEngine:
             print(f"[오류] 임베딩 생성 실패: {e}")
             raise
     
-    # Vector DB에서 관련 청크 검색(비동기함수)
+    # Vector DB에서 관련 청크 검색(비동기함수, 하이브리드 검색 적용)
     async def retrieve_chunks_async(self, user_input: str, n_results: int = 5, use_reranker: bool = True) -> List[Dict[str, Any]]:
 
         # 질문을 임베딩으로 변환 (비동기)
         query_embedding = await self.create_query_embedding_async(user_input)
         
         # 유사도 검색 (ChromaDB는 동기식이므로 스레드 풀에서 비동기 실행) -> 병렬 처리를 위함
+        # 하이브리드 검색을 위해 더 많이 검색 후 필터링
         results = await asyncio.to_thread(
             self.collection.query,
             query_embeddings=[query_embedding],
-            n_results=n_results
+            n_results=n_results * 2  # 더 많이 검색 후 필터링
         )
         
         # 결과 포맷팅
@@ -79,9 +80,16 @@ class SearchEngine:
                 }
                 retrieved_chunks.append(chunk)
         
+        # 하이브리드 검색 스코어링 적용
+        retrieved_chunks = self._apply_hybrid_scoring(retrieved_chunks, user_input)
+        
+        # 상위 n_results개만 선택
+        retrieved_chunks = retrieved_chunks[:n_results]
+        
         # 조건부 Re-ranker: 최고 유사도가 0.55 이상이면 생략
         if use_reranker and retrieved_chunks:
-            max_similarity = self._get_max_similarity(retrieved_chunks)
+            # final_similarity를 사용하여 최고 유사도 계산
+            max_similarity = max(chunk.get('final_similarity', 0.0) for chunk in retrieved_chunks)
             if max_similarity < 0.55:
                 retrieved_chunks = await self.rerank_chunks(user_input, retrieved_chunks)
         
@@ -94,6 +102,31 @@ class SearchEngine:
         # distance가 0이면 similarity는 1 (완전 일치)
         # distance가 클수록 similarity는 0에 가까워짐
         return 1.0 / (1.0 + distance)
+    
+    # 하이브리드 검색 스코어링 적용 (공통 로직)
+    def _apply_hybrid_scoring(self, chunks: List[Dict[str, Any]], user_input: str) -> List[Dict[str, Any]]:
+        """
+        청크 리스트에 하이브리드 검색 스코어링을 적용합니다.
+        base_similarity + emotion_boost = final_similarity를 계산하고 정렬합니다.
+        """
+        for chunk in chunks:
+            # 기본 유사도 계산
+            base_similarity = self._distance_to_similarity(chunk['distance']) if chunk.get('distance') is not None else 0.0
+            
+            # 감정 가중치 계산
+            emotion_boost = self._calculate_emotion_boost(user_input, chunk['text'])
+            
+            # 최종 유사도 (가중치 적용)
+            final_similarity = min(1.0, base_similarity + emotion_boost)
+            
+            chunk['base_similarity'] = base_similarity
+            chunk['emotion_boost'] = emotion_boost
+            chunk['final_similarity'] = final_similarity
+        
+        # 최종 유사도 기준으로 정렬
+        chunks.sort(key=lambda x: x['final_similarity'], reverse=True)
+        
+        return chunks
     
     # Re-ranker 사용 -> 검색된 청크들을 관련성 기준으로 재정렬 (LLM 사용, 비동기)
     async def rerank_chunks(self, user_input: str, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -226,13 +259,18 @@ class SearchEngine:
                 "needs_improvement": True
             }
         
-        # 평균 유사도 계산
+        # 평균 유사도 계산 (하이브리드 검색 결과는 final_similarity 사용)
         similarities = []
         for chunk in chunks:
-            distance = chunk.get('distance')
-            if distance is not None:
-                similarity = self._distance_to_similarity(distance)
-                similarities.append(similarity)
+            # 하이브리드 검색 결과는 final_similarity 사용
+            if 'final_similarity' in chunk:
+                similarities.append(chunk['final_similarity'])
+            else:
+                # fallback: distance를 similarity로 변환
+                distance = chunk.get('distance')
+                if distance is not None:
+                    similarity = self._distance_to_similarity(distance)
+                    similarities.append(similarity)
         
         avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
         
@@ -338,9 +376,15 @@ class SearchEngine:
     ) -> Dict[str, Any]:
         """검색 결과 최종 처리: Re-ranker 적용 및 결과 반환"""
         # 조건부 Re-ranker: 최고 유사도가 0.55 이상이면 생략
-        max_similarity = self._get_max_similarity(all_chunks)
-        if all_chunks and max_similarity < 0.55:
-            all_chunks = await self.rerank_chunks(user_input, all_chunks)
+        # 하이브리드 검색 결과는 final_similarity를 사용
+        if all_chunks:
+            max_similarity = max(
+                chunk.get('final_similarity', 
+                    self._distance_to_similarity(chunk.get('distance', 0.0)) if chunk.get('distance') is not None else 0.0
+                ) for chunk in all_chunks
+            )
+            if max_similarity < 0.55:
+                all_chunks = await self.rerank_chunks(user_input, all_chunks)
         
         # 상위 n_results개만 반환
         final_chunks = all_chunks[:n_results]
@@ -482,13 +526,13 @@ class SearchEngine:
             # 이미 실행 중인 루프가 있으면 동기적으로 실행할 수 없으므로 새 이벤트 루프에서 실행
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self._finalize_search_results(user_input, all_chunks, iteration, n_results))
+                future = executor.submit(lambda: asyncio.run(self._finalize_search_results(user_input, all_chunks, iteration, n_results)))
                 return future.result()
         except RuntimeError:
             # 이벤트 루프가 없으면 새로 생성하여 실행
             return asyncio.run(self._finalize_search_results(user_input, all_chunks, iteration, n_results))
     
-    # 하이브리드 검색 함수(벡터 검색 + 키워드 검색)
+    # 하이브리드 검색 함수(벡터 검색 + 키워드 검색, 동기 버전)
     def _hybrid_search(self, user_input: str, n_results: int = 5) -> List[Dict[str, Any]]:
 
         # 벡터 검색
@@ -498,7 +542,7 @@ class SearchEngine:
             n_results=n_results * 2  # 더 많이 검색 후 필터링
         )
         
-        # 결과 포맷팅 및 감정 가중치 적용
+        # 결과 포맷팅
         retrieved_chunks = []
         if results['ids'] and results['ids'][0]:
             for i in range(len(results['ids'][0])):
@@ -508,24 +552,10 @@ class SearchEngine:
                     'metadata': results['metadatas'][0][i],
                     'distance': results['distances'][0][i] if 'distances' in results else None
                 }
-                
-                # 기본 유사도 계산
-                base_similarity = self._distance_to_similarity(chunk['distance']) if chunk['distance'] is not None else 0.0
-                
-                # 감정 가중치 계산
-                emotion_boost = self._calculate_emotion_boost(user_input, chunk['text'])
-                
-                # 최종 유사도 (가중치 적용)
-                final_similarity = min(1.0, base_similarity + emotion_boost)
-                
-                chunk['base_similarity'] = base_similarity
-                chunk['emotion_boost'] = emotion_boost
-                chunk['final_similarity'] = final_similarity
-                
                 retrieved_chunks.append(chunk)
         
-        # 최종 유사도 기준으로 정렬
-        retrieved_chunks.sort(key=lambda x: x['final_similarity'], reverse=True)
+        # 하이브리드 검색 스코어링 적용 (공통 로직 사용)
+        retrieved_chunks = self._apply_hybrid_scoring(retrieved_chunks, user_input)
         
         # 상위 n_results개만 반환
         return retrieved_chunks[:n_results]
@@ -564,7 +594,7 @@ class SearchEngine:
                     loop = asyncio.get_running_loop()
                     import concurrent.futures
                     with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, self.rerank_chunks(user_input, retrieved_chunks))
+                        future = executor.submit(lambda: asyncio.run(self.rerank_chunks(user_input, retrieved_chunks)))
                         retrieved_chunks = future.result()
                 except RuntimeError:
                     # 이벤트 루프가 없으면 새로 생성하여 실행
