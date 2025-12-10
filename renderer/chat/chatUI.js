@@ -3,20 +3,22 @@
  * 간단한 대화 및 기타 기능
  */
 
-import { sendMultiAgentMessage, initChatbotService } from './chatbotService.js';
+import { sendMultiAgentMessage, initChatbotService } from "./chatbotService.js";
 
 // 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
-const accessToken = sessionStorage.getItem('access_token');
-console.log('🔍 세션 스토리지 확인:', {
-  accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : 'null',
-  sessionStorageKeys: Object.keys(sessionStorage)
+const accessToken = sessionStorage.getItem("access_token");
+console.log("🔍 세션 스토리지 확인:", {
+  accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : "null",
+  sessionStorageKeys: Object.keys(sessionStorage),
 });
 
 if (accessToken) {
   initChatbotService(accessToken);
-  console.log('✅ 세션 스토리지에서 액세스 토큰 로드 완료');
+  console.log("✅ 세션 스토리지에서 액세스 토큰 로드 완료");
 } else {
-  console.warn('⚠️ 액세스 토큰이 없습니다. 일부 기능(메일 전송 등)은 로그인이 필요합니다.');
+  console.warn(
+    "⚠️ 액세스 토큰이 없습니다. 일부 기능(메일 전송 등)은 로그인이 필요합니다."
+  );
 }
 
 let messages = [];
@@ -33,35 +35,35 @@ let userDisplayEl = null;
  */
 export function initChatPanel() {
   if (isChatPanelInitialized) {
-    console.log('⚠️  채팅 패널 이미 초기화됨 - 스킵');
+    console.log("⚠️  채팅 패널 이미 초기화됨 - 스킵");
     return;
   }
 
-  console.log('💬 채팅 패널 초기화 중...');
+  console.log("💬 채팅 패널 초기화 중...");
 
-  chatPanel = document.getElementById('chat-panel');
-  messagesContainer = document.getElementById('messages');
-  chatInput = document.getElementById('chat-input');
-  sendBtn = document.getElementById('send-btn');
-  userDisplayEl = document.getElementById('user-display');
-  
+  chatPanel = document.getElementById("chat-panel");
+  messagesContainer = document.getElementById("messages");
+  chatInput = document.getElementById("chat-input");
+  sendBtn = document.getElementById("send-btn");
+  userDisplayEl = document.getElementById("user-display");
+
   // 사용자 표시 숨기기 (보고서 기능에서만 사용자 이름 필요)
   if (userDisplayEl) {
-    userDisplayEl.style.display = 'none';
+    userDisplayEl.style.display = "none";
   }
 
   if (!chatPanel || !messagesContainer || !chatInput || !sendBtn) {
-    console.error('❌ 채팅 패널 요소를 찾을 수 없습니다.');
+    console.error("❌ 채팅 패널 요소를 찾을 수 없습니다.");
     return;
   }
 
   // 초기 메시지 추가
-  addMessage('assistant', '안녕하세요! 무엇을 도와드릴까요? 😊');
+  addMessage("assistant", "안녕하세요! 무엇을 도와드릴까요? 😊");
 
   // 이벤트 리스너 등록
-  sendBtn.addEventListener('click', handleSendMessage);
-  chatInput.addEventListener('keydown', handleChatInputKeydown);
-  window.addEventListener('keydown', handleGlobalKeydown);
+  sendBtn.addEventListener("click", handleSendMessage);
+  chatInput.addEventListener("keydown", handleChatInputKeydown);
+  window.addEventListener("keydown", handleGlobalKeydown);
 
   // 드래그 앤 드롭 기능 초기화
   initDragAndDrop();
@@ -71,14 +73,14 @@ export function initChatPanel() {
 
   isChatPanelInitialized = true;
 
-  console.log('✅ 채팅 패널 초기화 완료');
+  console.log("✅ 채팅 패널 초기화 완료");
 }
 
 /**
  * 드래그 앤 드롭 기능 초기화
  */
 function initDragAndDrop() {
-  const header = chatPanel.querySelector('h2');
+  const header = chatPanel.querySelector("h2");
   if (!header) return;
 
   let isDragging = false;
@@ -88,10 +90,10 @@ function initDragAndDrop() {
   let initialTop = 0;
 
   // 헤더에 드래그 커서 추가
-  header.style.cursor = 'move';
-  header.style.userSelect = 'none';
+  header.style.cursor = "move";
+  header.style.userSelect = "none";
 
-  header.addEventListener('mousedown', (e) => {
+  header.addEventListener("mousedown", (e) => {
     isDragging = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -101,11 +103,11 @@ function initDragAndDrop() {
     initialLeft = rect.left;
     initialTop = rect.top;
 
-    chatPanel.style.transition = 'none';
+    chatPanel.style.transition = "none";
     e.preventDefault();
   });
 
-  document.addEventListener('mousemove', (e) => {
+  document.addEventListener("mousemove", (e) => {
     if (!isDragging) return;
 
     const deltaX = e.clientX - startX;
@@ -118,18 +120,18 @@ function initDragAndDrop() {
     const maxLeft = window.innerWidth - chatPanel.offsetWidth;
     const maxTop = window.innerHeight - chatPanel.offsetHeight;
 
-    chatPanel.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
-    chatPanel.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+    chatPanel.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + "px";
+    chatPanel.style.top = Math.max(0, Math.min(newTop, maxTop)) + "px";
   });
 
-  document.addEventListener('mouseup', () => {
+  document.addEventListener("mouseup", () => {
     if (isDragging) {
       isDragging = false;
-      chatPanel.style.transition = '';
+      chatPanel.style.transition = "";
     }
   });
 
-  console.log('✅ 드래그 앤 드롭 기능 초기화 완료');
+  console.log("✅ 드래그 앤 드롭 기능 초기화 완료");
 }
 
 /**
@@ -137,9 +139,9 @@ function initDragAndDrop() {
  */
 function initResize() {
   // 리사이즈 핸들 생성
-  const resizeHandle = document.createElement('div');
-  resizeHandle.className = 'resize-handle';
-  resizeHandle.innerHTML = '⋰';
+  const resizeHandle = document.createElement("div");
+  resizeHandle.className = "resize-handle";
+  resizeHandle.innerHTML = "⋰";
   chatPanel.appendChild(resizeHandle);
 
   let isResizing = false;
@@ -148,7 +150,7 @@ function initResize() {
   let startWidth = 0;
   let startHeight = 0;
 
-  resizeHandle.addEventListener('mousedown', (e) => {
+  resizeHandle.addEventListener("mousedown", (e) => {
     isResizing = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -157,12 +159,12 @@ function initResize() {
     startWidth = rect.width;
     startHeight = rect.height;
 
-    chatPanel.style.transition = 'none';
+    chatPanel.style.transition = "none";
     e.preventDefault();
     e.stopPropagation();
   });
 
-  document.addEventListener('mousemove', (e) => {
+  document.addEventListener("mousemove", (e) => {
     if (!isResizing) return;
 
     const deltaX = e.clientX - startX;
@@ -177,18 +179,20 @@ function initResize() {
     const minHeight = 400;
     const maxHeight = window.innerHeight - 100;
 
-    chatPanel.style.width = Math.max(minWidth, Math.min(newWidth, maxWidth)) + 'px';
-    chatPanel.style.height = Math.max(minHeight, Math.min(newHeight, maxHeight)) + 'px';
+    chatPanel.style.width =
+      Math.max(minWidth, Math.min(newWidth, maxWidth)) + "px";
+    chatPanel.style.height =
+      Math.max(minHeight, Math.min(newHeight, maxHeight)) + "px";
   });
 
-  document.addEventListener('mouseup', () => {
+  document.addEventListener("mouseup", () => {
     if (isResizing) {
       isResizing = false;
-      chatPanel.style.transition = '';
+      chatPanel.style.transition = "";
     }
   });
 
-  console.log('✅ 리사이즈 기능 초기화 완료');
+  console.log("✅ 리사이즈 기능 초기화 완료");
 }
 
 // 전역으로 export
@@ -203,7 +207,7 @@ function handleChatInputKeydown(e) {
     return;
   }
 
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     handleSendMessage();
   }
@@ -214,14 +218,14 @@ function handleChatInputKeydown(e) {
  */
 function handleGlobalKeydown(e) {
   // Shift + Ctrl(Cmd) + Enter: 캐릭터 토글
-  if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key === "Enter") {
     e.preventDefault();
     toggleCharacter();
     return;
   }
 
   // Ctrl(Cmd) + Enter: 챗창 토글
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
     e.preventDefault();
     togglePanel();
   }
@@ -235,112 +239,130 @@ async function handleSendMessage() {
   if (!text) return;
 
   if (sendBtn.disabled) {
-    console.log('⚠️  이미 전송 중...');
+    console.log("⚠️  이미 전송 중...");
     return;
   }
 
-  addMessage('user', text);
+  addMessage("user", text);
 
-  chatInput.value = '';
+  chatInput.value = "";
   chatInput.blur();
   setTimeout(() => chatInput.focus(), 0);
 
   sendBtn.disabled = true;
-  sendBtn.textContent = '...';
+  sendBtn.textContent = "...";
 
   try {
     // 모든 메시지를 Multi-Agent Supervisor로 전달 (자동 라우팅)
     // 키워드 기반 하드코딩 제거: 백엔드 인텐트 분류에 맡김
     const result = await sendMultiAgentMessage(text);
-    
-    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
-    const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
+
+    // HR(RAG) 및 Insurance 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown =
+      result.agent_used === "rag" ||
+      result.agent_used === "rag_tool" ||
+      result.agent_used === "insurance_tool" ||
+      result.agent_used === "insurance";  // backend에서 _tool 제거하고 반환
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
     }
-    
+
     // Intent 기준 UI 분기 (백엔드 응답 기반)
     const intent = result.intent;
     const agent = result.agent_used;
     let answer = result.answer;
 
     // 디버깅: 응답 내용 확인
-    console.log('[DEBUG] 프론트엔드 응답 확인:', {
+    console.log("[DEBUG] 프론트엔드 응답 확인:", {
       intent,
       agent,
-      answer_preview: answer ? answer.substring(0, 100) : 'null',
-      has_marker: answer ? answer.includes('__INTENT_LOOKUP__') : false
+      answer_preview: answer ? answer.substring(0, 100) : "null",
+      has_marker: answer ? answer.includes("__INTENT_LOOKUP__") : false,
     });
 
     // report_tool이 lookup intent를 처리한 경우 감지 (특수 마커)
     // agent가 'report' 또는 'report_tool'이고, answer에 마커가 있으면 RAG 응답으로 처리
-    if ((agent === 'report' || agent === 'report_tool') && answer) {
-      if (answer.includes('__INTENT_LOOKUP__')) {
+    if ((agent === "report" || agent === "report_tool") && answer) {
+      if (answer.includes("__INTENT_LOOKUP__")) {
         // lookup intent인 경우: 마커 제거하고 RAG 응답으로 처리
-        answer = answer.replace('__INTENT_LOOKUP__', '');
-        console.log('[DEBUG] ✅ RAG 응답으로 처리 (마커 감지됨)');
+        answer = answer.replace("__INTENT_LOOKUP__", "");
+        console.log("[DEBUG] ✅ RAG 응답으로 처리 (마커 감지됨)");
         // RAG 응답이므로 마크다운 렌더링 적용
-        addMessage('assistant', answer, true); // isMarkdown = true
+        addMessage("assistant", answer, true); // isMarkdown = true
         return;
       }
       // 마커가 없으면 보고서 도구 버튼 표시 (아래 조건문에서 처리)
     }
 
-    // 1. RAG(intent === 'lookup' 또는 'rag')면 → LLM 응답만 보여주고 종료
-    if (intent === 'lookup' || intent === 'rag') {
-      addMessage('assistant', answer, isMarkdown);
+    // 1. RAG(intent === 'lookup' 또는 'rag') 또는 insurance이면 → LLM 응답만 보여주고 종료
+    if (intent === "lookup" || intent === "rag" || agent === "insurance_tool" || agent === "insurance") {
+      console.log(`📝 Markdown 렌더링: ${isMarkdown}, Agent: ${agent}, Intent: ${intent}`);
+      addMessage("assistant", answer, isMarkdown);
       return;
     }
 
     // 2. Planning(intent === 'planning')이면 → 업무 카드 UI 표시
-    if (intent === 'planning' || agent === 'planning' || agent === 'planning_tool') {
+    if (
+      intent === "planning" ||
+      agent === "planning" ||
+      agent === "planning_tool"
+    ) {
       await loadAndDisplayTaskCardsInChat();
       return;
     }
 
     // 3. 보고서 작성(intent === 'report')이면 → 보고서 도구 열기 버튼만 제공
-    if (intent === 'report' || intent === 'report_write' || agent === 'report' || agent === 'report_tool') {
-      addMessage('assistant', '네 보고서 작성 기능을 도와드리겠습니다!');
-      addConfirmationButton('📝 보고서 도구 열기', () => {
+    if (
+      intent === "report" ||
+      intent === "report_write" ||
+      agent === "report" ||
+      agent === "report_tool"
+    ) {
+      addMessage("assistant", "네 보고서 작성 기능을 도와드리겠습니다!");
+      addConfirmationButton("📝 보고서 도구 열기", () => {
         openReportPopup();
-        addMessage('assistant', '보고서 도구를 열었습니다! 📝');
+        addMessage("assistant", "보고서 도구를 열었습니다! 📝");
       });
       return;
     }
-    
+
     // 브레인스토밍 에이전트가 사용되었으면
-    if (result.agent_used === 'brainstorming' || result.agent_used === 'brainstorming_tool') {
-      addMessage('assistant', result.answer);
+    if (
+      result.agent_used === "brainstorming" ||
+      result.agent_used === "brainstorming_tool"
+    ) {
+      addMessage("assistant", result.answer);
 
       // 1. "SUGGESTION:"으로 시작하면 (제안 모드)
-      if (result.answer.includes('SUGGESTION:')) {
-        const cleanMessage = result.answer.replace('SUGGESTION:', '').trim();
+      if (result.answer.includes("SUGGESTION:")) {
+        const cleanMessage = result.answer.replace("SUGGESTION:", "").trim();
         // 메시지는 이미 addMessage로 출력되었으므로 버튼만 추가
-        addConfirmationButton('브레인스토밍 시작하기', () => {
+        addConfirmationButton("브레인스토밍 시작하기", () => {
           openBrainstormingPopup();
-          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+          addMessage("assistant", "브레인스토밍을 시작합니다! 🚀");
         });
       }
       // 2. 그 외 (RAG 답변 등) - 자동 실행하지 않고 버튼 표시
       else {
-        addConfirmationButton('브레인스토밍 도구 열기', () => {
+        addConfirmationButton("브레인스토밍 도구 열기", () => {
           openBrainstormingPopup();
-          addMessage('assistant', '브레인스토밍을 시작합니다! 🚀');
+          addMessage("assistant", "브레인스토밍을 시작합니다! 🚀");
         });
       }
       return;
     }
-    
+
     // 그 외 일반 에이전트
-    addMessage('assistant', result.answer, isMarkdown);
+    console.log(`📝 일반 에이전트 응답 - Markdown: ${isMarkdown}, Agent: ${agent}`);
+    addMessage("assistant", result.answer, isMarkdown);
   } catch (error) {
-    console.error('❌ 채팅 오류:', error);
-    addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 😢');
+    console.error("❌ 채팅 오류:", error);
+    addMessage("assistant", "죄송합니다. 오류가 발생했습니다. 😢");
   } finally {
     sendBtn.disabled = false;
-    sendBtn.textContent = '전송';
+    sendBtn.textContent = "전송";
   }
 }
 
@@ -350,23 +372,26 @@ async function handleSendMessage() {
 async function loadAndDisplayTaskCardsInChat() {
   try {
     // taskUI.js의 함수들을 동적으로 import
-    const { addTaskRecommendations } = await import('../report/taskUI.js');
-    const { getTodayPlan } = await import('../report/taskService.js');
-    
+    const { addTaskRecommendations } = await import("../report/taskUI.js");
+    const { getTodayPlan } = await import("../report/taskService.js");
+
     const planResult = await getTodayPlan();
-    
-    if (planResult.type === 'task_recommendations' && planResult.data.tasks && planResult.data.tasks.length > 0) {
-      addTaskRecommendations(
-        planResult.data,
-        addMessage,
-        messagesContainer
-      );
+
+    if (
+      planResult.type === "task_recommendations" &&
+      planResult.data.tasks &&
+      planResult.data.tasks.length > 0
+    ) {
+      addTaskRecommendations(planResult.data, addMessage, messagesContainer);
     } else {
-      addMessage('assistant', '추천할 업무가 없습니다. 직접 작성해주세요! 😊');
+      addMessage("assistant", "추천할 업무가 없습니다. 직접 작성해주세요! 😊");
     }
   } catch (error) {
-    console.error('❌ 업무 카드 로드 오류:', error);
-    addMessage('assistant', `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ''}`);
+    console.error("❌ 업무 카드 로드 오류:", error);
+    addMessage(
+      "assistant",
+      `업무 카드를 불러오는 중 오류가 발생했습니다. 😢\n${error.message || ""}`
+    );
   }
 }
 
@@ -376,15 +401,20 @@ async function loadAndDisplayTaskCardsInChat() {
 async function handleSimpleResponse(text) {
   const lower = text.toLowerCase();
 
-
   // 브레인스토밍 안내
-  if (lower.includes('브레인') || lower.includes('아이디어')) {
-    addMessage('assistant', '브레인스토밍은 **Ctrl+Shift+B**를 눌러\n브레인스토밍 패널을 열어주세요! 💡');
+  if (lower.includes("브레인") || lower.includes("아이디어")) {
+    addMessage(
+      "assistant",
+      "브레인스토밍은 **Ctrl+Shift+B**를 눌러\n브레인스토밍 패널을 열어주세요! 💡"
+    );
     return;
   }
 
   // 일반 응답
-  addMessage('assistant', `"${text}" - 답변을 준비 중입니다! 😊\n\n사용 가능한 기능:\n• Ctrl+Shift+B - 브레인스토밍`);
+  addMessage(
+    "assistant",
+    `"${text}" - 답변을 준비 중입니다! 😊\n\n사용 가능한 기능:\n• Ctrl+Shift+B - 브레인스토밍`
+  );
 }
 
 /**
@@ -394,23 +424,23 @@ function addMessage(role, text, isMarkdown = false) {
   // 메시지 객체에 에이전트 정보 포함
   const messageObj = {
     role,
-    content: text
+    content: text,
   };
 
   messages.push(messageObj);
 
-  const messageDiv = document.createElement('div');
+  const messageDiv = document.createElement("div");
   messageDiv.className = `message ${role}`;
 
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
 
   // 마크다운 렌더링 (HR RAG 등)
-  if (isMarkdown && role === 'assistant' && typeof marked !== 'undefined') {
+  if (isMarkdown && role === "assistant" && typeof marked !== "undefined") {
     // marked.js 버전 호환성 처리
-    if (typeof marked.parse === 'function') {
+    if (typeof marked.parse === "function") {
       bubble.innerHTML = marked.parse(text);
-    } else if (typeof marked === 'function') {
+    } else if (typeof marked === "function") {
       bubble.innerHTML = marked(text);
     } else {
       bubble.textContent = text;
@@ -423,18 +453,19 @@ function addMessage(role, text, isMarkdown = false) {
   messagesContainer.appendChild(messageDiv);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-  console.log(`💬 [${role}]: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+  console.log(
+    `💬 [${role}]: ${text.substring(0, 50)}${text.length > 50 ? "..." : ""}`
+  );
 }
-
 
 /**
  * 확인 버튼 추가
  */
 function addConfirmationButton(text, onClick) {
-  const buttonDiv = document.createElement('div');
-  buttonDiv.className = 'message assistant'; // 챗봇 메시지처럼 보이게
+  const buttonDiv = document.createElement("div");
+  buttonDiv.className = "message assistant"; // 챗봇 메시지처럼 보이게
 
-  const button = document.createElement('button');
+  const button = document.createElement("button");
   button.textContent = text;
   button.style.cssText = `
     background: #9CAF88;
@@ -448,22 +479,22 @@ function addConfirmationButton(text, onClick) {
     transition: all 0.2s;
   `;
 
-  button.addEventListener('mouseover', () => {
-    button.style.transform = 'scale(1.05)';
-    button.style.background = '#7A8C6F';
+  button.addEventListener("mouseover", () => {
+    button.style.transform = "scale(1.05)";
+    button.style.background = "#7A8C6F";
   });
 
-  button.addEventListener('mouseout', () => {
-    button.style.transform = 'scale(1)';
-    button.style.background = '#9CAF88';
+  button.addEventListener("mouseout", () => {
+    button.style.transform = "scale(1)";
+    button.style.background = "#9CAF88";
   });
 
-  button.addEventListener('click', () => {
+  button.addEventListener("click", () => {
     onClick();
     button.disabled = true;
-    button.style.opacity = '0.7';
-    button.style.cursor = 'default';
-    button.textContent = '✅ ' + text;
+    button.style.opacity = "0.7";
+    button.style.cursor = "default";
+    button.textContent = "✅ " + text;
   });
 
   buttonDiv.appendChild(button);
@@ -475,13 +506,13 @@ function addConfirmationButton(text, onClick) {
  * 선택 버튼 추가 (수락/거절)
  */
 function addChoiceButtons(acceptText, declineText, onAccept, onDecline) {
-  const buttonDiv = document.createElement('div');
-  buttonDiv.className = 'message assistant';
-  buttonDiv.style.display = 'flex';
-  buttonDiv.style.gap = '10px';
+  const buttonDiv = document.createElement("div");
+  buttonDiv.className = "message assistant";
+  buttonDiv.style.display = "flex";
+  buttonDiv.style.gap = "10px";
 
   // 수락 버튼
-  const acceptBtn = document.createElement('button');
+  const acceptBtn = document.createElement("button");
   acceptBtn.textContent = acceptText;
   acceptBtn.style.cssText = `
     background: #9CAF88;
@@ -495,7 +526,7 @@ function addChoiceButtons(acceptText, declineText, onAccept, onDecline) {
   `;
 
   // 거절 버튼
-  const declineBtn = document.createElement('button');
+  const declineBtn = document.createElement("button");
   declineBtn.textContent = declineText;
   declineBtn.style.cssText = `
     background: #e0e0e0;
@@ -509,11 +540,23 @@ function addChoiceButtons(acceptText, declineText, onAccept, onDecline) {
   `;
 
   // 호버 효과
-  acceptBtn.onmouseover = () => { acceptBtn.style.transform = 'scale(1.05)'; acceptBtn.style.background = '#7A8C6F'; };
-  acceptBtn.onmouseout = () => { acceptBtn.style.transform = 'scale(1)'; acceptBtn.style.background = '#9CAF88'; };
+  acceptBtn.onmouseover = () => {
+    acceptBtn.style.transform = "scale(1.05)";
+    acceptBtn.style.background = "#7A8C6F";
+  };
+  acceptBtn.onmouseout = () => {
+    acceptBtn.style.transform = "scale(1)";
+    acceptBtn.style.background = "#9CAF88";
+  };
 
-  declineBtn.onmouseover = () => { declineBtn.style.transform = 'scale(1.05)'; declineBtn.style.background = '#d0d0d0'; };
-  declineBtn.onmouseout = () => { declineBtn.style.transform = 'scale(1)'; declineBtn.style.background = '#e0e0e0'; };
+  declineBtn.onmouseover = () => {
+    declineBtn.style.transform = "scale(1.05)";
+    declineBtn.style.background = "#d0d0d0";
+  };
+  declineBtn.onmouseout = () => {
+    declineBtn.style.transform = "scale(1)";
+    declineBtn.style.background = "#e0e0e0";
+  };
 
   // 클릭 이벤트
   acceptBtn.onclick = () => {
@@ -529,10 +572,10 @@ function addChoiceButtons(acceptText, declineText, onAccept, onDecline) {
   function disableButtons() {
     acceptBtn.disabled = true;
     declineBtn.disabled = true;
-    acceptBtn.style.opacity = '0.7';
-    declineBtn.style.opacity = '0.7';
-    acceptBtn.style.cursor = 'default';
-    declineBtn.style.cursor = 'default';
+    acceptBtn.style.opacity = "0.7";
+    declineBtn.style.opacity = "0.7";
+    acceptBtn.style.cursor = "default";
+    declineBtn.style.cursor = "default";
   }
 
   buttonDiv.appendChild(acceptBtn);
@@ -548,11 +591,11 @@ function togglePanel() {
   isPanelVisible = !isPanelVisible;
 
   if (isPanelVisible) {
-    chatPanel.style.display = 'flex';
-    console.log('👁️ 채팅 패널 표시');
+    chatPanel.style.display = "flex";
+    console.log("👁️ 채팅 패널 표시");
   } else {
-    chatPanel.style.display = 'none';
-    console.log('🙈 채팅 패널 숨김');
+    chatPanel.style.display = "none";
+    console.log("🙈 채팅 패널 숨김");
   }
 }
 
@@ -561,9 +604,9 @@ function togglePanel() {
  */
 let isCharacterVisible = true;
 function toggleCharacter() {
-  const stage = document.getElementById('stage');
+  const stage = document.getElementById("stage");
   if (!stage) {
-    console.warn('⚠️  Live2D stage 요소를 찾을 수 없습니다.');
+    console.warn("⚠️  Live2D stage 요소를 찾을 수 없습니다.");
     return;
   }
 
@@ -571,13 +614,16 @@ function toggleCharacter() {
 
   if (isCharacterVisible) {
     // display 속성을 제거하여 원래대로 복원
-    stage.style.display = '';
-    console.log('👁️ 캐릭터 표시');
-    addMessage('assistant', '안녕하세요! 다시 왔어요! 👋');
+    stage.style.display = "";
+    console.log("👁️ 캐릭터 표시");
+    addMessage("assistant", "안녕하세요! 다시 왔어요! 👋");
   } else {
-    stage.style.display = 'none';
-    console.log('🙈 캐릭터 숨김');
-    addMessage('assistant', '잠시 숨을게요~ Shift + Ctrl/Cmd + Enter로 다시 불러주세요! 👻');
+    stage.style.display = "none";
+    console.log("🙈 캐릭터 숨김");
+    addMessage(
+      "assistant",
+      "잠시 숨을게요~ Shift + Ctrl/Cmd + Enter로 다시 불러주세요! 👻"
+    );
   }
 }
 
@@ -585,31 +631,31 @@ function toggleCharacter() {
  * 브레인스토밍 팝업 열기
  */
 function openBrainstormingPopup() {
-  console.log('🧠 브레인스토밍 팝업 열기');
+  console.log("🧠 브레인스토밍 팝업 열기");
 
   // Electron IPC로 메인 프로세스에 팝업 요청
   if (window.require) {
-    const { ipcRenderer } = window.require('electron');
-    ipcRenderer.send('open-brainstorming-popup');
+    const { ipcRenderer } = window.require("electron");
+    ipcRenderer.send("open-brainstorming-popup");
 
     // 챗봇 패널 숨기기
-    chatPanel.style.display = 'none';
+    chatPanel.style.display = "none";
     isPanelVisible = false;
 
     // 팝업 종료 이벤트 리스너
-    ipcRenderer.once('brainstorming-closed', (event, data) => {
-      console.log('🧠 브레인스토밍 완료:', data);
+    ipcRenderer.once("brainstorming-closed", (event, data) => {
+      console.log("🧠 브레인스토밍 완료:", data);
 
       // 챗봇 패널 복구
-      chatPanel.style.display = 'flex';
+      chatPanel.style.display = "flex";
       isPanelVisible = true;
 
       // 완료 메시지 추가
-      addMessage('assistant', '브레인스토밍이 종료되었습니다.');
+      addMessage("assistant", "브레인스토밍이 종료되었습니다.");
     });
   } else {
-    console.error('❌ Electron IPC를 사용할 수 없습니다.');
-    addMessage('assistant', '❌ 브레인스토밍 팝업을 열 수 없습니다.');
+    console.error("❌ Electron IPC를 사용할 수 없습니다.");
+    addMessage("assistant", "❌ 브레인스토밍 팝업을 열 수 없습니다.");
   }
 }
 
@@ -617,31 +663,31 @@ function openBrainstormingPopup() {
  * 보고서 팝업 열기
  */
 function openReportPopup() {
-  console.log('📝 보고서 팝업 열기');
+  console.log("📝 보고서 팝업 열기");
 
   // Electron IPC로 메인 프로세스에 팝업 요청
   if (window.require) {
-    const { ipcRenderer } = window.require('electron');
-    ipcRenderer.send('open-report-popup');
+    const { ipcRenderer } = window.require("electron");
+    ipcRenderer.send("open-report-popup");
 
     // 챗봇 패널 숨기기
-    chatPanel.style.display = 'none';
+    chatPanel.style.display = "none";
     isPanelVisible = false;
 
     // 팝업 종료 이벤트 리스너
-    ipcRenderer.once('report-closed', (event, data) => {
-      console.log('📝 보고서 팝업 완료:', data);
+    ipcRenderer.once("report-closed", (event, data) => {
+      console.log("📝 보고서 팝업 완료:", data);
 
       // 챗봇 패널 복구
-      chatPanel.style.display = 'flex';
+      chatPanel.style.display = "flex";
       isPanelVisible = true;
 
       // 완료 메시지 추가
-      addMessage('assistant', '보고서 작성이 종료되었습니다.');
+      addMessage("assistant", "보고서 작성이 종료되었습니다.");
     });
   } else {
-    console.error('❌ Electron IPC를 사용할 수 없습니다.');
-    addMessage('assistant', '❌ 보고서 팝업을 열 수 없습니다.');
+    console.error("❌ Electron IPC를 사용할 수 없습니다.");
+    addMessage("assistant", "❌ 보고서 팝업을 열 수 없습니다.");
   }
 }
 
