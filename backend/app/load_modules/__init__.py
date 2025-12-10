@@ -13,6 +13,7 @@ from app.load_modules.brainstorming_loader import init_brainstorming
 from app.load_modules.therapy_loader import init_therapy
 from app.load_modules.insurance_rag_loader import init_insurance_rag
 from app.load_modules.report_loader import init_reports
+from app.load_modules.hr_rag_loader import init_hr_rag
 
 
 def init_all_modules():
@@ -39,6 +40,10 @@ def init_all_modules():
     # 보고서 모듈
     print("\n[3] 보고서 모듈 체크 중...")
     init_reports()
+    
+    # HR RAG 모듈
+    print("\n[4] HR RAG 모듈 체크 중...")
+    init_hr_rag()
     
     # TODO: 다른 팀원 모듈 추가 시 아래 형식으로
     # print("\n[X] OOO 모듈 체크 중...")
