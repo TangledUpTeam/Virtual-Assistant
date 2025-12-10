@@ -12,9 +12,25 @@ OpenAI API를 사용한 임베딩 및 답변 생성
   - Re-ranker 적용 (검색 결과 재정렬)
   - 코드 구조 정리: 상담 관련 기능 / 로그 관련 기능 분리
   - Threshold 기반 RAG + Self-learning 시스템 (2025.12.01)
-    * 유사도 0.75 기준 분기: 높으면 LLM 단독, 낮으면 RAG + Self-learning
-    * Self-learning: 유사도 낮을 때 Q&A를 Vector DB에 자동 저장
+    * 유사도 0.7 기준 분기: 높으면 간단한 조언, 낮으면 상세한 조언 + Self-learning
+    * Self-learning: 유사도 낮을 때 Q&A를 Vector DB에 자동 저장 (백그라운드)
   - 파일 분리: persona_manager, search_engine, response_generator로 분리 (2025.12.01)
+  - 통합 답변 생성 함수 (검색 결과 유무와 유사도에 따라 동적 분기)
+사용 기술:
+  - 비동기 프로그래밍 (asyncio, AsyncOpenAI)
+  - Vector DB 검색 (ChromaDB)
+  - 하이브리드 검색 (벡터 + 감정 키워드 가중치)
+  - Multi-step 반복 검색 (품질 낮을 때만 재검색)
+  - 사용자별 세션 관리 (딕셔너리 기반)
+  - 프로토콜 기반 상담 (EAP + SFBT)
+  - 백그라운드 Self-learning (asyncio.create_task)
+시간복잡도 최적화:
+  - 사용자별 세션 관리: O(1) 세션 조회 (딕셔너리)
+  - 히스토리 관리: O(1) 추가, O(1) 제거 (최대 10개 유지)
+  - 조건부 검색: 감정+상황 없으면 검색 생략
+  - Threshold 분기: 유사도 높으면 간단한 조언으로 토큰 수 감소
+  - Self-learning: 백그라운드 실행으로 응답 시간 영향 없음
+  - 히스토리 상황 포함: 검색 쿼리에 히스토리 추가로 정확도 향상
 로그와 관련된 코드 위치
   - 21줄
   - 206줄
@@ -461,48 +477,38 @@ class RAGTherapySystem:
             
             threshold = 0.7
             
-            # 7-3. Threshold 분기 (키워드 체크 포함)
-            if not force_use_rag and max_similarity >= threshold:
-                # Case A: 유사도 ≥ threshold -> RAG 없이 LLM 단독 답변 (프로토콜 적용)
-                response = await self.response_generator._generate_llm_only_response(
-                    user_input, 
-                    protocol_guidance['protocol_prompt'],  # 프로토콜 통합 페르소나 사용
-                    current_chat_history,
-                    self.counseling_keywords,
-                    protocol_info=protocol_info  # 프로토콜 정보 전달
-                )
-                response['similarity_score'] = max_similarity
-                response['search_iterations'] = iterations_used
-            else:
-                # Case B: 유사도 < threshold OR RAG 강제 키워드 -> RAG + Self-learning (프로토콜 적용)
-                
-                # RAG 기반 답변 생성
-                response = await self.response_generator.generate_response_with_persona(
-                    user_input, 
-                    retrieved_chunks, 
-                    protocol_guidance['protocol_prompt'],  # 프로토콜 통합 페르소나 사용
-                    current_chat_history,
-                    mode=input_type,
-                    distance_to_similarity_func=self.search_engine.get_distance_to_similarity,
-                    protocol_info=protocol_info  # 프로토콜 정보 전달
-                )
-                response['similarity_score'] = max_similarity
-                response['search_iterations'] = iterations_used
-                response['search_quality'] = quality_info['quality_score']
-                
-                # Self-learning: Multi-step으로 개선된 후에도 threshold를 넘지 못하면 저장
-                # 백그라운드 태스크로 실행 (답변 반환을 기다리지 않음)
-                if max_similarity < 0.7:
-                    # 비동기로 실행 (답변 반환을 기다리지 않음)
-                    asyncio.create_task(self._save_qa_to_vectordb_async(user_input, response["answer"]))
-        else:
-            # Case C: 감정+상황 없음 -> Vector DB 검색 없이 LLM 단독 답변
-            response = await self.response_generator._generate_llm_only_response(
+            # 7-3. 통합 답변 생성 (유사도에 따라 검색 결과 활용 정도 결정)
+            response = await self.response_generator.generate_response(
                 user_input, 
                 protocol_guidance['protocol_prompt'],  # 프로토콜 통합 페르소나 사용
                 current_chat_history,
                 self.counseling_keywords,
-                protocol_info=protocol_info  # 프로토콜 정보 전달
+                protocol_info=protocol_info,  # 프로토콜 정보 전달
+                retrieved_chunks=retrieved_chunks,  # 검색 결과 전달
+                max_similarity=max_similarity,  # 최고 유사도 전달
+                mode=input_type,
+                distance_to_similarity_func=self.search_engine.get_distance_to_similarity
+            )
+            response['similarity_score'] = max_similarity
+            response['search_iterations'] = iterations_used
+            if quality_info:
+                response['search_quality'] = quality_info['quality_score']
+            
+            # Self-learning: Multi-step으로 개선된 후에도 threshold를 넘지 못하면 저장
+            # 백그라운드 태스크로 실행 (답변 반환을 기다리지 않음)
+            if max_similarity < 0.7:
+                # 비동기로 실행 (답변 반환을 기다리지 않음)
+                asyncio.create_task(self._save_qa_to_vectordb_async(user_input, response["answer"]))
+        else:
+            # Case C: 감정+상황 없음 -> Vector DB 검색 없이 LLM 단독 답변
+            response = await self.response_generator.generate_response(
+                user_input, 
+                protocol_guidance['protocol_prompt'],  # 프로토콜 통합 페르소나 사용
+                current_chat_history,
+                self.counseling_keywords,
+                protocol_info=protocol_info,  # 프로토콜 정보 전달
+                retrieved_chunks=None,  # 검색 결과 없음
+                max_similarity=None  # 유사도 없음
             )
             response['similarity_score'] = None
             response['search_iterations'] = 0

@@ -3,6 +3,26 @@
 생성날짜: 2025.12.01
 설명: LLM 기반 답변 생성 기능
 시간복잡도: O(k)
+주요 변경:
+  - 통합 답변 생성 함수 (검색 결과 유무와 유사도에 따라 동적 분기)
+  - 유사도 기반 검색 결과 활용 (높으면 간단한 조언, 낮으면 상세한 조언)
+  - 키워드 매칭 최적화 (set 연산으로 O(1) 조회)
+  - 히스토리 상황 기반 가이던스 생성 (중복 질문 방지)
+  - 상황 가이던스 동적 생성 (입력 구체성에 따라 분기)
+  - 최근 3개 대화만 히스토리로 사용 (토큰 수 최적화)
+  - max_tokens 동적 조정 (유사도에 따라 180/250/400)
+사용 기술:
+  - 비동기 프로그래밍 (asyncio, AsyncOpenAI)
+  - 정규표현식 기반 패턴 매칭 (is_sufficiently_detailed)
+  - 키워드 기반 분류 (set 연산)
+  - 동적 프롬프트 생성 (검색 결과 유무와 유사도에 따라)
+  - 히스토리 기반 컨텍스트 추출
+시간복잡도 최적화:
+  - 키워드 매칭: O(n*m) → O(n+m) (set 연산 사용)
+  - 히스토리 처리: O(h) → O(3) (최근 3개만 사용)
+  - 감정 키워드 추출: O(n*m) → O(n+m) (set 교집합 연산)
+  - 상황 추출: O(h) → O(5) (최근 5개만 확인)
+  - 통합 함수로 중복 로직 제거 (코드 중복 제거)
 """
 
 import asyncio
@@ -193,14 +213,82 @@ class ResponseGenerator:
         input_type = self.classify_input(user_input)
         return input_type in ["adler", "counseling"]
     
-    # RAG없이 LLM만으로 답변 생성 (프로토콜 통합)
-    async def _generate_llm_only_response(self, user_input: str, protocol_persona: str, chat_history: List[Dict[str, str]], counseling_keywords: List[str], protocol_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-
+    # 통합 답변 생성 함수 (프로토콜 통합, 유사도에 따라 검색 결과 활용)
+    async def generate_response(self, user_input: str, protocol_persona: str, chat_history: List[Dict[str, str]], 
+                                counseling_keywords: List[str], protocol_info: Optional[Dict[str, Any]] = None,
+                                retrieved_chunks: Optional[List[Dict[str, Any]]] = None, 
+                                max_similarity: Optional[float] = None, mode: str = "adler",
+                                distance_to_similarity_func=None, summarize_chunk_func=None) -> Dict[str, Any]:
+        """
+        통합 답변 생성 함수
+        
+        Args:
+            retrieved_chunks: 검색된 청크 (None이면 LLM 단독)
+            max_similarity: 최고 유사도 (None이면 검색 안 함, >= 0.7이면 간단한 조언, < 0.7이면 상세한 조언)
+        """
         try:
             # 프로토콜 통합 페르소나 사용
             persona_prompt = protocol_persona
             
-            # 대화 히스토리에서 감정 맥락 파악 (최적화: set 연산 사용)
+            # 1. 검색 결과 처리 및 유사도에 따른 분기
+            has_retrieved_chunks = retrieved_chunks is not None and len(retrieved_chunks) > 0
+            threshold = 0.7
+            
+            if has_retrieved_chunks:
+                # 유사도에 따라 청크 활용 정도 결정
+                if max_similarity and max_similarity >= threshold:
+                    # 유사도 높음: 상위 1-2개 청크만 간단히 활용
+                    chunks_to_use = retrieved_chunks[:2]
+                    use_detailed_advice = False  # 간단한 조언
+                    max_tokens = 250  # 3~4문장
+                else:
+                    # 유사도 낮음: 상위 3개 청크 상세 활용
+                    chunks_to_use = retrieved_chunks[:3]
+                    use_detailed_advice = True  # 상세한 조언
+                    max_tokens = 400  # 4~7문장
+            else:
+                # 검색 결과 없음: LLM 단독
+                chunks_to_use = []
+                use_detailed_advice = False
+                max_tokens = 180  # 2~3문장
+            
+            # 2. 컨텍스트 구성 (검색 결과가 있을 때만)
+            context = ""
+            used_chunks = []
+            used_chunks_detailed = []
+            
+            if chunks_to_use:
+                context_parts = []
+                for i, chunk in enumerate(chunks_to_use, 1):
+                    chunk_text = chunk['text']
+                    source = chunk['metadata'].get('source', '알 수 없음')
+                    context_parts.append(f"[자료 {i}]\n{chunk_text}\n(출처: {source})")
+                    used_chunks.append(f"{source}: {chunk_text[:50]}...")
+                    
+                    # 상세 청크 정보 (로깅용)
+                    if summarize_chunk_func:
+                        chunk_summary = summarize_chunk_func(chunk_text)
+                    else:
+                        chunk_summary = chunk_text[:100] + "..."
+                    
+                    chunk_distance = chunk.get('distance')
+                    if distance_to_similarity_func and chunk_distance is not None:
+                        chunk_similarity = distance_to_similarity_func(chunk_distance)
+                    else:
+                        chunk_similarity = None
+                    
+                    used_chunks_detailed.append({
+                        "chunk_id": chunk.get('id'),
+                        "source": source,
+                        "metadata": chunk.get('metadata', {}),
+                        "summary_kr": chunk_summary,
+                        "distance": chunk_distance,
+                        "similarity": chunk_similarity
+                    })
+                
+                context = "\n\n".join(context_parts)
+            
+            # 3. 대화 히스토리에서 감정 맥락 파악 (최적화: set 연산 사용)
             emotion_context = ""
             if chat_history:
                 recent_emotions = []
@@ -215,7 +303,33 @@ class ResponseGenerator:
                 if recent_emotions:
                     emotion_context = f"\n[이전 대화 맥락: 사용자가 '{', '.join(set(recent_emotions[:3]))}' 관련 감정을 표현했습니다. 이를 고려하여 답변하세요.]"
             
-            # 히스토리에서 이미 상황이 설명되었는지 확인
+            # 4. 사용자 입력에서 감정 키워드 추출 (검색 결과가 있을 때)
+            emotion_note = ""
+            if has_retrieved_chunks:
+                detected_emotions = []
+                user_input_lower = user_input.lower()
+                user_words = set(user_input_lower.split())
+                
+                # 주요 감정 키워드 set 생성
+                main_keywords_set = set(kw.lower() for kw in self.counseling_keywords[:30])
+                
+                # 단어 단위 매칭 (set 연산으로 최적화)
+                matched = user_words & main_keywords_set
+                if matched:
+                    detected_emotions.extend(list(matched)[:3])
+                
+                # 부분 문자열 매칭 (하위 호환성)
+                if not detected_emotions:
+                    for keyword in main_keywords_set:
+                        if keyword in user_input_lower:
+                            detected_emotions.append(keyword)
+                            if len(detected_emotions) >= 3:
+                                break
+                
+                if detected_emotions:
+                    emotion_note = f"\n[감지된 감정: {', '.join(detected_emotions[:3])} - 이 감정들을 먼저 인정하고 공감해주세요]"
+            
+            # 5. 히스토리에서 이미 상황이 설명되었는지 확인
             has_situation_in_history = self.has_situation_in_history(chat_history)
             situation_from_history = ""
             history_situation_guidance = ""
@@ -233,7 +347,29 @@ class ResponseGenerator:
                 
                 if is_asking_solution:
                     # 해결 방법을 묻는 경우: 히스토리의 상황을 바탕으로 해결 방법 제시
-                    history_situation_guidance = f"""
+                    if has_retrieved_chunks:
+                        history_situation_guidance = f"""
+[절대 중요: 이전 대화에서 사용자가 이미 구체적인 상황을 설명했습니다!
+상황 내용: {situation_from_history}
+
+현재 질문("{user_input}")은 그 상황에 대한 해결 방법을 묻는 것입니다.
+
+**반드시 준수:**
+1. 절대 다시 상황을 물어보지 마세요. "어떤 상황인지", "구체적으로", "상황을 알려주세요" 같은 표현은 완전히 금지입니다.
+2. 이미 설명된 상황({situation_from_history})을 바탕으로 참고 자료를 활용하여 즉시 구체적인 해결 방법을 제시하세요.
+3. 감정 인정(1문장) + 참고 자료 기반 조언(2-3문장) + 구체적인 해결 방법(1-2문장) 형식으로 답변하세요.
+
+**절대 금지 표현:**
+- "어떤 상황인지 알려주세요"
+- "구체적으로 말씀해 주시면"
+- "상황을 설명해 주세요"
+- "어떤 일이 있었는지"
+- "예를 들어, 업무, 개인 생활..."
+
+이런 표현들은 절대 사용하지 마세요! 즉시 해결 방법을 제시하세요.]
+"""
+                    else:
+                        history_situation_guidance = f"""
 [절대 중요: 이전 대화에서 사용자가 이미 구체적인 상황을 설명했습니다!
 상황 내용: {situation_from_history}
 
@@ -260,23 +396,25 @@ class ResponseGenerator:
 현재 입력과 연결하여 자연스럽게 답변하세요. 중복 질문은 피하세요]
 """
             
-            # 대화 히스토리 추가 (최적화: 최근 3개 포함으로 증가 - 상황 파악을 위해)
-            messages = [{"role": "system", "content": persona_prompt + emotion_context + history_situation_guidance}]
-            
-            # 최근 3개의 대화 포함 (상황 파악을 위해 2개 → 3개로 증가)
-            for history in chat_history[-3:]:
-                messages.append({"role": "user", "content": history["user"]})
-                messages.append({"role": "assistant", "content": history["assistant"]})
-            
-            # 사용자 입력이 구체적 상황을 포함하는지 확인
+            # 6. 사용자 입력이 구체적 상황을 포함하는지 확인
             is_detailed_input = self.has_situation_context(user_input)
             is_sufficiently_detailed = self.is_sufficiently_detailed(user_input) if is_detailed_input else False
             
+            # 7. 상황 가이던스 생성
             situation_guidance = ""
             if is_detailed_input and not has_situation_in_history:
                 if is_sufficiently_detailed:
                     # 충분히 구체적인 상황이 이미 설명된 경우
-                    situation_guidance = """
+                    if has_retrieved_chunks:
+                        situation_guidance = """
+**충분히 구체적인 상황이 이미 제시된 경우:**
+- 이미 구체적인 상황이 설명되었으므로 다시 상황을 물어보지 마세요
+- "구체적으로 어떤 상황인지", "어떤 일이 있었는지" 같은 질문은 절대 하지 마세요
+- 참고 자료를 바탕으로 그 상황에 대한 공감과 함께 구체적인 조언과 해결 방법을 제시하세요
+- 예: "그런 상황이 정말 화가 나셨겠어요. (참고 자료 기반 조언) 그 상황에서 지금 가장 힘든 부분은 무엇인가요?"
+"""
+                    else:
+                        situation_guidance = """
 **충분히 구체적인 상황이 이미 제시된 경우:**
 - 이미 구체적인 상황이 설명되었으므로 다시 상황을 물어보지 마세요
 - "구체적으로 어떤 상황인지", "어떤 일이 있었는지" 같은 질문은 절대 하지 마세요
@@ -298,228 +436,12 @@ class ResponseGenerator:
 - 사용자가 상황을 설명하도록 자연스럽게 유도하는 질문을 포함하세요
 """
             
-            # 공감적 답변 유도 프롬프트 (프로토콜 통합)
-            enhanced_input = f"""{user_input}
+            # 8. 답변 구조 구성 (검색 결과 유무와 유사도에 따라)
+            if use_detailed_advice:
+                # 상세 조언 포함 (유사도 낮을 때)
+                answer_structure = f"""**답변 구조 (반드시 이 순서대로, 참고 자료를 바탕으로 상세하게 작성):**
 
-[중요: 반드시 다음 구조로 답변하세요 - 2~3문장으로 적절한 길이로 작성]
-1. 먼저 사용자의 감정을 인정하고 공감 (1문장, 필수)
-   예: "힘드시는 마음 충분히 이해됩니다"
-   예: "그런 마음이 드시는군요"
-
-2. 상황에 맞는 자연스러운 질문 또는 공감문 (1~2문장)
-   - 고정된 질문이 아니라 사용자의 상황에 맞게 자연스럽게 질문하세요
-   - 현재 상담 단계의 지침을 참고하되, 자연스러운 표현을 사용하세요
-   - 이미 충분히 구체적인 상황이 설명되었다면, 그 상황을 다시 물어보지 말고 감정이나 해결 방법에 대해 질문하세요
-   - 상황이 구체적이지 않은 경우에만 더 자세한 상황을 물어보세요
-
-{situation_guidance}
-**절대 준수 사항**: 
-- 총 2~3문장으로 적절한 길이로 작성하세요
-- 공감(1단계)은 필수입니다
-- 재해석 단계는 포함하지 마세요
-- 고정된 질문이 아니라 상황에 맞는 자연스러운 질문을 하세요
-- "언제든지 말씀해주세요", "더 이야기하고 싶으시면", "언제든 다시 찾아주세요" 같은 마무리/종료 표현은 절대 사용하지 마세요
-- 상담을 계속 이어가도록 하는 질문을 포함하세요"""
-            
-            messages.append({"role": "user", "content": enhanced_input})
-            
-            # OpenAI API 호출 (최적화: max_tokens 조정)
-            if self.async_openai_client:
-                response = await self.async_openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=messages,
-                    temperature=0.3,  # 일관된 답변을 위해 낮은 temperature 유지
-                    max_tokens=180  # 토큰 수 최적화 (2~3문장)
-                )
-            else:
-                # Fallback: 동기 클라이언트 사용
-                response = await asyncio.to_thread(
-                    self.openai_client.chat.completions.create,
-                    model="gpt-4o-mini",
-                    messages=messages,
-                    temperature=0.3,
-                    max_tokens=180
-                )
-            
-            answer = response.choices[0].message.content.strip()
-            
-            return {
-                "answer": answer,
-                "used_chunks": [],
-                "used_chunks_detailed": [],
-                "mode": "llm_only",
-                "continue_conversation": True,
-                "similarity_score": None  # LLM only 모드에서는 유사도 없음
-            }
-        
-        except Exception as e:
-            print(f"[오류] LLM 단독 답변 생성 실패")
-            return {
-                "answer": "죄송합니다. 답변 생성 중 오류가 발생했습니다. 다시 시도해주세요.",
-                "used_chunks": [],
-                "used_chunks_detailed": [],
-                "mode": "error",
-                "continue_conversation": True
-            }
-    
-    # 페르소나 기반 답변 생성 (RAG 기반, 프로토콜 통합)
-    async def generate_response_with_persona(self, user_input: str, retrieved_chunks: List[Dict[str, Any]], 
-                                            protocol_persona: str, chat_history: List[Dict[str, str]], mode: str = "adler", 
-                                            distance_to_similarity_func=None, summarize_chunk_func=None, protocol_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-
-        # 검색된 청크가 없는 경우
-        if not retrieved_chunks:
-            return {
-                "answer": "죄송합니다. 관련된 자료를 찾을 수 없습니다. 다른 질문을 해주시겠어요?",
-                "used_chunks": [],
-                "used_chunks_detailed": [],
-                "continue_conversation": True
-            }
-        
-        # 컨텍스트 구성
-        context_parts = []
-        used_chunks = []
-        used_chunks_detailed = []
-        
-        for i, chunk in enumerate(retrieved_chunks[:3], 1):  # 상위 3개 청크 사용
-            chunk_text = chunk['text']
-            source = chunk['metadata'].get('source', '알 수 없음')
-            context_parts.append(f"[자료 {i}]\n{chunk_text}\n(출처: {source})")
-            used_chunks.append(f"{source}: {chunk_text[:50]}...")
-            
-            # 상세 청크 정보 (로깅용)
-            if summarize_chunk_func:
-                chunk_summary = summarize_chunk_func(chunk_text)
-            else:
-                chunk_summary = chunk_text[:100] + "..."
-            
-            chunk_distance = chunk.get('distance')
-            if distance_to_similarity_func and chunk_distance is not None:
-                chunk_similarity = distance_to_similarity_func(chunk_distance)
-            else:
-                chunk_similarity = None
-            
-            used_chunks_detailed.append({
-                "chunk_id": chunk['id'],
-                "source": source,
-                "metadata": chunk['metadata'],
-                "summary_kr": chunk_summary,
-                "distance": chunk_distance,
-                "similarity": chunk_similarity  # 코사인 유사도 추가
-            })
-        
-        context = "\n\n".join(context_parts)
-        
-        # 사용자 입력에서 감정 키워드 추출 (최적화: set 연산 사용)
-        detected_emotions = []
-        user_input_lower = user_input.lower()
-        user_words = set(user_input_lower.split())
-        
-        # 주요 감정 키워드 set 생성
-        main_keywords_set = set(kw.lower() for kw in self.counseling_keywords[:30])
-        
-        # 단어 단위 매칭 (set 연산으로 최적화)
-        matched = user_words & main_keywords_set
-        if matched:
-            detected_emotions.extend(list(matched)[:3])
-        
-        # 부분 문자열 매칭 (하위 호환성)
-        if not detected_emotions:
-            for keyword in main_keywords_set:
-                if keyword in user_input_lower:
-                    detected_emotions.append(keyword)
-                    if len(detected_emotions) >= 3:
-                        break
-        
-        emotion_note = ""
-        if detected_emotions:
-            emotion_note = f"\n[감지된 감정: {', '.join(detected_emotions[:3])} - 이 감정들을 먼저 인정하고 공감해주세요]"
-        
-        # 프로토콜 통합 페르소나 사용
-        persona_prompt = protocol_persona
-        
-        # 히스토리에서 이미 상황이 설명되었는지 확인
-        has_situation_in_history = self.has_situation_in_history(chat_history)
-        situation_from_history = ""
-        history_situation_guidance = ""
-        
-        if has_situation_in_history:
-            # 히스토리에서 상황 추출
-            situation_from_history = self.extract_situation_from_history(chat_history)
-            
-            # 현재 입력이 해결 방법을 묻는 질문인지 확인
-            solution_keywords = ['어떻게 해야', '어떻게 하면', '어떻게 해야할까', '어떻게 해야할지', 
-                                 '어떻게 해야 할지', '방법', '해결', '대처', '알려줘', '알려줘요', 
-                                 '알려주세요', '조언', '도움']
-            user_input_lower = user_input.lower()
-            is_asking_solution = any(keyword in user_input_lower for keyword in solution_keywords)
-            
-            if is_asking_solution:
-                # 해결 방법을 묻는 경우: 히스토리의 상황을 바탕으로 해결 방법 제시
-                history_situation_guidance = f"""
-[절대 중요: 이전 대화에서 사용자가 이미 구체적인 상황을 설명했습니다!
-상황 내용: {situation_from_history}
-
-현재 질문("{user_input}")은 그 상황에 대한 해결 방법을 묻는 것입니다.
-
-**반드시 준수:**
-1. 절대 다시 상황을 물어보지 마세요. "어떤 상황인지", "구체적으로", "상황을 알려주세요" 같은 표현은 완전히 금지입니다.
-2. 이미 설명된 상황({situation_from_history})을 바탕으로 참고 자료를 활용하여 즉시 구체적인 해결 방법을 제시하세요.
-3. 감정 인정(1문장) + 참고 자료 기반 조언(2-3문장) + 구체적인 해결 방법(1-2문장) 형식으로 답변하세요.
-
-**절대 금지 표현:**
-- "어떤 상황인지 알려주세요"
-- "구체적으로 말씀해 주시면"
-- "상황을 설명해 주세요"
-- "어떤 일이 있었는지"
-- "예를 들어, 업무, 개인 생활..."
-
-이런 표현들은 절대 사용하지 마세요! 즉시 해결 방법을 제시하세요.]
-"""
-            else:
-                # 해결 방법을 묻지 않는 경우: 상황이 이미 설명되었음을 인지하고 답변
-                history_situation_guidance = f"""
-[참고: 이전 대화에서 사용자가 이미 상황을 설명했습니다: {situation_from_history}
-현재 입력과 연결하여 자연스럽게 답변하세요. 중복 질문은 피하세요]
-"""
-        
-        # 사용자 입력 내용 분석 (답변 구조 결정)
-        is_detailed_input = self.has_situation_context(user_input)  # 감정 + 상황 설명이 있으면 상세한 입력으로 판단
-        is_sufficiently_detailed = self.is_sufficiently_detailed(user_input) if is_detailed_input else False
-        
-        # 답변 구조 (재해석 단계 제거)
-        # 구체적 상황이 포함된 경우 추가 안내
-        situation_guidance = ""
-        if is_detailed_input and not has_situation_in_history:
-            if is_sufficiently_detailed:
-                # 충분히 구체적인 상황이 이미 설명된 경우
-                situation_guidance = """
-**충분히 구체적인 상황이 이미 제시된 경우:**
-- 이미 구체적인 상황이 설명되었으므로 다시 상황을 물어보지 마세요
-- "구체적으로 어떤 상황인지", "어떤 일이 있었는지" 같은 질문은 절대 하지 마세요
-- 참고 자료를 바탕으로 그 상황에 대한 공감과 함께 구체적인 조언과 해결 방법을 제시하세요
-- 예: "그런 상황이 정말 화가 나셨겠어요. (참고 자료 기반 조언) 그 상황에서 지금 가장 힘든 부분은 무엇인가요?"
-"""
-            else:
-                # 상황은 언급되었지만 충분히 구체적이지 않은 경우
-                situation_guidance = """
-**상황이 언급되었으나 충분히 구체적이지 않은 경우 (예: 상사가 괴롭힘, 관계 문제 등):**
-- 구체적인 상황에 대해 더 자세히 물어보는 질문을 포함하세요
-- 예: "구체적으로 어떤 상황이었는지 말씀해 주실 수 있을까요?"
-- 예: "그때 어떤 일이 있었는지 더 자세히 들려주실 수 있을까요?"
-- "언제든지 말씀해주세요", "더 이야기하고 싶으시면" 같은 마무리 표현은 절대 사용하지 마세요
-- 상담을 계속 진행하도록 하는 질문을 반드시 포함하세요
-"""
-        elif not is_detailed_input and not has_situation_in_history:
-            # 현재 입력에도 상황이 없고 히스토리에도 없는 경우
-            situation_guidance = """
-**상황 설명이 없는 경우:**
-- 사용자가 상황을 설명하도록 자연스럽게 유도하는 질문을 포함하세요
-"""
-        
-        answer_structure = f"""**답변 구조 (반드시 이 순서대로, 참고 자료를 바탕으로 상세하게 작성):**
-
-1단계 - 감정 인정 및 공감 (1~2문장):
+1단계 - 감정 인정 및 공감 (1문장):
    - 사용자의 감정을 있는 그대로 인정하고 공감합니다.
    - 예: "힘드시는 마음 충분히 이해됩니다"
    - 예: "그런 마음이 드시는군요"
@@ -543,41 +465,94 @@ class ResponseGenerator:
 - 참고 자료의 내용을 반드시 활용하여 답변하세요
 - 고정된 질문이 아니라 상황에 맞는 자연스러운 질문을 하세요
 - "언제든지 말씀해주세요", "더 이야기하고 싶으시면", "언제든 다시 찾아주세요" 같은 마무리/종료 표현은 절대 사용하지 마세요
-- 상담을 계속 이어가도록 하는 질문을 포함하세요
-"""
-        
-        user_message = f"""참고 자료:
+- 상담을 계속 이어가도록 하는 질문을 포함하세요"""
+            elif has_retrieved_chunks:
+                # 간단한 조언 포함 (유사도 높을 때)
+                answer_structure = f"""**답변 구조 (반드시 이 순서대로, 참고 자료를 바탕으로 작성):**
+
+1단계 - 감정 인정 및 공감 (1문장):
+   - 사용자의 감정을 있는 그대로 인정하고 공감합니다.
+   - 예: "힘드시는 마음 충분히 이해됩니다"
+   - 예: "그런 마음이 드시는군요"
+   - 절대 "하지만", "그래도"로 시작하지 마세요.
+
+2단계 - 참고 자료를 바탕으로 한 간단한 조언 (1~2문장):
+   - 검색된 자료의 내용을 바탕으로 간단하고 핵심적인 조언을 제공하세요
+   - 아들러 심리학의 원칙을 자연스럽게 언급하세요
+
+3단계 - 자연스러운 질문 또는 다음 단계 제안 (1~2문장):
+   - 고정된 질문이 아니라 사용자의 상황에 맞게 자연스럽게 질문하세요
+   - 현재 상담 단계의 지침을 참고하되, 자연스러운 표현을 사용하세요
+   - 이미 충분히 구체적인 상황이 설명되었다면, 그 상황을 다시 물어보지 말고 감정이나 해결 방법에 대해 질문하세요
+   - 상황이 구체적이지 않은 경우에만 더 자세한 상황을 물어보세요
+
+{situation_guidance}
+**절대 준수 사항:**
+- 참고 자료를 바탕으로 답변하세요 (총 3~4문장)
+- 공감(1단계)은 필수입니다
+- 참고 자료의 내용을 활용하여 답변하세요
+- 고정된 질문이 아니라 상황에 맞는 자연스러운 질문을 하세요
+- "언제든지 말씀해주세요", "더 이야기하고 싶으시면", "언제든 다시 찾아주세요" 같은 마무리/종료 표현은 절대 사용하지 마세요
+- 상담을 계속 이어가도록 하는 질문을 포함하세요"""
+            else:
+                # 조언 없음 (검색 결과 없을 때)
+                answer_structure = f"""[중요: 반드시 다음 구조로 답변하세요 - 2~3문장으로 적절한 길이로 작성]
+1. 먼저 사용자의 감정을 인정하고 공감 (1문장, 필수)
+   예: "힘드시는 마음 충분히 이해됩니다"
+   예: "그런 마음이 드시는군요"
+
+2. 상황에 맞는 자연스러운 질문 또는 공감문 (1~2문장)
+   - 고정된 질문이 아니라 사용자의 상황에 맞게 자연스럽게 질문하세요
+   - 현재 상담 단계의 지침을 참고하되, 자연스러운 표현을 사용하세요
+   - 이미 충분히 구체적인 상황이 설명되었다면, 그 상황을 다시 물어보지 말고 감정이나 해결 방법에 대해 질문하세요
+   - 상황이 구체적이지 않은 경우에만 더 자세한 상황을 물어보세요
+
+{situation_guidance}
+**절대 준수 사항**: 
+- 총 2~3문장으로 적절한 길이로 작성하세요
+- 공감(1단계)은 필수입니다
+- 재해석 단계는 포함하지 마세요
+- 고정된 질문이 아니라 상황에 맞는 자연스러운 질문을 하세요
+- "언제든지 말씀해주세요", "더 이야기하고 싶으시면", "언제든 다시 찾아주세요" 같은 마무리/종료 표현은 절대 사용하지 마세요
+- 상담을 계속 이어가도록 하는 질문을 포함하세요"""
+            
+            # 9. 프롬프트 구성
+            if has_retrieved_chunks:
+                user_message = f"""참고 자료:
 {context}
 
 사용자 질문: {user_input}{emotion_note}
 
 {answer_structure}
-- 참고 자료의 내용을 충분히 활용하여 상세하고 구체적으로 답변하세요
+- 참고 자료의 내용을 충분히 활용하여 답변하세요
 - 실천 방안은 구체적이고 즉시 실행 가능해야 함
 - 문제보다는 해결책, 약점보다는 강점에 초점
 - 감정을 판단하거나 최소화하지 않기
 - 따뜻하고 수용적인 톤 유지
 - 구체적인 상황(예: 상사, 관계, 직장 문제)이 언급되면 반드시 그에 대한 구체적인 질문을 포함하세요
 - "언제든지", "말씀해주세요", "더 이야기하고 싶으시면" 같은 마무리 표현은 절대 사용하지 마세요"""
-        
-        # 대화 히스토리 추가 (단기 기억, 히스토리 상황 파악을 위해 최근 3개 포함)
-        messages = [{"role": "system", "content": persona_prompt + history_situation_guidance}]
-        
-        # 최근 3개의 대화 포함 (상황 파악을 위해 5개 → 3개로 조정, 하지만 히스토리 가이던스로 보완)
-        for history in chat_history[-3:]:
-            messages.append({"role": "user", "content": history["user"]})
-            messages.append({"role": "assistant", "content": history["assistant"]})
-        
-        messages.append({"role": "user", "content": user_message})
-        
-        # OpenAI API 호출 (최적화: max_tokens 조정)
-        try:
+            else:
+                user_message = f"""{user_input}
+
+{answer_structure}"""
+            
+            # 10. 대화 히스토리 추가
+            messages = [{"role": "system", "content": persona_prompt + emotion_context + history_situation_guidance}]
+            
+            # 최근 3개의 대화 포함
+            for history in chat_history[-3:]:
+                messages.append({"role": "user", "content": history["user"]})
+                messages.append({"role": "assistant", "content": history["assistant"]})
+            
+            messages.append({"role": "user", "content": user_message})
+            
+            # 11. OpenAI API 호출
             if self.async_openai_client:
                 response = await self.async_openai_client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=messages,
-                    temperature=0.3,  # 낮은 temperature로 일관된 답변 생성
-                    max_tokens=400  # 답변 길이 최적화 (RAG 사용 시 상세하게 4~7문장)
+                    temperature=0.3,
+                    max_tokens=max_tokens
                 )
             else:
                 # Fallback: 동기 클라이언트 사용
@@ -586,25 +561,28 @@ class ResponseGenerator:
                     model="gpt-4o-mini",
                     messages=messages,
                     temperature=0.3,
-                    max_tokens=400
+                    max_tokens=max_tokens
                 )
             
             answer = response.choices[0].message.content.strip()
             
-            return {
+            # 12. 반환값 구성
+            result = {
                 "answer": answer,
                 "used_chunks": used_chunks,
                 "used_chunks_detailed": used_chunks_detailed,
-                "mode": mode,
+                "mode": mode if has_retrieved_chunks else "llm_only",
                 "continue_conversation": True
             }
+            
+            return result
         
         except Exception as e:
-            print(f"[오류] OpenAI 답변 생성 실패: {e}")
+            print(f"[오류] 답변 생성 실패: {e}")
             return {
                 "answer": "죄송합니다. 답변 생성 중 오류가 발생했습니다. 다시 시도해주세요.",
                 "used_chunks": [],
                 "used_chunks_detailed": [],
-                "mode": mode,
+                "mode": mode if (retrieved_chunks and len(retrieved_chunks) > 0) else "error",
                 "continue_conversation": True
             }

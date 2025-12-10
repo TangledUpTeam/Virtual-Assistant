@@ -2,6 +2,24 @@
 상담 프로토콜 모듈
 생성날짜: 2025.12.05
 설명: EAP(Employee Assistance Program) + SFBT(Solution-Focused Brief Therapy) 통합 프로토콜
+시간복잡도: O(h + LLM)
+주요 변경:
+  - EAP + SFBT 통합 프로토콜 구현
+  - LLM 기반 상담 단계 자동 선택
+  - 키워드 기반 프로토콜 선택 (빠른 분기)
+  - 세션 상태 관리 (TherapySession 클래스)
+  - 심각도 평가 (키워드 매칭 기반)
+  - 최근 3개 대화만 히스토리 컨텍스트로 사용 (토큰 수 최적화)
+사용 기술:
+  - Enum 기반 상태 관리 (TherapyStage, ProtocolType)
+  - 비동기 프로그래밍 (asyncio, AsyncOpenAI)
+  - 키워드 매칭 기반 분기 (조건부 프로토콜 선택)
+  - LLM 기반 단계 선택 (gpt-4o-mini, max_tokens=10)
+시간복잡도 최적화:
+  - 히스토리 컨텍스트 축소: O(h) → O(3) (최근 3개만 사용)
+  - 키워드 기반 프로토콜 선택: O(1) (상수 시간)
+  - LLM 호출 최적화: max_tokens=10 (단계 번호만 추출)
+  - 세션 상태 캐싱: 상태 재계산 방지
 """
 
 import asyncio
