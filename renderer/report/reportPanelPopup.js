@@ -59,10 +59,7 @@ export async function initReportPanel() {
     return;
   }
   
-  // 초기 메시지
-  addMessage('assistant', '📝 보고서 & 업무 관리를 도와드립니다!\n\n• "오늘 업무 플래닝" - 업무 추천\n• "일일 보고서" - 일일 보고서 작성\n• "주간 보고서" - 주간 보고서 생성\n• "월간 보고서" - 월간 보고서 생성\n• "날짜 설정" - 과거 기간 보고서\n\n💬 자연어로 질문하면 일일보고서를 검색해 답변합니다!');
-  
-  // 빠른 실행 버튼 추가
+  // 초기 화면: 빠른 실행 버튼만 표시 (설명 메시지 없음)
   addQuickActionButtons();
   
   // 이벤트 리스너
@@ -92,75 +89,72 @@ function addQuickActionButtons() {
     return;
   }
   
-  const quickActions = [
-    { label: '오늘 업무 플래닝', command: '오늘 업무 추천해줘', icon: '📋' },
-    { label: '일일 보고서 작성', command: '일일보고서 작성할래', icon: '📝' },
-    { label: '주간 보고서 생성', command: '주간보고서 작성해줘', icon: '📊' },
-    { label: '월간 보고서 생성', command: '월간보고서 만들어줘', icon: '📈' },
-    { label: '날짜 설정 / 과거 보고서', command: '지난 보고서들 조회하고 싶어', icon: '📅' }
-  ];
-  
-  const buttonContainer = document.createElement('div');
-  buttonContainer.className = 'quick-actions-container';
-  buttonContainer.style.cssText = `
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid #e0e0e0;
+  // 메인 컨테이너 생성
+  const mainContainer = document.createElement('div');
+  mainContainer.className = 'report-main-container';
+  mainContainer.style.cssText = `
+    max-width: 760px;
+    margin: 32px auto;
+    padding: 0 24px;
   `;
+  
+  // 제목 추가
+  const title = document.createElement('div');
+  title.className = 'report-main-title';
+  title.textContent = '보고서 & 업무 관리';
+  title.style.cssText = `
+    font-size: 18px;
+    font-weight: 600;
+    color: #333333;
+    margin-bottom: 16px;
+  `;
+  mainContainer.appendChild(title);
+  
+  // 2x2 그리드 컨테이너
+  const gridContainer = document.createElement('div');
+  gridContainer.className = 'report-quick-grid';
+  gridContainer.style.cssText = `
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  `;
+  
+  // 4개 버튼 정의
+  const quickActions = [
+    { key: 'today_plan', label: '오늘 업무 플래닝', command: '오늘 업무 추천해줘', icon: '📋', needsDate: false },
+    { key: 'daily', label: '일일 보고서 작성', command: '일일보고서 작성할래', icon: '📝', needsDate: false },
+    { key: 'weekly', label: '주간 보고서 생성', icon: '📊', needsDate: true, dateMode: 'weekly' },
+    { key: 'monthly', label: '월간 보고서 생성', icon: '📈', needsDate: true, dateMode: 'monthly' }
+  ];
   
   quickActions.forEach(action => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'quick-action-button';
-    button.innerHTML = `<span class="quick-action-icon">${action.icon}</span><span>${action.label}</span>`;
-    button.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 16px;
-      border-radius: 20px;
-      background: #FFE0B3;
-      color: #333;
-      border: none;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      white-space: nowrap;
+    button.className = 'report-quick-button';
+    button.innerHTML = `
+      <span class="report-quick-button-icon">${action.icon}</span>
+      <span class="report-quick-button-label">${action.label}</span>
     `;
-    
-    // Hover 효과
-    button.addEventListener('mouseenter', () => {
-      button.style.background = '#FFB04A';
-      button.style.color = 'white';
-      button.style.transform = 'translateY(-1px)';
-      button.style.boxShadow = '0 2px 6px rgba(253, 188, 102, 0.3)';
-    });
-    
-    button.addEventListener('mouseleave', () => {
-      button.style.background = '#FFE0B3';
-      button.style.color = '#333';
-      button.style.transform = 'translateY(0)';
-      button.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-    });
     
     // 클릭 이벤트
     button.addEventListener('click', () => {
-      triggerAgentCommand(action.command);
+      if (action.needsDate) {
+        // 날짜 선택 모달 표시
+        showDatePickerModal(action.dateMode);
+      } else {
+        // 즉시 명령 실행
+        triggerAgentCommand(action.command);
+      }
     });
     
-    buttonContainer.appendChild(button);
+    gridContainer.appendChild(button);
   });
   
-  // 마지막 assistant 메시지에 버튼 추가
-  const lastMessage = messagesContainer.lastElementChild;
-  if (lastMessage && lastMessage.classList.contains('assistant')) {
-    lastMessage.appendChild(buttonContainer);
-  }
+  mainContainer.appendChild(gridContainer);
+  
+  // 메시지 컨테이너에 추가
+  messagesContainer.appendChild(mainContainer);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 /**
@@ -320,6 +314,19 @@ async function handleSendMessage() {
 }
 
 /**
+ * 자연어 명령어에서 날짜 추출 (YYYY-MM-DD 형식)
+ */
+function extractDateFromCommand(text) {
+  // YYYY-MM-DD 형식 날짜 추출
+  const dateRegex = /(\d{4}-\d{2}-\d{2})/;
+  const match = text.match(dateRegex);
+  if (match) {
+    return match[1];
+  }
+  return null;
+}
+
+/**
  * Intent 처리
  * 멀티에이전트 시스템 사용 (메인 챗봇과 동일)
  */
@@ -334,6 +341,12 @@ async function handleReportIntent(text) {
   
   // 보고서 생성 요청 감지 (설정된 날짜 사용)
   if (lower.includes('일일보고서') && (lower.includes('만들') || lower.includes('생성') || lower.includes('작성'))) {
+    // 명령어에서 날짜 추출 시도
+    const extractedDate = extractDateFromCommand(text);
+    if (extractedDate) {
+      customDates.daily = extractedDate;
+    }
+    
     if (customDates.daily) {
       addMessage('assistant', `📅 설정된 날짜(${customDates.daily})로 일일보고서를 생성합니다.`);
       await startDailyReport();
@@ -345,6 +358,13 @@ async function handleReportIntent(text) {
   }
   
   if (lower.includes('주간보고서') && (lower.includes('만들') || lower.includes('생성') || lower.includes('작성'))) {
+    // 명령어에서 날짜 추출 시도
+    const extractedDate = extractDateFromCommand(text);
+    if (extractedDate) {
+      customDates.weekly = extractedDate;
+      console.log(`[ReportPopup] 주간보고서 날짜 추출: ${extractedDate}`);
+    }
+    
     if (customDates.weekly) {
       addMessage('assistant', `📅 설정된 날짜(${customDates.weekly})로 주간보고서를 생성합니다.`);
       await generateWeeklyReport();
@@ -356,6 +376,18 @@ async function handleReportIntent(text) {
   }
   
   if (lower.includes('월간보고서') && (lower.includes('만들') || lower.includes('생성') || lower.includes('작성'))) {
+    // 명령어에서 날짜 추출 시도
+    const extractedDate = extractDateFromCommand(text);
+    if (extractedDate) {
+      // 날짜에서 년월 추출
+      const dateObj = new Date(extractedDate);
+      customDates.monthly = {
+        year: dateObj.getFullYear(),
+        month: dateObj.getMonth() + 1
+      };
+      console.log(`[ReportPopup] 월간보고서 날짜 추출: ${extractedDate} → ${customDates.monthly.year}년 ${customDates.monthly.month}월`);
+    }
+    
     const year = customDates.monthly?.year;
     const month = customDates.monthly?.month;
     if (year && month) {
@@ -414,6 +446,13 @@ async function handleReportIntent(text) {
     if ((result.intent === 'report' || result.agent_used === 'report') && 
         (answerLower.includes('주간보고서') || answerLower.includes('주간 보고서'))) {
       // 주간보고서 생성 요청
+      // 원본 사용자 메시지에서 날짜 추출 시도
+      const extractedDate = extractDateFromCommand(text);
+      if (extractedDate) {
+        customDates.weekly = extractedDate;
+        console.log(`[ReportPopup] 주간보고서 날짜 추출 (에이전트 경로): ${extractedDate}`);
+      }
+      
       if (customDates.weekly) {
         addMessage('assistant', `📅 설정된 날짜(${customDates.weekly})로 주간보고서를 생성합니다.`);
       } else {
@@ -426,6 +465,18 @@ async function handleReportIntent(text) {
     if ((result.intent === 'report' || result.agent_used === 'report') && 
         (answerLower.includes('월간보고서') || answerLower.includes('월간 보고서'))) {
       // 월간보고서 생성 요청
+      // 원본 사용자 메시지에서 날짜 추출 시도
+      const extractedDate = extractDateFromCommand(text);
+      if (extractedDate) {
+        // 날짜에서 년월 추출
+        const dateObj = new Date(extractedDate);
+        customDates.monthly = {
+          year: dateObj.getFullYear(),
+          month: dateObj.getMonth() + 1
+        };
+        console.log(`[ReportPopup] 월간보고서 날짜 추출 (에이전트 경로): ${extractedDate} → ${customDates.monthly.year}년 ${customDates.monthly.month}월`);
+      }
+      
       const year = customDates.monthly?.year;
       const month = customDates.monthly?.month;
       if (year && month) {
@@ -1273,8 +1324,8 @@ async function generateMonthlyReport() {
     addMessage('assistant', '📈 월간 보고서를 생성 중입니다...');
     
     const now = new Date();
-    const year = customDates.monthly.year || now.getFullYear();
-    const month = customDates.monthly.month || (now.getMonth() + 1);
+    const year = customDates.monthly?.year || now.getFullYear();
+    const month = customDates.monthly?.month || (now.getMonth() + 1);
     console.log(`[${requestId}] 📅 대상 기간: ${year}년 ${month}월`);
     
     const { headers, owner_id } = await buildRequestContext();
@@ -1510,6 +1561,185 @@ function handleApplyDate() {
   } else {
     addMessage('assistant', '⚠️ 날짜를 입력해주세요.');
   }
+}
+
+/**
+ * 날짜 선택 모달 표시
+ */
+function showDatePickerModal(dateMode) {
+  // 기존 모달이 있으면 제거
+  const existingModal = document.getElementById('date-picker-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  // 모달 생성
+  const modal = document.createElement('div');
+  modal.id = 'date-picker-modal';
+  modal.className = 'date-picker-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  `;
+  
+  // 모달 콘텐츠
+  const modalContent = document.createElement('div');
+  modalContent.className = 'date-picker-modal-content';
+  modalContent.style.cssText = `
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  `;
+  
+  // 제목
+  const title = document.createElement('div');
+  title.style.cssText = `
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+  `;
+  title.textContent = dateMode === 'weekly' 
+    ? '주간보고서 기준 날짜 선택' 
+    : '월간보고서 기준 날짜 선택';
+  modalContent.appendChild(title);
+  
+  // 설명
+  const description = document.createElement('div');
+  description.style.cssText = `
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 20px;
+  `;
+  description.textContent = dateMode === 'weekly'
+    ? '기준 날짜가 포함된 주간 보고서를 생성합니다.'
+    : '기준 날짜가 포함된 월간 보고서를 생성합니다.';
+  modalContent.appendChild(description);
+  
+  // 날짜 입력
+  const dateInput = document.createElement('input');
+  dateInput.type = 'date';
+  dateInput.value = new Date().toISOString().split('T')[0]; // 오늘 날짜 기본값
+  dateInput.style.cssText = `
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+  `;
+  modalContent.appendChild(dateInput);
+  
+  // 버튼 컨테이너
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = `
+    display: flex;
+    gap: 12px;
+  `;
+  
+  // 취소 버튼
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = '취소';
+  cancelBtn.style.cssText = `
+    flex: 1;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: white;
+    color: #333;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  `;
+  cancelBtn.addEventListener('click', () => {
+    modal.remove();
+  });
+  cancelBtn.addEventListener('mouseenter', () => {
+    cancelBtn.style.borderColor = '#ccc';
+    cancelBtn.style.background = '#f5f5f5';
+  });
+  cancelBtn.addEventListener('mouseleave', () => {
+    cancelBtn.style.borderColor = '#e0e0e0';
+    cancelBtn.style.background = 'white';
+  });
+  buttonContainer.appendChild(cancelBtn);
+  
+  // 생성하기 버튼
+  const confirmBtn = document.createElement('button');
+  confirmBtn.textContent = '생성하기';
+  confirmBtn.style.cssText = `
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #fdbc66;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  `;
+  confirmBtn.addEventListener('click', () => {
+    const selectedDate = dateInput.value;
+    if (!selectedDate) {
+      alert('날짜를 선택해주세요.');
+      return;
+    }
+    
+    // 명령어 생성
+    let command = '';
+    if (dateMode === 'weekly') {
+      command = `${selectedDate} 기준으로 이번주 주간보고서 작성해줘`;
+    } else if (dateMode === 'monthly') {
+      command = `${selectedDate}가 포함된 달의 월간보고서를 작성해줘`;
+    }
+    
+    // 모달 닫기
+    modal.remove();
+    
+    // 명령 실행
+    if (command) {
+      triggerAgentCommand(command);
+    }
+  });
+  confirmBtn.addEventListener('mouseenter', () => {
+    confirmBtn.style.background = '#f0a850';
+    confirmBtn.style.transform = 'translateY(-1px)';
+    confirmBtn.style.boxShadow = '0 2px 8px rgba(253, 188, 102, 0.3)';
+  });
+  confirmBtn.addEventListener('mouseleave', () => {
+    confirmBtn.style.background = '#fdbc66';
+    confirmBtn.style.transform = 'translateY(0)';
+    confirmBtn.style.boxShadow = 'none';
+  });
+  buttonContainer.appendChild(confirmBtn);
+  
+  modalContent.appendChild(buttonContainer);
+  modal.appendChild(modalContent);
+  
+  // 모달 배경 클릭 시 닫기
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+  
+  // body에 추가
+  document.body.appendChild(modal);
 }
 
 /**
