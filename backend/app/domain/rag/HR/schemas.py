@@ -100,7 +100,7 @@ class UploadResponse(BaseModel):
 class QueryRequest(BaseModel):
     """질의응답 요청"""
     query: str
-    top_k: Optional[int] = Field(default=3, ge=1, le=10)
+    top_k: Optional[int] = Field(default=5, ge=1, le=10)
     # similarity_threshold 제거: 동적 threshold가 항상 활성화됨
     collection_name: Optional[str] = None
 

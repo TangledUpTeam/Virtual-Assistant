@@ -25,6 +25,14 @@ def blocks_to_markdown(blocks: List[Dict[str, Any]], depth: int = 0) -> str:
                 markdown_lines.append(f"{indent}{text}")
                 markdown_lines.append("")  # 단락 사이 공백
         
+        elif block_type == "child_page":
+            # 하위 페이지는 제목만 표시하고 내용은 가져오지 않음
+            title = block.get("child_page", {}).get("title", "Untitled Page")
+            markdown_lines.append(f"{indent}📄 [{title}]")
+            markdown_lines.append("")
+            # child_page는 자식 블록을 재귀적으로 처리하지 않음 (제목만 표시)
+            continue
+        
         elif block_type == "heading_1":
             text = _extract_rich_text(block.get("heading_1", {}).get("rich_text", []))
             if text:
@@ -91,10 +99,91 @@ def blocks_to_markdown(blocks: List[Dict[str, Any]], depth: int = 0) -> str:
             if text:
                 markdown_lines.append(f"{indent}- ▶ {text}")
         
-        # 자식 블록이 있으면 재귀적으로 처리
+        elif block_type == "callout":
+            callout_data = block.get("callout", {})
+            text = _extract_rich_text(callout_data.get("rich_text", []))
+            icon = callout_data.get("icon", {})
+            icon_emoji = icon.get("emoji", "💡") if icon.get("type") == "emoji" else "💡"
+            if text:
+                markdown_lines.append(f"{indent}>{icon_emoji} {text}")
+                markdown_lines.append("")
+        
+        elif block_type == "table":
+            # 테이블은 간단히 처리 (실제로는 복잡할 수 있음)
+            markdown_lines.append(f"{indent}[테이블]")
+            markdown_lines.append("")
+        
+        elif block_type == "table_row":
+            # 테이블 행은 건너뛰기 (상위 테이블에서 처리)
+            pass
+        
+        elif block_type == "column_list" or block_type == "column":
+            # 컬럼 레이아웃은 간단히 처리
+            pass
+        
+        elif block_type == "image":
+            image_data = block.get("image", {})
+            caption = _extract_rich_text(image_data.get("caption", []))
+            file_url = ""
+            if image_data.get("type") == "external":
+                file_url = image_data.get("external", {}).get("url", "")
+            elif image_data.get("type") == "file":
+                file_url = image_data.get("file", {}).get("url", "")
+            
+            if file_url:
+                caption_text = f" {caption}" if caption else ""
+                markdown_lines.append(f"{indent}![{caption_text}]({file_url})")
+                markdown_lines.append("")
+        
+        elif block_type == "video" or block_type == "audio" or block_type == "file":
+            # 미디어 파일들
+            file_data = block.get(block_type, {})
+            caption = _extract_rich_text(file_data.get("caption", []))
+            file_url = ""
+            if file_data.get("type") == "external":
+                file_url = file_data.get("external", {}).get("url", "")
+            elif file_data.get("type") == "file":
+                file_url = file_data.get("file", {}).get("url", "")
+            
+            if file_url:
+                caption_text = caption if caption else "파일"
+                markdown_lines.append(f"{indent}[{caption_text}]({file_url})")
+                markdown_lines.append("")
+        
+        elif block_type == "bookmark":
+            bookmark_data = block.get("bookmark", {})
+            url = bookmark_data.get("url", "")
+            caption = _extract_rich_text(bookmark_data.get("caption", []))
+            if url:
+                caption_text = caption if caption else url
+                markdown_lines.append(f"{indent}[{caption_text}]({url})")
+                markdown_lines.append("")
+        
+        elif block_type == "link_preview":
+            link_data = block.get("link_preview", {})
+            url = link_data.get("url", "")
+            if url:
+                markdown_lines.append(f"{indent}[링크]({url})")
+                markdown_lines.append("")
+        
+        elif block_type == "child_database":
+            # 데이터베이스는 제목만 표시
+            title = block.get("child_database", {}).get("title", "Untitled Database")
+            markdown_lines.append(f"{indent}📊 [{title}]")
+            markdown_lines.append("")
+            continue
+        
+        else:
+            # 처리되지 않은 블록 타입은 타입 이름만 표시 (디버깅용)
+            # 실제로는 많은 블록 타입이 있지만, 기본적인 것들은 위에서 처리됨
+            print(f"[WARNING] 처리되지 않은 블록 타입: {block_type}")
+            # 알 수 없는 블록 타입도 최소한 자식 블록은 처리할 수 있도록 함
+        
+        # 자식 블록이 있으면 재귀적으로 처리 (child_page는 continue로 이미 건너뜀)
         if block.get("children"):
             child_markdown = blocks_to_markdown(block["children"], depth + 1)
-            markdown_lines.append(child_markdown)
+            if child_markdown.strip():  # 빈 문자열이 아니면 추가
+                markdown_lines.append(child_markdown)
     
     return "\n".join(markdown_lines)
 

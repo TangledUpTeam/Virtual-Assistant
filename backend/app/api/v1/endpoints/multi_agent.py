@@ -65,6 +65,9 @@ async def multi_agent_query(
         response = await supervisor.process(request)
         return response
     except Exception as e:
+        import traceback
+        print(f"❌ [Multi-Agent API] 처리 중 에러 발생:")
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Multi-Agent 처리 중 오류 발생: {str(e)}"

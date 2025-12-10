@@ -11,13 +11,29 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.prebuilt import create_react_agent
 
 from .config import multi_agent_config
 from .tools.agent_tools import get_all_agent_tools
 from .schemas import MultiAgentRequest, MultiAgentResponse
 from .context import session_context, user_context, reset_context
+
+# ------------------------------------------------------------------
+# 세션별 마지막 답변 저장소 (In-Memory)
+# ------------------------------------------------------------------
+LAST_ANSWER: Dict[str, str] = {}
+
+def set_last_answer(session_id: str, answer: str) -> None:
+    """세션의 마지막 답변을 저장합니다."""
+    if session_id and answer:
+        LAST_ANSWER[session_id] = answer
+
+def get_last_answer(session_id: str) -> Optional[str]:
+    """세션의 마지막 답변을 가져옵니다."""
+    if not session_id:
+        return None
+    return LAST_ANSWER.get(session_id)
 
 # SuperViser Agent 클래스
 # Tool Calling 패턴으로 에이전트 호출
@@ -81,22 +97,14 @@ class SupervisorAgent:
 
 2. **rag_tool**: 회사 문서, 규정, 정책 검색
    - 사용 조건:
-     * 사용자가 회사 내부 규정, 정책, 절차에 대한 구체적인 사실 관계를 원할 때
+     * 사용자가 '연차', '규정', '절차', '비용' 등 업무 관련 용어를 사용할 때, '우리 회사'라는 말이 없더라도 기본적으로 사내 내부 규정을 묻는 것으로 간주하세요.
      * 일반적인 지식이 아닌, '우리 회사'의 특정한 정보를 문서 기반으로 확인해야 할 때
      * "연차 규정이 뭐야?" 처럼 정해진 규칙이나 매뉴얼에 대한 답변이 필요한 경우
-   - 트리거 상황:
-     * 명시적 검색 요청: "규정 찾아줘", "정책 알려줘", "매뉴얼 검색해줘", "자료 보여줘"
-     * 규정/제도 문의: "연차는 며칠이야?", "야근 식대 기준이 뭐야?", "복지 포인트 사용처 알려줘"
-     * 절차 확인: "휴가 신청 방법 알려줘", "법인카드 사용 절차", "지출결의서 작성법"
-   - 예시 (도구 사용 O):
+   - 예시:
      * "연차 수당 지급 기준 알려줘"
      * "의무교육은 어디서 들어야해?"
      * "승진하려면 어떤 노력을 해야해?"
      * "제휴사 목록 알려줘"
-   - 예시 (도구 사용 X - chatbot_tool 사용):
-     * "연차가 영어로 뭐야?" → 일반 상식/어학 (chatbot_tool)
-     * "회사 가기 싫다, 휴가 가고 싶어" → 감정 표현 (therapy_tool)
-     * "점심 메뉴 추천해줘" → 일반 대화 (chatbot_tool)
 
 3. **brainstorming_tool**: 창의적 아이디어 발상 및 브레인스토밍 지원
    - 사용 조건:
@@ -154,29 +162,20 @@ class SupervisorAgent:
      * 영어: counseling, therapy, help, depressed, anxious, sad, angry, lonely, frustrated, stressed, worried, scared, afraid, fear, panic, hopeless, helpless, worthless, empty, guilt, shame, regret, remorse, jealous, envy, tired, exhausted, burnout, overwhelmed, confused, lost, psychology, mental health, counselor, therapist, support, comfort, encouragement, empathy, trauma, alcoholic, drunk, abusive, violence, trust, mistrust, trustworthy, parent, family, perfect, perfectionism, insecure, instability, inflexible, overbearing, control
    - 예시: "스트레스가 많아서 힘들어", "우울한 기분이 들어", "대인관계 문제로 고민이야", "번아웃이 와", "상사가 무서워", "자존감이 낮아", "트라우마가 있어"
 
-6. **notion_tool**: Notion 페이지 관리 (검색, 생성, 대화 내용 저장)
-   - **핵심 의도**: 사용자가 Notion에 무언가를 **저장, 기록, 메모**하거나, 기존 페이지를 **검색, 조회, 수정**하려는 경우
+7. **notion_tool**: Notion 페이지 관리 (검색, 생성, 대화 내용 저장, 내용 조회 및 설명)
+   - **핵심 의도**: 사용자가 Notion에 무언가를 **저장, 기록, 메모**하거나, 기존 페이지를 **검색, 조회, 수정, 설명**하려는 경우
    - **사용 조건**:
      * 사용자가 Notion에 **실제로 페이지를 만들거나 내용을 저장**하려는 명확한 의도가 있을 때
-     * "노션", "notion", "페이지" 단어와 함께 **행동 동사**(만들어, 저장, 적어, 기록 등)가 있을 때
+     * "노션", "notion", "페이지" 단어와 함께 **행동 동사**가 있을 때
      * 대화 내용을 정리해서 보관하고 싶을 때
+     * **Notion 페이지의 내용을 가져와서 설명하거나 알려주는 경우**
    - **트리거 상황**:
      * 페이지 생성: "X 페이지 만들어줘", "X라는 페이지 생성해줘"
      * 내용 작성: "X라고 적어줘", "제목은 X, 내용은 Y로 만들어줘"
      * 대화 저장: "상담 내용 노션에 저장해줘", "이거 정리해서 노션에 올려줘"
-     * 페이지 검색: "노션에서 X 찾아줘", "X 페이지 어디 있어?"
-   - **예시 (notion_tool 사용 O)**:
-     * ✅ "안녕이라는 페이지 만들고 오늘 할일 목록 다이소 들리기 라고 적어줘"
-       → 제목: "안녕", 내용: "오늘 할일 목록 다이소 들리기"
-     * ✅ "내 노션에 제목은 안녕, 내용은 클레오파트라 라고 적어줘"
-       → 제목: "안녕", 내용: "클레오파트라"
-     * ✅ "개인 페이지에 '회의록'이라고 적어줘"
-   - 예: "제목은 X, 내용은 Y로 적어줘" → notion_tool
-   - 예: "상담 내용 노션에 저장해줘" → notion_tool
-   - 예: "방금 답변해준 내용 노션에 정리해서 넣어줘" → notion_tool
-   - 예: "제휴사 목록 페이지 만들어서 정리해줘" → notion_tool
-   - 예: "노션에 있는 AI직업종류 내용 알려줘" → notion_tool
-   - 예: "페이지 찾아줘" → notion_tool
+     * 페이지 검색: "노션에서 X 찾아줘", "X 페이지에 어떤 내용이 있어?"
+     * **내용 조회 및 설명: "내 노션에 있는 X에 대해 얘기해줘", "내 노션의 X 페이지 내용 알려줘", "내 노션 개인정리에 있는 Y 설명해줘"**
+
 
 8. **"메일", "이메일"** 관련 요청(전송, 검색, 첨부) → **무조건 email_tool**
    - 예: "이거 메일로 보내줘" → email_tool
@@ -218,14 +217,6 @@ class SupervisorAgent:
 - **행동 동사**(만들어, 저장, 적어, 기록, 생성 등)가 있으면 **실행 의도**입니다.
 - **질문 동사**(뭐야, 어떻게, 알려줘 등)만 있으면 **정보 요청**입니다.
 
-**의도 판별 예시:**
-- ✅ "안녕이라는 페이지 만들어줘" → **실행 의도** → notion_tool
-- ❌ "페이지 만드는 방법 알려줘" → **정보 요청** → chatbot_tool
-- ✅ "제목은 X, 내용은 Y로 적어줘" → **실행 의도** → notion_tool
-- ❌ "노션이 뭐야?" → **정보 요청** → chatbot_tool
-- ✅ "상담 내용 저장해줘" → **실행 의도** → notion_tool
-- ❌ "저장하는 방법 알려줘" → **정보 요청** → chatbot_tool
-
 **최종 체크:**
 - 가장 적합한 에이전트 **하나만** 선택하세요.
 - **brainstorming_tool을 선택한 경우, 절대 직접 답변을 생성하지 말고 에이전트의 안내 메시지만 그대로 전달하세요.**
@@ -250,40 +241,204 @@ class SupervisorAgent:
             if request.user_id:
                 current_user_context["user_id"] = request.user_id
             user_context.set(current_user_context)
+
+            # ------------------------------------------------------------------
+            # [Notion 저장 편의 기능]
+            # "방금 답변", "이 내용" + "노션" 키워드가 있으면 직전 답변을 찾아 저장 요청으로 변환
+            # ------------------------------------------------------------------
+            query = request.query
+            session_id = request.session_id
             
-            # LangGraph Agent 실행
-            result = await self.agent_executor.ainvoke({
-                "messages": [HumanMessage(content=request.query)]
-            })
+            check_keywords = ["방금 답변", "이 대화", "지금 내용", "위 내용", "이 내용"]
+            if any(k in query for k in check_keywords) and ("노션" in query or "Notion" in query):
+                last_answer = get_last_answer(session_id)
+                if last_answer:
+                    print(f"🔄 [Supervisor] 직전 답변을 Notion에 저장하기 위해 쿼리 변환 중...")
+                    query = f"""
+사용자의 요청에 따라 다음 내용을 노션 페이지로 저장해줘.
+
+사용자 요청: "{request.query}"
+
+[저장할 내용]
+{last_answer}
+
+권장 사항:
+1. 사용자가 제목을 구체적으로 언급했다면 그 제목을 사용해.
+2. 언급하지 않았다면, 내용을 잘 요약하는 제목을 스스로 생성해.
+"""
+                else:
+                    return MultiAgentResponse(
+                        query=request.query,
+                        answer="바로 이전 답변만 생성해드릴 수 있어요.",
+                        agent_used="supervisor",
+                        intermediate_steps=[],
+                        processing_time=time.time() - start_time,
+                        session_id=session_id
+                    )
             
-            # 결과 추출 (LangGraph는 messages 형태로 반환)
-            messages = result.get("messages", [])
+            # ============================================
+            # [주석 처리] 기존 코드: ainvoke 방식 (전체 실행 후 결과 추출)
+            # Tool 실행 후 두 번째 agent 호출이 발생하는 문제 있음
+            # ============================================
+            # # LangGraph Agent 실행
+            # result = await self.agent_executor.ainvoke({
+            #     "messages": [HumanMessage(content=request.query)]
+            # })
+            # 
+            # # 결과 추출 (LangGraph는 messages 형태로 반환)
+            # messages = result.get("messages", [])
+            # answer = "응답을 생성할 수 없습니다."
+            # agent_used = "supervisor"
+            # 
+            # # 마지막 AI 메시지에서 답변 추출
+            # for msg in reversed(messages):
+            #     if hasattr(msg, 'content') and msg.content:
+            #         answer = msg.content
+            #         break
+            # 
+            # # 사용된 도구 추출
+            # intermediate_steps = []
+            # for msg in messages:
+            #     if hasattr(msg, 'tool_calls') and msg.tool_calls:
+            #         for tool_call in msg.tool_calls:
+            #             tool_name = tool_call.get('name', 'unknown')
+            #             agent_used = tool_name.replace('_tool', '')
+            #             intermediate_steps.append({
+            #                 "agent": agent_used,
+            #                 "action": "process_query",
+            #                 "result": "success"
+            #             })
+            
+            # ============================================
+            # [주석 처리] 기존 코드: ainvoke 방식에서 ToolMessage 찾기 (여전히 두 번째 agent 호출 발생)
+            # ============================================
+            # tool_used = None
+            # tool_result = None
+            # intermediate_steps = []
+            # 
+            # # Tool 실행 결과 찾기 (ToolMessage)
+            # for msg in messages:
+            #     # Tool이 호출되었는지 확인 (AIMessage에 tool_calls가 있는 경우)
+            #     if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+            #         for tool_call in msg.tool_calls:
+            #             tool_name = tool_call.get('name', 'unknown')
+            #             tool_used = tool_name.replace('_tool', '')
+            #             intermediate_steps.append({
+            #                 "agent": tool_used,
+            #                 "action": "process_query",
+            #                 "result": "success"
+            #             })
+            #     
+            #     # Tool 실행 결과 메시지 찾기 (ToolMessage)
+            #     if isinstance(msg, ToolMessage):
+            #         tool_result = msg.content
+            #         # Tool이 사용된 경우 agent_used 설정
+            #         if tool_used:
+            #             agent_used = tool_used
+            # 
+            # # Tool이 실행되었고 결과가 있으면 Tool 결과를 바로 반환
+            # if tool_used and tool_result:
+            #     answer = tool_result
+            # else:
+            #     # Tool이 실행되지 않은 경우 (일반 대화 등) 마지막 AI 메시지에서 답변 추출
+            #     for msg in reversed(messages):
+            #         if isinstance(msg, AIMessage) and hasattr(msg, 'content') and msg.content:
+            #             answer = msg.content
+            #             break
+            #     
+            #     # intermediate_steps가 비어있으면 supervisor로 표시
+            #     if not intermediate_steps:
+            #         intermediate_steps.append({
+            #             "agent": agent_used,
+            #             "action": "process_query",
+            #             "result": "success"
+            #         })
+            
+            # ============================================
+            # [현재 사용] astream 방식: Tool 실행 결과를 받는 즉시 종료 (두 번째 agent 호출 방지)
+            # ============================================
             answer = "응답을 생성할 수 없습니다."
             agent_used = "supervisor"
+            tool_used = None
+            tool_result = None
+            intermediate_steps = []
+            all_messages = []
             
-            # 마지막 AI 메시지에서 답변 추출
-            for msg in reversed(messages):
-                if hasattr(msg, 'content') and msg.content:
-                    answer = msg.content
+            # astream을 사용하여 실시간으로 메시지를 받아서 ToolMessage를 받는 즉시 종료
+            should_stop = False
+            async for event in self.agent_executor.astream({
+                "messages": [HumanMessage(content=query)]
+            }):
+                if should_stop:
+                    break
+                    
+                # 각 노드의 결과를 확인
+                for node_name, node_result in event.items():
+                    if should_stop:
+                        break
+                    
+                    # ✅ 1) node_result가 dict인지 먼저 확인
+                    if not isinstance(node_result, dict):
+                        continue
+                    
+                    # ✅ 2) messages 키 존재 + 비어있지 않은지 확인
+                    node_messages = node_result.get("messages")
+                    if not node_messages:
+                        continue
+                    
+                    all_messages.extend(node_messages)
+                    
+                    # ToolMessage를 찾으면 바로 결과 추출하고 종료
+                    for msg in node_messages:
+                        # Tool 호출 감지
+                        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                            for tool_call in msg.tool_calls:
+                                tool_name = tool_call.get("name", "unknown")
+                                tool_used = tool_name.replace("_tool", "")
+                                print(f"🔧 [Supervisor] Tool 호출 감지: {tool_name} -> agent: {tool_used}")
+                                intermediate_steps.append({
+                                    "agent": tool_used,
+                                    "action": "process_query",
+                                    "result": "success",
+                                })
+                        
+                        # ToolMessage 결과 감지
+                        if isinstance(msg, ToolMessage):
+                            tool_result = msg.content
+                            print(f"📦 [Supervisor] ToolMessage 받음 - 길이: {len(str(tool_result))}, 내용: {str(tool_result)[:200]}")
+                            if tool_used:
+                                agent_used = tool_used
+                            answer = tool_result
+                            print(f"✅ [Supervisor] 최종 answer 설정: {str(answer)[:200]}")
+                            set_last_answer(request.session_id, answer)
+                            should_stop = True
+                            break
+                    
+                    if should_stop:
+                        break
+                    
+                if should_stop:
                     break
             
-            # 사용된 도구 추출 및 intent 추출
-            intermediate_steps = []
-            detected_intent = None
-            for msg in messages:
-                if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                    for tool_call in msg.tool_calls:
-                        tool_name = tool_call.get('name', 'unknown')
-                        agent_used = tool_name.replace('_tool', '')
-                        
-                        # 디버깅 로그 추가
-                        print(f"[SUPERVISOR DEBUG] Tool called: {tool_name} for query: {request.query[:50]}...")
-                        
-                        intermediate_steps.append({
-                            "agent": agent_used,
-                            "action": "process_query",
-                            "result": "success"
-                        })
+            # Tool이 실행되지 않은 경우 (일반 대화 등) 마지막 AI 메시지에서 답변 추출
+            if not tool_result:
+                for msg in reversed(all_messages):
+                    if isinstance(msg, AIMessage) and hasattr(msg, 'content') and msg.content:
+                        # Tool 호출만 하고 결과가 없는 경우는 제외
+                        if not (hasattr(msg, 'tool_calls') and msg.tool_calls):
+                            answer = msg.content
+                            set_last_answer(request.session_id, answer)
+                            break
+                
+                # intermediate_steps가 비어있으면 supervisor로 표시
+                if not intermediate_steps:
+                    intermediate_steps.append({
+                        "agent": agent_used,
+                        "action": "process_query",
+                        "result": "success"
+                    })
+                    
+            detected_intent = None  # 기본값 초기화
             
             # report_tool이 사용된 경우, answer에서 intent 마커 확인
             if agent_used == "report" and answer and answer.startswith("__INTENT_LOOKUP__"):
@@ -356,6 +511,9 @@ class SupervisorAgent:
             
         # 오류 처리
         except Exception as e:
+            import traceback
+            print(f"❌ [SupervisorAgent] 처리 중 에러 발생:")
+            traceback.print_exc()
             
             processing_time = time.time() - start_time
             error_message = f"질문 처리 중 오류가 발생했습니다"
