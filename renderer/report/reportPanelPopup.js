@@ -62,6 +62,9 @@ export async function initReportPanel() {
   // 초기 메시지
   addMessage('assistant', '📝 보고서 & 업무 관리를 도와드립니다!\n\n• "오늘 업무 플래닝" - 업무 추천\n• "일일 보고서" - 일일 보고서 작성\n• "주간 보고서" - 주간 보고서 생성\n• "월간 보고서" - 월간 보고서 생성\n• "날짜 설정" - 과거 기간 보고서\n\n💬 자연어로 질문하면 일일보고서를 검색해 답변합니다!');
   
+  // 빠른 실행 버튼 추가
+  addQuickActionButtons();
+  
   // 이벤트 리스너
   sendBtn.addEventListener('click', handleSendMessage);
   reportInput.addEventListener('keydown', handleInputKeydown);
@@ -77,6 +80,114 @@ export async function initReportPanel() {
   
   isInitialized = true;
   console.log('✅ 보고서 패널 초기화 완료');
+}
+
+/**
+ * 빠른 실행 버튼 추가 (초기 화면에만 표시)
+ */
+function addQuickActionButtons() {
+  // 이미 사용자 메시지가 있으면 버튼을 표시하지 않음
+  const hasUserMessages = messages.some(msg => msg.role === 'user');
+  if (hasUserMessages) {
+    return;
+  }
+  
+  const quickActions = [
+    { label: '오늘 업무 플래닝', command: '오늘 업무 추천해줘', icon: '📋' },
+    { label: '일일 보고서 작성', command: '일일보고서 작성할래', icon: '📝' },
+    { label: '주간 보고서 생성', command: '주간보고서 작성해줘', icon: '📊' },
+    { label: '월간 보고서 생성', command: '월간보고서 만들어줘', icon: '📈' },
+    { label: '날짜 설정 / 과거 보고서', command: '지난 보고서들 조회하고 싶어', icon: '📅' }
+  ];
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.className = 'quick-actions-container';
+  buttonContainer.style.cssText = `
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e0e0e0;
+  `;
+  
+  quickActions.forEach(action => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'quick-action-button';
+    button.innerHTML = `<span class="quick-action-icon">${action.icon}</span><span>${action.label}</span>`;
+    button.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px;
+      border-radius: 20px;
+      background: #FFE0B3;
+      color: #333;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      white-space: nowrap;
+    `;
+    
+    // Hover 효과
+    button.addEventListener('mouseenter', () => {
+      button.style.background = '#FFB04A';
+      button.style.color = 'white';
+      button.style.transform = 'translateY(-1px)';
+      button.style.boxShadow = '0 2px 6px rgba(253, 188, 102, 0.3)';
+    });
+    
+    button.addEventListener('mouseleave', () => {
+      button.style.background = '#FFE0B3';
+      button.style.color = '#333';
+      button.style.transform = 'translateY(0)';
+      button.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+    });
+    
+    // 클릭 이벤트
+    button.addEventListener('click', () => {
+      triggerAgentCommand(action.command);
+    });
+    
+    buttonContainer.appendChild(button);
+  });
+  
+  // 마지막 assistant 메시지에 버튼 추가
+  const lastMessage = messagesContainer.lastElementChild;
+  if (lastMessage && lastMessage.classList.contains('assistant')) {
+    lastMessage.appendChild(buttonContainer);
+  }
+}
+
+/**
+ * 에이전트 명령 트리거 (빠른 실행 버튼용)
+ * 기존 handleSendMessage와 동일한 로직 사용
+ */
+async function triggerAgentCommand(command) {
+  // 사용자 메시지로 추가
+  addMessage('user', command);
+  
+  // 기존 전송 로직과 동일하게 처리
+  sendBtn.disabled = true;
+  sendBtn.textContent = '...';
+  
+  try {
+    if (chatMode === 'daily_fsm') {
+      await handleDailyAnswer(command);
+    } else {
+      await handleReportIntent(command);
+    }
+  } catch (error) {
+    console.error('빠른 실행 오류:', error);
+    addMessage('assistant', '오류가 발생했습니다. 😢');
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = '전송';
+  }
 }
 
 /**

@@ -96,14 +96,69 @@ class QueryAnalyzer:
         return None
 
     @staticmethod
+    def _parse_absolute_korean_dates(query: str, reference_date: date) -> tuple[Optional[str], Optional[Dict[str, date]]]:
+        """
+        한국어 절대 날짜 파싱
+        
+        Returns:
+            (single_date: Optional[str], date_range: Optional[Dict[str, date]])
+            - single_date: "YYYY-MM-DD" 형식 문자열 (단일 날짜인 경우)
+            - date_range: {"start": date, "end": date} (월 범위인 경우)
+        """
+        # 1) YYYY년 MM월 DD일 → single_date
+        full_date_match = re.search(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일", query)
+        if full_date_match:
+            try:
+                year = int(full_date_match.group(1))
+                month = int(full_date_match.group(2))
+                day = int(full_date_match.group(3))
+                parsed_date = date(year, month, day)
+                return (parsed_date.strftime("%Y-%m-%d"), None)
+            except ValueError:
+                pass
+        
+        # 2) YYYY년 MM월 → month range
+        year_month_match = re.search(r"(\d{4})년\s*(\d{1,2})월", query)
+        if year_month_match:
+            try:
+                year = int(year_month_match.group(1))
+                month = int(year_month_match.group(2))
+                _, last_day = calendar.monthrange(year, month)
+                return (None, {
+                    "start": date(year, month, 1),
+                    "end": date(year, month, last_day)
+                })
+            except ValueError:
+                pass
+        
+        # 3) MM월 DD일 → reference_date의 연도 사용
+        month_day_match = re.search(r"(\d{1,2})월\s*(\d{1,2})일", query)
+        if month_day_match:
+            try:
+                month = int(month_day_match.group(1))
+                day = int(month_day_match.group(2))
+                year = reference_date.year
+                parsed_date = date(year, month, day)
+                return (parsed_date.strftime("%Y-%m-%d"), None)
+            except ValueError:
+                pass
+        
+        return (None, None)
+
+    @staticmethod
     def _extract_date_range(query: str, base_date: Optional[date] = None) -> Optional[Dict[str, date]]:
         reference = base_date or date.today()
         lower = query.lower()
 
-        relative = QueryAnalyzer._extract_relative_date_range(lower, reference)
-        if relative:
-            return relative
+        # 절대 날짜를 먼저 파싱 (한국어 형식 우선)
+        single_date, korean_date_range = QueryAnalyzer._parse_absolute_korean_dates(query, reference)
+        if korean_date_range:
+            return korean_date_range
+        if single_date:
+            parsed_date = datetime.strptime(single_date, "%Y-%m-%d").date()
+            return {"start": parsed_date, "end": parsed_date}
 
+        # ISO 형식 날짜 파싱 (YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD)
         explicit_dates = [
             QueryAnalyzer._parse_date_string(match)
             for match in re.findall(r"\b(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})\b", query)
@@ -116,6 +171,11 @@ class QueryAnalyzer:
             return {"start": start, "end": end}
         if len(explicit_dates) == 1:
             return {"start": explicit_dates[0], "end": explicit_dates[0]}
+
+        # 상대 날짜 파싱 (절대 날짜가 없을 때만)
+        relative = QueryAnalyzer._extract_relative_date_range(lower, reference)
+        if relative:
+            return relative
 
         week_anchor = re.search(
             r"week\s+(?:of|starting|beginning)?\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})",
@@ -144,8 +204,14 @@ class QueryAnalyzer:
     def extract_keywords(query: str, base_date: Optional[date] = None) -> SearchKeywords:
         lower = query.lower()
         chunk_types: List[str] = []
+        
+        # 날짜 범위 추출 (_extract_date_range에서 한국어 날짜도 처리)
         date_range = QueryAnalyzer._extract_date_range(query, base_date)
         single_date = None
+        
+        # 단일 날짜인 경우 single_date 설정
+        if date_range and date_range["start"] == date_range["end"]:
+            single_date = date_range["start"].strftime("%Y-%m-%d")
 
         if any(word in lower for word in ["계획", "plan", "익일"]):
             chunk_types.append("plan")
@@ -157,9 +223,6 @@ class QueryAnalyzer:
             chunk_types.append("todo")
         if not chunk_types:
             chunk_types = ["detail", "todo", "pending", "plan", "summary"]
-
-        if date_range and date_range["start"] == date_range["end"]:
-            single_date = date_range["start"].strftime("%Y-%m-%d")
 
         return SearchKeywords(chunk_types=chunk_types, single_date=single_date, date_range=date_range)
 
@@ -241,9 +304,20 @@ class HybridSearcher:
         base_date_range: Optional[Dict[str, date]] = None,
         top_k: int = 5,
     ) -> List[UnifiedSearchResult]:
-        effective_date_range: Optional[Dict[str, Any]] = keywords.date_range or base_date_range
-        if not effective_date_range and keywords.single_date:
-            effective_date_range = {"start": keywords.single_date, "end": keywords.single_date}
+        # single_date가 있으면 우선적으로 date_range로 변환
+        effective_date_range: Optional[Dict[str, Any]] = None
+        if keywords.single_date:
+            # single_date를 date 객체로 변환
+            try:
+                single_date_obj = datetime.strptime(keywords.single_date, "%Y-%m-%d").date()
+                effective_date_range = {"start": single_date_obj, "end": single_date_obj}
+            except ValueError:
+                pass
+        
+        # single_date가 없으면 date_range 또는 base_date_range 사용
+        if not effective_date_range:
+            effective_date_range = keywords.date_range or base_date_range
+        
         normalized_date_range = self._normalize_date_range(effective_date_range)
 
         where_filter = self._build_where(keywords, owner, normalized_date_range)

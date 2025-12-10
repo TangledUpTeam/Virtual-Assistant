@@ -437,3 +437,48 @@
   background: #555;
 }
 
+/* 빠른 실행 버튼 스타일 */
+.quick-actions-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.quick-action-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 20px;
+  background: #FFE0B3;
+  color: #333;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.quick-action-button:hover {
+  background: #FFB04A;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(253, 188, 102, 0.3);
+}
+
+.quick-action-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.quick-action-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
