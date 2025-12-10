@@ -118,7 +118,7 @@ def generate_weekly_report(
     # display_name 결정 (HTML 보고서용)
     actual_display_name = display_name or owner
     header = {
-        "작성일자": f"{monday.isoformat()} ~ {friday.isoformat()}",
+        "작성일자": target_date.isoformat(),
         "성명": actual_display_name  # HTML 보고서에 표시할 이름
     }
     
@@ -131,20 +131,27 @@ def generate_weekly_report(
     
     # 날짜별로 정렬하여 요일로 매핑
     current_date = monday
+    missing_dates = []
     for day_idx in range(5):
         weekday_name = weekday_names[day_idx]
         date_str = current_date.isoformat()
         
         # 날짜 키로 업무 찾기
         if date_str in weekday_tasks_raw:
-            weekday_tasks_converted[weekday_name] = weekday_tasks_raw[date_str]
-            print(f"[DEBUG] {weekday_name} ({date_str}) 업무 {len(weekday_tasks_raw[date_str])}개 변환 완료")
+            tasks = weekday_tasks_raw[date_str]
+            weekday_tasks_converted[weekday_name] = tasks
+            print(f"[DEBUG] {weekday_name} ({date_str}) 업무 {len(tasks)}개 변환 완료")
         else:
             # 날짜 키가 없으면 빈 리스트
             weekday_tasks_converted[weekday_name] = []
-            print(f"[WARNING] {weekday_name} ({date_str}) 업무 데이터 없음")
+            missing_dates.append(date_str)
+            print(f"[WARNING] {weekday_name} ({date_str}) 업무 데이터 없음 - LLM이 해당 날짜를 누락함")
         
         current_date += timedelta(days=1)
+    
+    if missing_dates:
+        print(f"[WARNING] weekday_tasks_raw에 누락된 날짜: {missing_dates}")
+        print(f"[DEBUG] weekday_tasks_raw에 포함된 날짜 키: {list(weekday_tasks_raw.keys())}")
     
     print(f"[DEBUG] 최종 weekday_tasks_converted: {list(weekday_tasks_converted.keys())}")
     
@@ -160,12 +167,24 @@ def generate_weekly_report(
         else:
             weekly_goals.append(str(goal))
     
+    # 메모 후처리: "메모:" 접두어 제거 및 줄바꿈 보존
+    notes_raw = weekly_data.get("notes", "")
+    if isinstance(notes_raw, str):
+        # "메모:" 접두어 제거 (대소문자 구분 없이)
+        notes_cleaned = notes_raw
+        if notes_cleaned.startswith("메모:"):
+            notes_cleaned = notes_cleaned[3:].lstrip()  # "메모:" 제거 후 앞 공백 제거
+        # 여러 줄바꿈을 하나로 정규화하지 않고 원본 보존
+        notes = notes_cleaned
+    else:
+        notes = str(notes_raw) if notes_raw else ""
+    
     canonical_weekly = CanonicalWeekly(
         header=header,
         weekly_goals=weekly_goals,
         weekday_tasks=weekday_tasks_converted,
         weekly_highlights=weekly_data.get("weekly_highlights", []),
-        notes=weekly_data.get("notes", "")
+        notes=notes
     )
     
     # 7. CanonicalReport 생성

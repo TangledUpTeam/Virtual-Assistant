@@ -142,9 +142,9 @@
   <table>
     <tr>
       <th>작성일자</th>
-      <td><input type="date" value="{{ header.작성일자 }}" /></td>
+      <td><input type="date" value="2025-12-10" /></td>
       <th>성명</th>
-      <td><input type="text" value="{{ header.성명 }}" /></td>
+      <td><input type="text" value="김준경" /></td>
     </tr>
   </table>
 
@@ -152,9 +152,6 @@
   <div class="section-title">금일 진행 업무</div>
   <div class="section-box">
     <ol>
-      {% for task in summary_tasks %}
-      <li>{{ task }}</li>
-      {% endfor %}
     </ol>
   </div>
 
@@ -167,31 +164,69 @@
       <th>비고</th>
     </tr>
 
-    {% for task in detail_tasks %}
     <tr>
-      <td>{{ task.time_range }}</td>
-      <td><textarea>{{ task.text }}</textarea></td>
-      <td>{{ task.note }}</td>
+      <td>09:00 - 10:00</td>
+      <td><textarea>ㅇㅇㅇ</textarea></td>
+      <td>카테고리: 기타</td>
     </tr>
-    {% endfor %}
+    <tr>
+      <td>10:00 - 11:00</td>
+      <td><textarea>ㅇㅇㅇ</textarea></td>
+      <td>카테고리: 기타</td>
+    </tr>
+    <tr>
+      <td>11:00 - 12:00</td>
+      <td><textarea>ㅇㅇㅇㅇ</textarea></td>
+      <td>카테고리: 기타</td>
+    </tr>
+    <tr>
+      <td>12:00 - 13:00</td>
+      <td><textarea>업무 내용이 &#39;ㅇㅇㅇ&#39;로 제공되어 구체적인 분석이 필요합니다.</textarea></td>
+      <td>카테고리: 기타</td>
+    </tr>
+    <tr>
+      <td>13:00 - 14:00</td>
+      <td><textarea>ㅇㅇㅇ</textarea></td>
+      <td>카테고리: 미분류</td>
+    </tr>
+    <tr>
+      <td>14:00 - 15:00</td>
+      <td><textarea>ㅇㅇㅇ</textarea></td>
+      <td>카테고리: 기타</td>
+    </tr>
+    <tr>
+      <td>15:00 - 16:00</td>
+      <td><textarea>ㅇㅇㅇㅇ</textarea></td>
+      <td>카테고리: 기타</td>
+    </tr>
+    <tr>
+      <td>16:00 - 17:00</td>
+      <td><textarea>업무 내용: ㅇㅇㅇㅇ</textarea></td>
+      <td>카테고리: 기타</td>
+    </tr>
+    <tr>
+      <td>17:00 - 18:00</td>
+      <td><textarea>ㅇㅇㅇㅇ</textarea></td>
+      <td>카테고리: 기타</td>
+    </tr>
   </table>
 
   <!-- 미종결 -->
   <div class="section-title">미종결 업무사항</div>
   <div class="section-box">
-    <textarea>{{ pending }}</textarea>
+    <textarea></textarea>
   </div>
 
   <!-- 익일 계획 -->
   <div class="section-title">익일 업무 계획</div>
   <div class="section-box">
-    <textarea>{{ plans }}</textarea>
+    <textarea></textarea>
   </div>
 
   <!-- 특이사항 -->
   <div class="section-title">특이사항</div>
   <div class="section-box">
-    <textarea>{{ notes }}</textarea>
+    <textarea></textarea>
   </div>
 </div>
 

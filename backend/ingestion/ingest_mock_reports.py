@@ -64,28 +64,35 @@ def ingest_daily_reports() -> None:
     pipeline = EmbeddingPipeline(vector_store=vector_store)
 
     all_chunks: List[Dict[str, Any]] = []
-    for path in files:
+    total_files = len(files)
+    print(f"   처리 중... ({total_files}개 파일)", end="", flush=True)
+    
+    for idx, path in enumerate(files, 1):
         try:
             raw = read_json(path)
             canonical = service.normalize_daily(raw, owner_override=owner)
             chunks = chunk_canonical_report(canonical)
             all_chunks.extend(chunks)
-            print(f"[OK] {path.name}: {len(chunks)} chunks")
-        except ChunkValidationError as exc:
-            print(f"[SKIP] {path.name}: {exc}")
-        except Exception as exc:  # noqa: BLE001
-            print(f"[ERROR] {path.name}: {exc}")
+        except ChunkValidationError:
+            # 스킵 (조용히 처리)
+            pass
+        except Exception:  # noqa: BLE001
+            # 에러 (조용히 처리)
+            pass
+        
+        # 진행률 표시 (10% 단위)
+        if idx % max(1, total_files // 10) == 0 or idx == total_files:
+            progress = int((idx / total_files) * 100)
+            print(f"\r   처리 중... {progress}% ({idx}/{total_files})", end="", flush=True)
+    
+    print()  # 줄바꿈
 
     if not all_chunks:
         print("No chunks were generated. Nothing to store.")
         return
 
     result = pipeline.process_and_store(all_chunks, batch_size=BATCH_SIZE)
-    print(
-        f"Stored {result['chunks_processed']} chunks "
-        f"({result['embeddings_created']} embeddings). "
-        f"Collection now has {result['total_documents']} documents."
-    )
+    # 결과는 report_loader.py에서 표시하므로 여기서는 출력하지 않음
 
 
 def main() -> None:

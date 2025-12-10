@@ -423,16 +423,16 @@ def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] =
     error_count = 0
     
     try:
-        # 4. 각 파일 처리
-        for file_path in txt_files:
-            print(f"\n📖 처리 중: {file_path.relative_to(base_dir)}")
-            
+        # 4. 각 파일 처리 (진행률 표시)
+        total_files = len(txt_files)
+        print(f"   📄 총 {total_files}개 파일 처리 중...", end="", flush=True)
+        
+        for file_idx, file_path in enumerate(txt_files, 1):
             # 4-1. 파일에서 JSON 객체들 읽기
             json_objects = read_json_objects_from_file(file_path)
-            print(f"   ├─ JSON 객체 수: {len(json_objects)}개")
             
             # 4-2. 각 JSON 객체를 CanonicalReport로 변환 후 DB 저장
-            for idx, json_obj in enumerate(json_objects, 1):
+            for json_obj in json_objects:
                 try:
                     # CanonicalReport 변환
                     canonical_report = convert_to_canonical_report(json_obj, owner=owner)
@@ -452,27 +452,25 @@ def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] =
                     total_reports += 1
                     if is_created:
                         created_count += 1
-                        action = "생성"
                     else:
                         updated_count += 1
-                        action = "업데이트"
-                    
-                    print(f"   ├─ [{idx}/{len(json_objects)}] {canonical_report.owner} - {canonical_report.period_start} ({action})")
                 
                 except Exception as e:
                     error_count += 1
-                    print(f"   ├─ ❌ [{idx}/{len(json_objects)}] 처리 실패: {e}")
                     continue
+            
+            # 진행률 표시 (10% 단위)
+            if file_idx % max(1, total_files // 10) == 0 or file_idx == total_files:
+                progress = int((file_idx / total_files) * 100)
+                print(f"\r   📄 진행률: {progress}% ({file_idx}/{total_files})", end="", flush=True)
         
-        # 5. 결과 출력
-        print(f"\n{'=' * 70}")
-        print(f"✅ Bulk Ingestion 완료!")
-        print(f"{'=' * 70}")
-        print(f"📊 처리 결과:")
-        print(f"   ├─ 총 보고서 수: {total_reports}개")
-        print(f"   ├─ 생성: {created_count}개")
-        print(f"   ├─ 업데이트: {updated_count}개")
-        print(f"   └─ 에러: {error_count}개")
+        print()  # 줄바꿈
+        
+        # 5. 결과 출력 (간략하게)
+        if error_count > 0:
+            print(f"   📊 결과: 생성 {created_count}개, 업데이트 {updated_count}개, 에러 {error_count}개")
+        else:
+            print(f"   📊 결과: 생성 {created_count}개, 업데이트 {updated_count}개")
         
     except Exception as e:
         print(f"\n❌ 예상치 못한 에러: {e}")
@@ -481,7 +479,6 @@ def bulk_ingest_daily_reports(year: Optional[int] = None, month: Optional[int] =
     
     finally:
         db.close()
-        print(f"\n{'=' * 70}")
 
 
 if __name__ == "__main__":

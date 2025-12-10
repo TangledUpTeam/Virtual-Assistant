@@ -52,12 +52,8 @@ def run_ingestion() -> bool:
         project_root = BASE_DIR.parent  # Virtual-Assistant 루트
         env["PYTHONPATH"] = str(project_root) + os.pathsep + env.get("PYTHONPATH", "")
         
-        print(f"   📍 실행 경로: {BASE_DIR}")
-        print(f"   📍 Python: {python_exe}")
-        print(f"   📍 REPORT_OWNER: {env.get('REPORT_OWNER', 'N/A')}")
-        
         # 1. ChromaDB ingestion
-        print("   🔄 ChromaDB 목업 데이터 로드 중...")
+        print("   🔄 ChromaDB 로드 중...", end="", flush=True)
         result1 = subprocess.run(
             [python_exe, "-m", "ingestion.ingest_mock_reports"],
             cwd=str(BASE_DIR),
@@ -68,29 +64,32 @@ def run_ingestion() -> bool:
         )
         
         if result1.returncode != 0:
-            print(f"   ❌ ChromaDB Ingestion 실패 (exit code: {result1.returncode})")
+            print(" ❌ 실패")
             if result1.stderr:
-                print(f"      오류 메시지:")
-                for line in result1.stderr.strip().split('\n'):
-                    if line.strip():
-                        print(f"         {line}")
-            if result1.stdout:
-                print(f"      stdout:")
-                for line in result1.stdout.strip().split('\n')[-10:]:
-                    if line.strip():
-                        print(f"         {line}")
+                # 에러만 간단히 표시
+                error_lines = [line.strip() for line in result1.stderr.strip().split('\n') if line.strip()]
+                if error_lines:
+                    print(f"      오류: {error_lines[-1]}")
             return False
         
-        print("   ✅ ChromaDB Ingestion 완료")
+        # 성공 메시지에서 문서 수 추출
         if result1.stdout:
-            # 출력이 있으면 마지막 몇 줄만 표시
             lines = result1.stdout.strip().split('\n')
-            for line in lines[-3:]:
-                if line.strip():
-                    print(f"      {line}")
+            doc_count = "?"
+            for line in lines:
+                if "Collection now has" in line:
+                    # "Collection now has 1377 documents." 형식에서 숫자 추출
+                    import re
+                    match = re.search(r'(\d+) documents', line)
+                    if match:
+                        doc_count = match.group(1)
+                    break
+            print(f" ✅ 완료 ({doc_count}개 문서)")
+        else:
+            print(" ✅ 완료")
         
         # 2. PostgreSQL ingestion
-        print("   🔄 PostgreSQL 목업 데이터 로드 중...")
+        print("   🔄 PostgreSQL 로드 중...", end="", flush=True)
         bulk_ingest_script = BASE_DIR / "tools" / "bulk_daily_ingest.py"
         
         result2 = subprocess.run(
@@ -103,37 +102,43 @@ def run_ingestion() -> bool:
         )
         
         if result2.returncode != 0:
-            print(f"   ⚠️  PostgreSQL Ingestion 실패 (exit code: {result2.returncode})")
+            print(" ⚠️  실패")
             if result2.stderr:
-                print(f"      오류 메시지:")
-                for line in result2.stderr.strip().split('\n'):
-                    if line.strip():
-                        print(f"         {line}")
-            if result2.stdout:
-                print(f"      stdout:")
-                for line in result2.stdout.strip().split('\n')[-10:]:
-                    if line.strip():
-                        print(f"         {line}")
+                error_lines = [line.strip() for line in result2.stderr.strip().split('\n') if line.strip()]
+                if error_lines:
+                    print(f"      오류: {error_lines[-1]}")
             # ChromaDB는 성공했으므로 부분 성공으로 처리
-            print("   ⚠️  ChromaDB는 성공했지만 PostgreSQL 초기화 실패")
             return True
         
-        print("   ✅ PostgreSQL Ingestion 완료")
+        # 성공 메시지에서 결과 추출
         if result2.stdout:
-            # 출력이 있으면 전체 표시 (에러 확인을 위해)
             lines = result2.stdout.strip().split('\n')
-            # 에러가 있는지 확인
-            has_errors = any("에러" in line or "ERROR" in line or "❌" in line for line in lines)
-            if has_errors:
-                print("      전체 출력:")
-                for line in lines:
-                    if line.strip():
-                        print(f"         {line}")
+            created = "?"
+            updated = "?"
+            errors = "0"
+            for line in lines:
+                if "생성:" in line:
+                    import re
+                    match = re.search(r'생성:\s*(\d+)', line)
+                    if match:
+                        created = match.group(1)
+                if "업데이트:" in line:
+                    import re
+                    match = re.search(r'업데이트:\s*(\d+)', line)
+                    if match:
+                        updated = match.group(1)
+                if "에러:" in line:
+                    import re
+                    match = re.search(r'에러:\s*(\d+)', line)
+                    if match:
+                        errors = match.group(1)
+            
+            if errors != "0":
+                print(f" ✅ 완료 (생성: {created}, 업데이트: {updated}, 에러: {errors})")
             else:
-                # 에러가 없으면 마지막 몇 줄만 표시
-                for line in lines[-5:]:
-                    if line.strip():
-                        print(f"      {line}")
+                print(f" ✅ 완료 (생성: {created}, 업데이트: {updated})")
+        else:
+            print(" ✅ 완료")
         
         return True
             
