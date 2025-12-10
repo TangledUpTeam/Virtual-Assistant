@@ -53,7 +53,18 @@ class PersonaManager:
     
     # RAG 기반 페르소나 생성(Vector DB + 웹 검색)
     def generate_persona_with_rag(self) -> str:
-        return self._generate_persona_from_rag()
+        # 동기 함수에서 비동기 함수 호출
+        try:
+            # 이미 실행 중인 이벤트 루프가 있는지 확인
+            loop = asyncio.get_running_loop()
+            # 실행 중인 루프가 있으면 새 스레드에서 실행
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._generate_persona_from_rag())
+                return future.result()
+        except RuntimeError:
+            # 이벤트 루프가 없으면 새로 생성하여 실행
+            return asyncio.run(self._generate_persona_from_rag())
     
     # 프롬프트 엔지니어링으로 페르소나 생성(기본 페르소나)
     def generate_persona_with_prompt_engineering(self) -> str:
@@ -191,8 +202,9 @@ Keep it concise but comprehensive."""
                     max_tokens=800
                 )
             else:
-                # Fallback: 동기 클라이언트 사용
-                response = self.openai_client.chat.completions.create(
+                # Fallback: 동기 클라이언트 사용 (스레드 풀에서 실행)
+                response = await asyncio.to_thread(
+                    self.openai_client.chat.completions.create,
                     model="gpt-4o-mini",
                     messages=[
                         {
