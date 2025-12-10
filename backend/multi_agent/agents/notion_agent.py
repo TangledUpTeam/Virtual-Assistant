@@ -1,13 +1,13 @@
+"""
+LangChain 최신 버전을 활용한 Notion Agent
+RunnableConfig를 사용하여 컨텍스트 기반 Notion 작업 수행
+"""
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, Literal, List
-import difflib
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
 
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-
-# tools 경로 추가 (환경에 따라 경로가 다를 수 있으므로 유지)
+# 1. 환경 설정
 tools_path = Path(__file__).resolve().parent.parent.parent.parent / "tools"
 if str(tools_path) not in sys.path:
     sys.path.insert(0, str(tools_path))
@@ -16,567 +16,500 @@ from tools import notion_tool
 from .base_agent import BaseAgent
 from app.core.config import settings
 
+# LangChain 최신 버전 임포트
+from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables.config import RunnableConfig
+from pydantic import BaseModel, Field
 
-Mode = Literal["search", "get", "create"]
-
-
-class NotionAgent(BaseAgent):
-    """
-    Notion 전용 에이전트.
-    검색(RAG), 상세 조회(Get), 페이지 생성(Create) 기능을 수행합니다.
-    """
-
-    def __init__(self) -> None:
-        super().__init__(
-            name="notion_agent",
-            description="Notion 페이지 검색, 상세 조회, 생성 및 저장을 수행합니다.",
+# ------------------------------------------------------------------
+# 4. 입력 스키마 정의
+# ------------------------------------------------------------------
+class SearchInput(BaseModel):
+    query: str = Field(
+        description=(
+            "검색할 페이지 제목 또는 질문 내용. "
+            "절대 요약/변경하지 말고 사용자가 말한 내용 전체를 그대로 넣어라."
         )
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
+    )
+    page_size: int = Field(default=10, description="결과 개수 (기본값: 10)")
+    return_mode: str = Field(
+        default="content",
+        description=(
+            "반환 모드: 'content' (페이지 전체 내용 마크다운 반환) 또는 "
+            "'answer' (페이지 내용 기반으로 질문에 답변). "
+            "사용자가 '내용 보여줘', '전체 내용' 같은 요청을 하면 'content', "
+            "'~에 대해 설명해줘', '~이 뭐야' 같은 질문을 하면 'answer'를 사용하세요."
+        )
+    )
+
+
+class CreatePageInput(BaseModel):
+    """페이지 생성 입력 스키마"""
+    parent_page_name: str = Field(description="상위 페이지 이름 또는 ID (이 페이지 하위에 새 페이지 생성)")
+    title: str = Field(
+        description=(
+            "새로 생성할 페이지의 제목. "
+            "**중요**: 이 제목으로 기존 페이지를 검색하지 않고 바로 새 페이지를 생성합니다. "
+            "제목 중복 여부를 확인하지 않으며, 무조건 새 페이지를 만듭니다."
+        )
+    )
+    content: str = Field(description="페이지 내용 (Markdown 형식, 선택적)", default="")
+
+
+# ------------------------------------------------------------------
+# 5. LangChain Tools (최신 패턴)
+# ------------------------------------------------------------------
+# RunnableConfig를 사용하여 user_id에 접근
+# config 파라미터는 LLM에 노출되지 않으며 자동으로 주입됩니다.
+
+@tool("search_notion", args_schema=SearchInput)
+async def search_notion_tool(
+    query: str,
+    config: RunnableConfig,
+    page_size: int = 10,
+    return_mode: str = "content",
+) -> str:
+    """
+    Notion의 실제 검색 API(notion.search)를 사용하여 페이지를 검색합니다.
+    
+    두 가지 모드:
+    1. 'content': 검색된 페이지들의 전체 내용을 마크다운 형식으로 반환합니다.
+    2. 'answer': 검색된 페이지 내용을 기반으로 사용자의 질문에 대해 답변을 생성합니다.
+    
+    Args:
+        query: 검색할 페이지 제목 또는 질문 내용
+        page_size: 결과 개수 (기본값: 3)
+        return_mode: 'content' (전체 내용 반환) 또는 'answer' (질문에 답변)
+    """
+    print("=" * 80)
+    print("🔧 [search_notion_tool] 도구 호출됨!")
+    print(f"  Query: {query}")
+    print(f"  Page Size: {page_size}")
+    print(f"  Return Mode: {return_mode}")
+    print(f"  Config 존재: {config is not None}")
+    print("=" * 80)
+
+    # 1) config에서 user_id 꺼내기
+    user_id = None
+    if config and getattr(config, "configurable", None):
+        user_id = config.configurable.get("user_id")
+    elif config:
+        # dict 형태일 수도 있으므로 fallback
+        user_id = config.get("configurable", {}).get("user_id") if isinstance(config, dict) else None
+    
+    if not user_id:
+        return "오류: 사용자 정보(user_id)를 찾을 수 없습니다."
+
+    # 2) Notion의 실제 search API 호출
+    search_result = await notion_tool.search_pages(user_id, query, page_size=page_size)
+    
+    if not search_result["success"]:
+        error_msg = f"검색 중 오류가 발생했습니다: {search_result.get('error', '알 수 없는 오류')}"
+        print(f"❌ [search_notion_tool] {error_msg}")
+        return error_msg
+    
+    found_pages = search_result["data"]["pages"]
+    
+    # 3) 페이지 제목이 쿼리에 포함되는 페이지 찾기 (유연한 매칭)
+    # 쿼리(긴 문장) 안에 페이지 제목(짧은 단어/구문)이 들어있으면 매칭
+    q_normalized = (query or "").strip().lower().replace(" ", "").replace("　", "")
+    
+    matched_page = None
+    longest_match_length = 0  # 가장 긴 제목을 우선 선택 (더 구체적인 매칭)
+    
+    for page in found_pages:
+        title = (page.get("title") or "").strip()
+        if not title:
+            continue
+        
+        title_normalized = title.lower().replace(" ", "").replace("　", "")
+        
+        # 페이지 제목이 쿼리 안에 포함되는지 확인 (포함 관계)
+        if title_normalized in q_normalized:
+            # 더 긴 제목을 우선 선택 (더 구체적인 매칭)
+            if len(title_normalized) > longest_match_length:
+                matched_page = page
+                longest_match_length = len(title_normalized)
+                print(f"✅ [search_notion_tool] 매칭되는 페이지 발견: '{title}' (ID: {page.get('id')}) - 제목이 쿼리에 포함됨")
+    
+    # 매칭되는 페이지가 없는 경우
+    if not matched_page:
+        print(f"⚠️ [search_notion_tool] 정확히 일치하는 페이지를 찾을 수 없습니다. 검색 결과: {len(found_pages)}개")
+        for idx, page in enumerate(found_pages, 1):
+            print(f"  [{idx}] 제목: '{page.get('title', '제목 없음')}' (ID: {page.get('id', 'N/A')})")
+        
+        # 전체 인덱스에서 키워드가 포함된 페이지 찾기
+        all_pages = await notion_tool.get_or_build_page_index(user_id)
+        q_lower = (query or "").strip().lower()
+        
+        keyword_matches = []
+        for p in all_pages:
+            title = (p.get("title") or "").lower()
+            if not title:
+                continue
+            
+            title_normalized = title.replace(" ", "").replace("　", "")
+            
+            # 키워드가 제목에 포함되어 있는지 확인
+            if (q_lower in title or q_normalized in title_normalized or 
+                any(word in title for word in q_lower.split() if len(word) > 1)):
+                keyword_matches.append(p)
+        
+        if keyword_matches:
+            # 키워드가 있는 페이지 목록 반환 (최대 10개)
+            keyword_matches = keyword_matches[:10]
+            page_list = "\n".join([f"- {p.get('title', '제목 없음')}" for p in keyword_matches])
+            
+            msg = f'"{query}"와 관련된 페이지를 찾을 수 없습니다.\n\n다음과 같은 키워드가 포함된 페이지들을 찾았습니다. 정확한 페이지 제목을 입력해주세요:\n\n{page_list}'
+            print(f"⚠️ [search_notion_tool] 키워드 매칭 페이지 {len(keyword_matches)}개 반환")
+            return msg
+        else:
+            msg = f'"{query}"와(과) 관련된 페이지를 찾을 수 없습니다.'
+            print(f"⚠️ [search_notion_tool] {msg}")
+            return msg
+
+    # 4) 매칭되는 페이지의 내용만 가져오기 (순회하지 않음)
+    all_contents = []
+    page_id = matched_page["id"]
+    title = matched_page.get("title") or "제목 없음"
+    print(f"  📄 페이지 '{title}' 내용 가져오는 중... (id={page_id})")
+
+    content_res = await notion_tool.get_page_content(user_id, page_id)
+    if not content_res.get("success"):
+        error_msg = f'페이지 내용 조회 실패: {content_res.get("error")}'
+        print(f"  ⚠️ {error_msg}")
+        return error_msg
+
+    # 전체 마크다운 내용 가져오기
+    md = content_res["data"]["markdown"]
+    
+    # 하위 페이지만 있는지 확인 (get_page_content에서 반환하는 메타데이터 사용)
+    is_only_pages = content_res["data"].get("is_only_child_pages", False)
+    
+    if is_only_pages:
+        # 하위 페이지만 있는 경우, 제목만 반환
+        print(f"  ℹ️ 페이지 '{title}'는 하위 페이지만 포함되어 있습니다. 제목만 반환합니다.")
+        all_contents.append({
+            "title": title,
+            "content": None,  # 하위 페이지만 있음을 표시
+            "is_page_list_only": True
+        })
+    else:
+        all_contents.append({
+            "title": title,
+            "content": md,
+            "is_page_list_only": False
+        })
+
+    if not all_contents:
+        return f'"{query}"와(과) 매칭되는 페이지의 내용을 불러오지 못했습니다.'
+
+    # 5) return_mode에 따라 처리
+    if return_mode == "answer":
+        # 페이지 내용을 기반으로 질문에 답변 생성
+        # 하위 페이지만 있는 페이지는 제외하고 실제 내용이 있는 페이지만 사용
+        pages_with_content = [item for item in all_contents if not item.get("is_page_list_only")]
+        
+        if not pages_with_content:
+            # 모든 페이지가 하위 페이지만 있는 경우
+            page_titles = [item["title"] for item in all_contents]
+            return f'검색된 페이지들({", ".join(page_titles)})은 하위 페이지만 포함되어 있어 실제 내용이 없습니다. 구체적인 하위 페이지 제목으로 검색해주세요.'
+        
+        llm = ChatOpenAI(
+            model=settings.LLM_MODEL,
             temperature=0,
             api_key=settings.OPENAI_API_KEY,
         )
+        
+        # 실제 내용이 있는 페이지들만 컨텍스트로 합치기
+        context_parts = []
+        for item in pages_with_content:
+            context_parts.append(f"## {item['title']}\n\n{item['content']}")
+        
+        context = "\n\n---\n\n".join(context_parts)
+        
+        print(f"  🤖 LLM을 사용하여 답변 생성 중... (컨텍스트 길이: {len(context)} 문자)")
+        
+        # 질문에 답변하는 프롬프트
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """당신은 Notion 페이지 내용을 기반으로 정확하게 답변하는 AI 어시스턴트입니다.
+
+다음 규칙을 엄격히 준수하여 답변하세요:
+
+1. **답변 원칙**:
+   - 제공된 Notion 페이지 내용(Context)에 있는 내용만으로 답변하세요.
+   - 사용자가 묻는 정보가 페이지에 명확히 없더라도, 문맥상 유추할 수 있거나 관련된 내용이 있다면 이를 **페이지 내에서 찾아서** 설명해 주세요.
+   - 아예 관련 내용이 없을 때만 "죄송합니다. 관련 정보를 Notion 페이지에서 찾을 수 없습니다."라고 답변하세요.
+
+2. **Markdown 필수**: 가독성을 위해 Markdown을 적극 활용하세요.
+   - 모든 목록(글머리 기호)과 소제목(`###`) 앞뒤에는 반드시 줄바꿈 문자를 두 번 사용하여 빈 줄을 만드세요.
+   - 핵심 내용은 **볼드체**로 강조합니다.
+
+3. **간결성**: 불필요한 서론을 빼고 핵심만 간결하게 답변하세요.
+4. **언어**: 한국어로 답변하세요."""),
+            ("user", """다음 Notion 페이지 내용을 참고하여 질문에 답변해주세요.
+            
+{context}
+
+질문: {question}
+
+답변:""")
+        ])
+        
+        chain = prompt | llm
+        
+        try:
+            answer = await chain.ainvoke({
+                "context": context,
+                "question": query
+            })
+            
+            result_text = answer.content if hasattr(answer, 'content') else str(answer)
+            print(f"✅ [search_notion_tool] 답변 생성 완료 (길이: {len(result_text)} 문자)")
+            return result_text
+        except Exception as e:
+            error_msg = f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+            print(f"❌ [search_notion_tool] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return error_msg
+    
+    else:  # return_mode == "content"
+        # 페이지 전체 내용을 마크다운 형태로 반환
+        summary_parts = []
+        for item in all_contents:
+            if item.get("is_page_list_only"):
+                # 하위 페이지만 있는 경우, 제목만 표시
+                block = f"## {item['title']}\n\n이 페이지는 하위 페이지만 포함되어 있습니다.\n\n---\n"
+            else:
+                block = f"## {item['title']}\n\n{item['content']}\n\n---\n"
+            summary_parts.append(block)
+
+        result_text = "\n".join(summary_parts)
+        print(f"✅ [search_notion_tool] 전체 내용 반환 (총 {len(summary_parts)}개 페이지, 길이: {len(result_text)} 문자)")
+    return result_text
+
+
+@tool("create_page", args_schema=CreatePageInput)
+async def create_page_tool(
+    parent_page_name: str,
+    title: str,
+    config: RunnableConfig,
+    content: str = "",
+) -> str:
+    """
+    Notion(노션)에 새 페이지를 생성합니다.
+    
+    **중요**: 이 도구는 새 페이지를 생성하는 것이며, title로 기존 페이지를 검색하지 않습니다.
+    title은 생성할 새 페이지의 제목이며, 무조건 새 페이지로 생성됩니다.
+    
+    Args:
+        parent_page_name: 상위 페이지 이름 또는 ID (이 페이지를 찾아서 하위에 생성)
+        title: 새로 생성할 페이지 제목
+        content: 페이지 내용 (Markdown 형식)
+        config: RunnableConfig (자동 주입, LLM에 노출되지 않음)
+    
+    Returns:
+        생성된 페이지 제목 또는 오류 메시지
+    """
+    print("=" * 80)
+    print("🔧 [create_page_tool] 도구 호출됨!")
+    print(f"  Parent Page: {parent_page_name}")
+    print(f"  Title: {title}")
+    print(f"  Content 길이: {len(content)} 문자")
+    print(f"  Config 존재: {config is not None}")
+    if config:
+        user_id = config.get("configurable", {}).get("user_id")
+        print(f"  User ID: {user_id}")
+    print("=" * 80)
+    
+    user_id = config.get("configurable", {}).get("user_id")
+    if not user_id:
+        error_msg = "오류: 사용자 인증 정보를 찾을 수 없습니다."
+        print(f"❌ [create_page_tool] {error_msg}")
+        return error_msg
+    
+    # parent_page_name이 ID인지 확인 (UUID 형식)
+    import re
+    uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+    
+    if uuid_pattern.match(parent_page_name):
+        # ID로 직접 사용
+        parent_id = parent_page_name
+    else:
+        # 이름으로 검색
+        search_res = await notion_tool.search_pages(user_id, parent_page_name, page_size=1)
+        if not search_res["success"] or not search_res["data"]["pages"]:
+            return f"오류: 상위 페이지 '{parent_page_name}'를 찾을 수 없습니다."
+        parent_id = search_res["data"]["pages"][0]["id"]
+    
+    # 페이지 생성
+    if content:
+        res = await notion_tool.create_page_from_markdown(user_id, parent_id, title, content)
+    else:
+        res = await notion_tool.create_page(user_id, parent_id, title)
+    
+    if res["success"]:
+        result_text = f"✅ 페이지가 성공적으로 생성되었습니다!\nURL: {res['data']['url']}"
+        print(f"✅ [create_page_tool] 페이지 생성 성공: {res['data']['url']}")
+        return result_text
+    else:
+        error_msg = f"❌ 페이지 생성 실패: {res['error']}"
+        print(f"❌ [create_page_tool] {error_msg}")
+        return error_msg
+
+
+# ------------------------------------------------------------------
+# 6. NotionAgent 클래스
+# ------------------------------------------------------------------
+class NotionAgent(BaseAgent):
+    """LangChain 최신 버전을 사용한 Notion Agent"""
+
+    def __init__(self) -> None:
+        super().__init__(name="notion_agent", description="Notion 비서")
+
+        self.llm = ChatOpenAI(
+            model=settings.LLM_MODEL,
+            temperature=0,
+            api_key=settings.OPENAI_API_KEY,
+        )
+
+        self.tools = [
+            search_notion_tool,
+            create_page_tool,
+        ]
+
+        print("=" * 80)
+        print("🔧 [NotionAgent.__init__] 등록된 도구 목록:")
+        for i, tool in enumerate(self.tools, 1):
+            print(f"  {i}. {tool.name}")
+            print(f"     설명: {tool.description[:100]}...")
+            if hasattr(tool, "args_schema"):
+                print(f"     스키마: {tool.args_schema.__name__}")
+        print("=" * 80)
+
+        system_prompt = """
+당신은 사용자의 Notion 워크스페이스에만 접근할 수 있는 Notion 전용 AI 비서입니다.
+
+[사용 가능한 도구]
+- search_notion: Notion의 실제 검색 API를 사용하여 페이지를 검색합니다. 두 가지 모드가 있습니다:
+  * 'content' 모드: 검색된 페이지의 전체 내용을 마크다운 형식으로 반환합니다.
+  * 'answer' 모드: 검색된 페이지 내용을 기반으로 사용자의 질문에 대해 답변을 생성합니다.
+- create_page: Notion에 새 페이지를 생성합니다. parent_page_name으로 상위 페이지를 찾고, title로 새 페이지를 생성합니다.
+
+[핵심 규칙]
+- 일반 지식으로 답하지 말고, 항상 search_notion 도구를 먼저 호출하여 Notion에서 관련 정보를 찾으세요.
+- 도구를 한 번도 호출하지 않고 답변을 만들지 마세요.
+- search_notion 사용 시:
+  * query 인자는 사용자가 말한 질문/검색어를 그대로 사용하세요. 임의로 요약·변형하지 마세요.
+  * return_mode는 사용자의 의도를 파악하여 선택하세요:
+    - 사용자가 페이지 전체 내용을 요청하면 → 'content'
+    - 사용자가 페이지 내에 있는 내용을 기반으로 질문을 하면 → 'answer'
+- search_notion이 페이지를 찾지 못하면, 반환된 키워드가 포함된 페이지 목록을 사용자에게 보여주고 정확한 페이지 제목을 입력하도록 안내하세요.
+- 내부 구현(사용자 ID, config 등)은 언급하지 말고, 정중한 한국어로만 응답하세요.
+"""
+
+        print("=" * 80)
+        print("📝 [NotionAgent.__init__] 시스템 프롬프트:")
+        print(system_prompt)
+        print("=" * 80)
+        
+        llm_with_tools = self.llm.bind_tools(
+            self.tools,
+            tool_choice="any",
+        )
+
+        agent = create_agent(
+            llm_with_tools,
+            tools=self.tools,
+            system_prompt=system_prompt,
+        )
+
+        self.agent = agent
 
     async def process(
         self,
         query: str,
         user_id: str,
+        session_id: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        에이전트 메인 실행 함수
+        Notion Agent를 실행합니다. (Stateless)
+        
+        Args:
+            query: 사용자 질문
+            user_id: 사용자 ID
+            session_id: 세션 ID (로깅용)
+            context: 추가 컨텍스트 (선택적)
         """
         try:
-            # 1. 사용자의 의도(Mode) 파악
-            mode = await self._decide_mode(query)
-            print(f"🤖 [NotionAgent] mode={mode} / query='{query}'")
-
-            # 2. 모드별 핸들러 실행
-            if mode == "search":
-                return await self._handle_search(query, user_id)
-
-            if mode == "get":
-                return await self._get_page_content(query, user_id)
-
-            if mode == "create":
-                return await self._create_page(query, user_id, context)
-
-            # 기본값은 검색
-            return await self._handle_search(query, user_id)
-
-        except Exception as e:
-            return {
-                "success": False,
-                "answer": f"Notion 에이전트 오류 발생: {str(e)}",
-                "agent_used": self.name,
-            }
-
-    # ------------------------------------------------------------------
-    # 1. 모드 결정 (Context-Aware Router)
-    # ------------------------------------------------------------------
-    async def _decide_mode(self, query: str, context: Optional[Dict[str, Any]] = None) -> Mode:
-        
-        # 1. 대화 이력 가져오기 (라우터도 맥락을 알아야 함)
-        history_text = "없음 (새로운 대화)"
-        if context and "conversation_history" in context:
-            # 최근 2턴만 봐도 흐름 파악 가능
-            recent = context["conversation_history"][-2:]
-            history_text = "\n".join([f"- {m.get('role')}: {m.get('content')}" for m in recent])
-
-        # 2. 강력한 Few-Shot 프롬프트
-        system_prompt = """
-    당신은 Notion Agent의 '의도 분류기(Intent Classifier)'입니다.
-    사용자의 발화와 '이전 대화 흐름'을 분석하여 다음 3가지 모드 중 하나를 선택하세요.
-
-    ### 1. create (생성/저장)
-    - **상태 변경(Mutation)**이 목적일 때.
-    - 문맥상 정보를 기록, 저장, 추가, 작성, 정리해달라는 의도.
-
-    ### 2. get (조회/가져오기)
-    - 사용자가 "내용 보여줘", "읽어줘", "무슨 내용이야?" 같이 **구체적인 내용 확인**을 원할 때.
-   - page_id: 페이지 ID가 있다면 추출 (없으면 null)
-   - search_query: ID가 없을 경우 검색할 핵심 키워드
-
-    ### 3. search (검색/질문)
-    - 특정 정보가 있는지 찾거나, 질문에 대한 답을 원할 때 (RAG).
-    - 정보에 대한 질문을 할 경우 검색 결과를 받아 적절하게 응답하세요
-
-    ### 중요 판단 기준
-    - 사용자가 저장, 추가, 작성, 정리하라고 하면 -> **create**
-    - 사용자가 조회, 가져오기, 읽어줘하면 -> **get**
-    - 사용자가 검색, 질문, 정보를 찾고 싶을 때 -> **search**
-
-    반환값은 오직 단어 하나: "search", "get", "create"
-    """
-        
-        # 프롬프트에 '대화 이력'을 같이 태움
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("user", f"[이전 대화 흐름]\n{history_text}\n\n[현재 사용자 입력]\n{query}")
-        ])
-        
-        chain = prompt | self.llm | StrOutputParser()
-        result = (await chain.ainvoke({})).strip().lower()
-        
-        # 하드코딩 제거함. 이제 LLM의 판단을 신뢰.
-        if result in ["search", "get", "create"]:
-            return result # type: ignore
-        return "search"
-
-    # ------------------------------------------------------------------
-    # [보조 함수] 전체 페이지 목록 가져오기 (페이지네이션 처리)
-    # ------------------------------------------------------------------
-    async def _get_all_pages(self, user_id: str, max_pages: int = 100) -> List[Dict[str, Any]]:
-        """
-        Notion에서 모든 페이지를 가져옵니다 (페이지네이션 처리).
-        """
-        all_pages = []
-        try:
-            from tools.token_manager import load_token
-            token_data = await load_token(user_id, "notion")
-            if not token_data:
-                return all_pages
+            print("=" * 80)
+            print(f"🤖 [NotionAgent.process] 시작 (Stateless)")
+            print(f"  Query: {query}")
+            print(f"  User ID: {user_id}")
+            print("=" * 80)
             
-            from notion_client import AsyncClient
-            notion = AsyncClient(auth=token_data.get("access_token"))
+            final_answer = ""
             
-            # 첫 페이지 가져오기
-            search_response = await notion.search(
-                query="",
-                filter={"property": "object", "value": "page"},
-                page_size=min(100, max_pages)
-            )
-            
-            results = search_response.get("results", [])
-            has_more = search_response.get("has_more", False)
-            next_cursor = search_response.get("next_cursor")
-            
-            # 첫 페이지 처리
-            for page in results:
-                page_id = page.get("id")
-                title = "Untitled"
-                properties = page.get("properties", {})
-                for prop_name, prop_value in properties.items():
-                    if prop_value.get("type") == "title":
-                        title_array = prop_value.get("title", [])
-                        if title_array:
-                            title = title_array[0].get("text", {}).get("content", "Untitled")
-                        break
-                
-                all_pages.append({
-                    "id": page_id,
-                    "title": title,
-                    "url": page.get("url", "")
-                })
-            
-            # 페이지네이션 처리 (최대 max_pages까지)
-            while has_more and len(all_pages) < max_pages and next_cursor:
-                search_response = await notion.search(
-                    query="",
-                    filter={"property": "object", "value": "page"},
-                    page_size=min(100, max_pages - len(all_pages)),
-                    start_cursor=next_cursor
-                )
-                
-                results = search_response.get("results", [])
-                has_more = search_response.get("has_more", False)
-                next_cursor = search_response.get("next_cursor")
-                
-                for page in results:
-                    page_id = page.get("id")
-                    title = "Untitled"
-                    properties = page.get("properties", {})
-                    for prop_name, prop_value in properties.items():
-                        if prop_value.get("type") == "title":
-                            title_array = prop_value.get("title", [])
-                            if title_array:
-                                title = title_array[0].get("text", {}).get("content", "Untitled")
-                            break
+            # 🔹 user_id를 configurable로 넘겨야 search_notion_tool에서 읽을 수 있음
+            async for event in self.agent.astream(
+                {"messages": [HumanMessage(content=query)]},
+                config={
+                    "configurable": {
+                        "user_id": str(user_id),
+                    }
+                },
+            ):
+                # event는 노드 이름을 키로 하는 딕셔너리 (예: {'agent': {'messages': [...]}})
+                for node_name, node_output in event.items():
+                    # node_output에서 messages 추출
+                    messages = []
+                    if isinstance(node_output, dict):
+                        messages = node_output.get("messages", [])
+                    elif isinstance(node_output, list):
+                        messages = node_output
                     
-                    all_pages.append({
-                        "id": page_id,
-                        "title": title,
-                        "url": page.get("url", "")
-                    })
+                    for msg in messages:
+                        if hasattr(msg, "content") and msg.content:
+                            # AIMessage이고 tool_calls가 없는 경우(또는 일반 텍스트)를 누적
+                            # 여기서는 모든 텍스트 컨텐츠를 누적합니다.
+                            # 단순 텍스트 응답만 필요하다면 조건을 더 강화할 수 있음.
+                            
+                            # 툴 호출 메시지(ToolMessage)나 툴 호출을 포함한 AIMessage는 제외하고 
+                            # 순수 텍스트 응답만 원할 수도 있지만,
+                            # 요청사항에 "AIMessage chunk들에서 나오는 text를 모아서"라고 했으므로
+                            # AIMessage의 내용을 붙입니다.
+                            # 단, Tool call이 있는 AIMessage는 보통 content가 비어있거나 "생각"일 수 있음.
+                            
+                            if msg.type == "ai" and not msg.tool_calls:
+                                final_answer += msg.content
+                            elif msg.type == "ai" and msg.tool_calls:
+                                # 툴 호출 시점의 텍스트(Thought 등)도 포함할지 여부.
+                                # 보통 사용자에게 보여줄 답변이므로 포함하거나, 
+                                # 최종 답변(tool 실행 후)만 포함할 수 있음.
+                                # 여기서는 content가 있다면 추가.
+                                final_answer += msg.content
+
+            if not final_answer:
+                final_answer = "응답을 생성할 수 없습니다."
             
-        except Exception as e:
-            print(f"⚠️ [전체 페이지 가져오기 오류] {e}")
-        
-        return all_pages
-
-    # ------------------------------------------------------------------
-    # [보조 함수] 자연어 쿼리에서 페이지 이름만 추출
-    # ------------------------------------------------------------------
-    async def _extract_page_name(self, query: str) -> str:
-        """
-        자연어 쿼리에서 페이지 이름만 추출합니다.
-        
-        예시:
-        - "프로젝트 아이디어"라는 페이지 → "프로젝트 아이디어"
-        - "승진프로세스 개인페이지 안에 개인정리 페이지" → "개인정리"
-        - "NLP라는 AI 직군" → "NLP"
-        - "프로젝트 아이디어에 저장해줘" → "프로젝트 아이디어"
-        """
-        extract_prompt = ChatPromptTemplate.from_messages([
-            ("system", """
-당신은 사용자의 자연어 입력에서 Notion 페이지 이름만 추출하는 전문가입니다.
-
-[임무]
-사용자의 입력에서 실제 Notion 페이지 이름만 깔끔하게 추출하세요.
-- 불필요한 설명, 조사, 문맥 단어는 제거
-- 페이지 이름만 정확히 추출
-- 따옴표나 인용부호가 있으면 그 안의 내용을 우선
-
-[예시]
-입력: "프로젝트 아이디어"라는 페이지
-출력: 프로젝트 아이디어
-
-입력: 승진프로세스 개인페이지 안에 개인정리 페이지
-출력: 개인정리
-
-입력: "NLP라는 AI 직군"
-출력: NLP
-
-입력: 프로젝트 아이디어에 저장해줘
-출력: 프로젝트 아이디어
-
-입력: 개인정리 페이지 내용 보여줘
-출력: 개인정리
-
-[규칙]
-- 출력은 오직 페이지 이름만 (따옴표 없이)
-- 설명이나 추가 텍스트 없이
-- 한 단어 또는 여러 단어로 구성된 페이지 이름만
-"""),
-            ("user", query)
-        ])
-        
-        chain = extract_prompt | self.llm | StrOutputParser()
-        extracted = (await chain.ainvoke({})).strip()
-        
-        # 따옴표 제거 (있을 경우)
-        extracted = extracted.strip('"\'')
-        
-        print(f"📝 [페이지 이름 추출] '{query}' → '{extracted}'")
-        return extracted
-
-    # ------------------------------------------------------------------
-    # [보조 함수] 유사도 검증 및 매칭 로직 (강화된 버전)
-    # ------------------------------------------------------------------
-    def _find_best_match(self, target_name: str, pages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """
-        검색된 페이지 목록(pages) 중에서 target_name과 가장 유사한 페이지를 찾습니다.
-        사용자가 입력한 이름과 Notion 페이지 이름을 정확히 비교합니다.
-        """
-        if not pages:
-            return None
-        
-        target_original = target_name.strip()
-        target_norm = target_name.replace(" ", "").replace("_", "").replace("-", "").lower().strip()
-        
-        print(f"\n🔍 [매칭 시작] 사용자 입력: '{target_original}'")
-        print(f"📋 [후보 페이지 수] {len(pages)}개")
-        
-        # 모든 후보 페이지 제목 출력 (디버깅용)
-        print("📝 [후보 페이지 목록]:")
-        for i, p in enumerate(pages[:20], 1):  # 최대 20개만 출력
-            print(f"   {i}. '{p['title']}' (ID: {p['id'][:8]}...)")
-        if len(pages) > 20:
-            print(f"   ... 외 {len(pages) - 20}개 더")
-        
-        # 0. 정확한 이름 매칭 (최우선) - 원본 그대로 비교
-        for p in pages:
-            if target_original == p["title"]:
-                print(f"✅ [정확 매칭 - 원본] '{target_original}' == '{p['title']}'")
-                return p
-        
-        # 0-1. 정확한 이름 매칭 (대소문자 무시)
-        for p in pages:
-            if target_original.lower() == p["title"].lower():
-                print(f"✅ [정확 매칭 - 대소문자 무시] '{target_original}' == '{p['title']}'")
-                return p
-        
-        # 0-2. 정확한 이름 매칭 (공백, 언더스코어, 하이픈 무시)
-        for p in pages:
-            page_title_norm = p["title"].replace(" ", "").replace("_", "").replace("-", "").lower().strip()
-            if target_norm == page_title_norm:
-                print(f"✅ [정확 매칭 - 특수문자 무시] '{target_original}' == '{p['title']}'")
-                return p
-        
-        # 1. 포함 여부 확인 (Substring Match) - 양방향 확인
-        for p in pages:
-            page_title_norm = p["title"].replace(" ", "").replace("_", "").replace("-", "").lower().strip()
-            # 양방향 포함 확인
-            if target_norm in page_title_norm or page_title_norm in target_norm:
-                # 너무 짧은 단어는 제외 (예: "a", "the" 등)
-                if len(target_norm) >= 2:
-                    print(f"✅ [포함 매칭] '{target_original}' in '{p['title']}'")
-                    return p
-        
-        # 2. 유사도 점수 확인 (Fuzzy Match using difflib) - 오타 허용
-        best_page = None
-        highest_ratio = 0.0
-        
-        for p in pages:
-            page_title_norm = p["title"].replace(" ", "").replace("_", "").replace("-", "").lower().strip()
-            ratio = difflib.SequenceMatcher(None, target_norm, page_title_norm).ratio()
-            
-            if ratio > highest_ratio:
-                highest_ratio = ratio
-                best_page = p
-        
-        # 유사도 임계값 조정 (0.7 이상이면 확실한 매칭)
-        if highest_ratio >= 0.7:
-            print(f"✅ [유사도 매칭] '{target_original}' ~ '{best_page['title']}' (ratio: {highest_ratio:.2f})")
-            return best_page
-        elif highest_ratio >= 0.5:
-            # 0.5~0.7 사이는 경고와 함께 반환
-            print(f"⚠️ [낮은 유사도 매칭] '{target_original}' ~ '{best_page['title']}' (ratio: {highest_ratio:.2f})")
-            return best_page
-        else:
-            print(f"❌ [매칭 실패] '{target_original}' - 최고 유사도: {highest_ratio:.2f} (최고 후보: '{best_page['title'] if best_page else 'None'}')")
-            return None
-
-    # ------------------------------------------------------------------
-    # 2. search (RAG) - 일반 검색 및 답변
-    # ------------------------------------------------------------------
-    async def _handle_search(
-        self,
-        query: str,
-        user_id: str,
-        max_pages_for_rag: int = 3,
-    ) -> Dict[str, Any]:
-        
-        # 1. 노션 검색 API 호출
-        result = await notion_tool.search_pages(user_id, query, page_size=max_pages_for_rag)
-        if not result["success"]:
-            return {"success": False, "answer": f"노션 검색 오류: {result['error']}", "agent_used": self.name}
-
-        pages = result["data"]["pages"]
-        if not pages:
-            return {"success": True, "answer": "노션에서 관련 문서를 찾을 수 없습니다.", "agent_used": self.name}
-
-        # 2. 검색된 페이지들의 내용(Markdown) 가져오기
-        chunks = []
-        for p in pages:
-            res = await notion_tool.get_page_content(user_id, p["id"])
-            if res["success"]:
-                # 문서 제목과 내용을 합쳐서 컨텍스트로 구성
-                chunks.append(f"### 문서제목: {res['data']['title']}\n{res['data']['markdown']}")
-
-        # 3. LLM에게 답변 생성 요청
-        context_text = "\n\n".join(chunks)[:20000] # 토큰 제한 고려하여 길이 자름
-        answer_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", "Notion 검색 결과를 바탕으로 사용자의 질문에 답변하세요. 정보가 없으면 모른다고 하세요."),
-                ("user", f"[검색된 노션 문서들]\n{context_text}\n\n[사용자 질문]\n{query}"),
-            ]
-        )
-        chain = answer_prompt | self.llm | StrOutputParser()
-        answer = await chain.ainvoke({})
-
-        return {"success": True, "answer": answer, "agent_used": self.name}
-
-    # ------------------------------------------------------------------
-    # 3. create (저장) - [수정: 상위 페이지 지정 강제화 (Strict Mode)]
-    # ------------------------------------------------------------------
-    async def _create_page(
-        self,
-        query: str,
-        user_id: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        
-        # 0. 세션의 모든 대화 내용 가져오기 (context에서)
-        full_conversation = ""
-        if context and "conversation_history" in context:
-            history = context["conversation_history"]
-            if history:
-                # 모든 대화를 형식화하여 저장
-                conversation_parts = []
-                for msg in history:
-                    role = msg.get("role", "unknown")
-                    msg_content = msg.get("content", "").strip()
-                    if msg_content:
-                        if role == "user":
-                            conversation_parts.append(f"## 👤 사용자\n\n{msg_content}")
-                        elif role == "assistant":
-                            conversation_parts.append(f"## 🤖 AI 비서\n\n{msg_content}")
-                
-                if conversation_parts:
-                    full_conversation = "\n\n---\n\n".join(conversation_parts)
-                    print(f"📝 [전체 대화 내용 발견] {len(history)}개 메시지, {len(full_conversation)}자")
-        
-        # 1. 정보 추출 (전체 대화 내용 포함)
-        extract_prompt = ChatPromptTemplate.from_messages([
-            ("system", """
-            [임무]
-            사용자의 요청에서 '제목', '상위페이지', '내용'을 추출하세요.
-            - 사용자가 상위페이지(저장 위치)를 명시하지 않았다면 "NONE"이라고 출력하세요.
-            - 사용자가 "방금 답변해준 내용", "이전 답변", "위 내용", "대화 내용", "채팅 내역" 등을 언급하면, 제공된 [전체 대화 내용]을 사용하세요.
-            - 내용이 명시되지 않았고 전체 대화 내용이 있으면, 그 내용을 사용하세요.
-            - 사용자가 "전부 저장", "모두 저장", "대화 전부" 등을 요청하면 전체 대화 내용을 저장하세요.
-            
-            [출력 예시]
-            제목: ...
-            상위페이지: NONE
-            내용: ...
-            """),
-            ("user", f"""{query}
-
-[전체 대화 내용]
-{full_conversation if full_conversation else "없음"}""")
-        ])
-        extracted = await (extract_prompt | self.llm | StrOutputParser()).ainvoke({})
-        
-        title = "새 페이지"
-        parent_query = "NONE"
-        content_lines = []
-        mode_parser = None
-        
-        for line in extracted.splitlines():
-            if line.startswith("제목:"): title = line.replace("제목:", "").strip()
-            elif line.startswith("상위페이지:"): parent_query = line.replace("상위페이지:", "").strip()
-            elif line.startswith("내용:"): 
-                mode_parser = "content"
-                temp = line.replace("내용:", "").strip()
-                if temp: content_lines.append(temp)
-            elif mode_parser == "content":
-                content_lines.append(line)
-        
-        content = "\n".join(content_lines).strip() or "내용 없음"
-        
-        # 내용이 여전히 비어있거나 "내용 없음"이고 전체 대화 내용이 있으면 직접 사용
-        if not content or content == "내용 없음" or len(content) < 10:
-            if full_conversation:
-                content = full_conversation
-                print(f"✅ [전체 대화 내용 사용] {len(content)}자")
-                
-                # 제목이 기본값이면 대화 기반으로 제목 생성
-                if title == "새 페이지":
-                    title_prompt = ChatPromptTemplate.from_messages([
-                        ("system", "사용자의 대화 내용을 바탕으로 적절한 페이지 제목을 생성하세요. 제목만 출력하세요."),
-                        ("user", f"다음 대화 내용의 제목을 생성해주세요:\n\n{full_conversation[:500]}")
-                    ])
-                    title = (await (title_prompt | self.llm | StrOutputParser()).ainvoke({})).strip()
-                    print(f"📝 [자동 생성 제목] '{title}'")
-
-        # ---------------------------------------------------------
-        # [Strict Logic] 상위 페이지 미지정 시 즉시 중단 및 질문
-        # ---------------------------------------------------------
-        if parent_query == "NONE" or not parent_query:
-            # 사용자의 최근 편집 목록을 보여주며 선택 유도 (UX 편의성)
-            recents = await notion_tool.search_pages(user_id, "", page_size=5)
-            list_str = ""
-            if recents["success"]:
-                list_str = "\n".join([f"- {p['title']}" for p in recents["data"]["pages"]])
-            
-            return {
-                "success": False,
-                "answer": (
-                    f"⛔ **어디에 저장할까요?**\n"
-                    f"[최근 편집한 페이지]\n{list_str}\n\n"
-                    f"예시: \"'{recents['data']['pages'][0]['title']}'에 저장해줘\""
-                ),
-                "agent_used": self.name
-            }
-
-        # ---------------------------------------------------------
-        # [Verification] 지정된 페이지가 실제로 존재하는지 확인
-        # ---------------------------------------------------------
-        # 1. 자연어 쿼리에서 페이지 이름만 추출
-        parent_page_name = await self._extract_page_name(parent_query)
-        
-        # 2. 전체 페이지 목록 가져오기 (정확한 매칭을 위해)
-        print(f"🔍 [페이지 검색] 원본: '{parent_query}' → 추출: '{parent_page_name}'")
-        print(f"📥 [전체 페이지 목록 가져오기] 시작...")
-        candidates = await self._get_all_pages(user_id, max_pages=100)
-        print(f"📋 [전체 페이지 목록] {len(candidates)}개 페이지 로드 완료")
-        
-        # 3. 추출한 페이지 이름과 모든 페이지 이름을 비교하여 정확히 매칭
-        target_page = self._find_best_match(parent_page_name, candidates)
-        
-        # 4. 못 찾았으면 중단 (절대 추측 금지)
-        if not target_page:
-            if candidates:
-                list_str = "\n".join([f"- {p['title']}" for p in candidates])
-                return {
-                    "success": False,
-                    "answer": (
-                        f"🤔 **'{parent_page_name}'**와 정확히 일치하는 페이지를 못 찾겠습니다.\n"
-                        f"혹시 아래 목록 중 하나인가요?\n\n"
-                        f"{list_str}\n\n"
-                        "**목록에 있는 정확한 이름을 다시 말씀해 주세요.**"
-                    ),
-                    "agent_used": self.name
-                }
-            else:
-                return {
-                    "success": False,
-                    "answer": f"⛔ **'{parent_page_name}'**라는 페이지를 찾을 수 없습니다. 이름이 정확한지 확인해주세요.",
-                    "agent_used": self.name
-                }
-
-        # 4. 모든 조건 통과 -> 생성 진행
-        markdown = f"# {title}\n\n{content}"
-        result = await notion_tool.create_page_from_markdown(user_id, target_page["id"], title, markdown)
-
-        if result["success"]:
             return {
                 "success": True,
-                "answer": f"✅ **[{target_page['title']}]** 페이지 안에 **'{title}'** 문서를 저장했습니다.",
+                "answer": final_answer,
                 "agent_used": self.name,
-                "data": {"url": result["data"]["url"]}
             }
-        else:
-            return {"success": False, "answer": f"API 오류: {result.get('error')}", "agent_used": self.name}
 
-    # ------------------------------------------------------------------
-    # 4. get (조회) 
-    # ------------------------------------------------------------------
-    async def _get_page_content(
-        self,
-        query: str,
-        user_id: str,
-    ) -> Dict[str, Any]:
-        
-        # 1. 자연어 쿼리에서 페이지 이름만 추출
-        page_name = await self._extract_page_name(query)
-        
-        # 2. 전체 페이지 목록 가져오기 (정확한 매칭을 위해)
-        print(f"🔍 [페이지 조회] 원본: '{query}' → 추출: '{page_name}'")
-        print(f"📥 [전체 페이지 목록 가져오기] 시작...")
-        candidates = await self._get_all_pages(user_id, max_pages=100)
-        print(f"📋 [전체 페이지 목록] {len(candidates)}개 페이지 로드 완료")
-        
-        if not candidates:
-            return {"success": False, "answer": "Notion에서 페이지를 가져올 수 없습니다.", "agent_used": self.name}
-        
-        # 3. 추출한 페이지 이름과 모든 페이지 이름을 비교하여 정확히 매칭
-        target = self._find_best_match(page_name, candidates)
-        
-        # 4. 정확한 페이지를 못 찾았을 때 리스트 제공하고 중단
-        if not target:
-            candidate_list_str = "\n".join([f"- {p['title']}" for p in candidates])
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             return {
                 "success": False,
-                "answer": (
-                    f"🤔 **'{page_name}'**와 정확히 일치하는 페이지를 찾기 어렵습니다.\n"
-                    f"혹시 찾으시는 페이지가 아래 목록에 있나요?\n\n"
-                    f"{candidate_list_str}\n\n"
-                    "정확한 이름을 다시 알려주시면 내용을 가져오겠습니다."
-                ),
+                "answer": f"오류가 발생했습니다: {str(e)}",
                 "agent_used": self.name
             }
-        
-        # 3. 내용 가져오기 (매칭 성공 시)
-        content_res = await notion_tool.get_page_content(user_id, target["id"])
-        if not content_res["success"]:
-             return {"success": False, "answer": "내용 로드 실패.", "agent_used": self.name}
-
-        # 4. 결과 반환 (이메일 에이전트 등에서 쓰기 좋게 markdown 원문 반환)
-        return {
-            "success": True,
-            "answer": content_res["data"]["markdown"], 
-            "agent_used": self.name,
-        }
+            

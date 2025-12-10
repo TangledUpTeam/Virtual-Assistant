@@ -1,5 +1,6 @@
 const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const { spawn } = require('child_process');
+const path = require('path');
 
 let loginWin = null;
 let characterWin = null;
@@ -521,15 +522,54 @@ app.whenReady().then(async () => {
 
   // 백엔드 서버 시작
   console.log('🔧 백엔드 서버 시작 중...');
-  backendProcess = spawn('python3', ['assistant.py'], {
-    stdio: 'inherit',
-    shell: true,
-    env: {
-      ...process.env,
-      PYTHONIOENCODING: 'utf-8',
-      PYTHONUTF8: '1'
+  const isWindows = process.platform === 'win32';
+  
+  // Windows: 새 콘솔 창에서 Python 실행 (백엔드 출력을 별도 콘솔로)
+  // Linux/Mac: stdout을 파일로 리다이렉트하거나 기존 방식 유지
+  if (isWindows) {
+    // Windows에서 새 콘솔 창 생성
+    // CREATE_NEW_CONSOLE 플래그를 사용하면 새 콘솔 창이 생성되고
+    // Python의 stdout/stderr가 그 창에 출력됨
+    // stdio를 설정하지 않으면 기본적으로 새 콘솔 창에 출력됨
+    backendProcess = spawn('python', ['assistant.py'], {
+      detached: false,  // Electron과 함께 종료되도록 유지
+      // stdio를 설정하지 않으면 CREATE_NEW_CONSOLE로 생성된 새 콘솔 창에 출력됨
+      shell: false,
+      windowsVerbatimArguments: false,
+      creationFlags: 0x00000010, // CREATE_NEW_CONSOLE - 새 콘솔 창 생성
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
+    });
+  } else {
+    // Linux/Mac: 기존 방식 (터미널에서 직접 실행하는 경우)
+    backendProcess = spawn('python3', ['assistant.py'], {
+      stdio: ['ignore', 'pipe', 'pipe'], // stdout/stderr을 파이프로 받음
+      shell: true,
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
+    });
+    
+    // 백엔드 출력을 파일로 리다이렉트 (선택사항)
+    const fs = require('fs');
+    const logDir = path.join(__dirname, 'logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
     }
-  });
+    const logFile = fs.createWriteStream(path.join(logDir, 'backend.log'), { flags: 'a' });
+    
+    backendProcess.stdout.pipe(logFile);
+    backendProcess.stderr.pipe(logFile);
+    
+    // 터미널에도 출력 (Electron 콘솔이 아닌 터미널)
+    backendProcess.stdout.pipe(process.stdout);
+    backendProcess.stderr.pipe(process.stderr);
+  }
 
   backendProcess.on('error', (err) => {
     console.error('❌ 백엔드 서버 시작 실패:', err);

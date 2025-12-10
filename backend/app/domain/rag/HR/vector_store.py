@@ -419,7 +419,7 @@ class VectorStore:
         try:
             results = self.collection.query(
                 query_embeddings=[query_embedding],
-                n_results=min(top_k * 3, doc_count),  # 동적 threshold를 위해 더 많이 검색
+                n_results=min(top_k, doc_count),  # top_k만큼만 검색 (retriever에서 fetch_k로 조절)
                 include=['documents', 'metadatas', 'embeddings']  # 임베딩 포함
             )
             logger.debug(f"ChromaDB 검색 결과: {len(results.get('ids', [[]])[0]) if results.get('ids') else 0}개")

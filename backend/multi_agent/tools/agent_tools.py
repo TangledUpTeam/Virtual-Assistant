@@ -201,23 +201,48 @@ async def therapy_tool(query: str) -> str:
 @tool
 async def notion_tool(query: str) -> str:
     """Notion 페이지를 관리합니다. 페이지 검색, 생성, 대화 내용 저장 등을 처리합니다."""
-    agent = get_notion_agent()
-    context = get_current_context()
-    
-    # user_id 추출 (context에서)
-    user_id = context.get("user_id", "default_user")
-    
-    result = await agent.process(query, user_id, context)
-    
-    # 결과가 dict 형태면 answer 추출
-    if isinstance(result, dict):
-        return result.get("answer", str(result))
-    return str(result)
+    try:
+        print(f"🔧 [notion_tool] 호출됨 - query: {query}")
+        agent = get_notion_agent()
+        context = get_current_context()
+        
+        # user_id 추출 (context에서, 문자열로 변환)
+        user_id_raw = context.get("user_id")
+        if user_id_raw is None:
+            user_id = "default_user"
+            print(f"⚠️ [notion_tool] user_id가 없어서 default_user 사용")
+        else:
+            # 숫자일 수도 있으므로 문자열로 변환
+            user_id = str(user_id_raw)
+            print(f"✅ [notion_tool] user_id: {user_id}")
+        
+        # session_id 추출 (context에서, 없으면 기본값 사용)
+        session_id = context.get("session_id", "default_session")
+        print(f"✅ [notion_tool] session_id: {session_id}")
+        
+        result = await agent.process(query, user_id, session_id, context)
+        print(f"📦 [notion_tool] agent.process 결과: {type(result)}, {result}")
+        
+        # 결과가 dict 형태면 answer 추출
+        if isinstance(result, dict):
+            answer = result.get("answer", str(result))
+            print(f"✅ [notion_tool] 최종 반환값: {answer[:100] if len(str(answer)) > 100 else answer}")
+            return answer
+        print(f"✅ [notion_tool] 최종 반환값 (str): {str(result)[:100] if len(str(result)) > 100 else str(result)}")
+        return str(result)
+    except Exception as e:
+        import traceback
+        print(f"❌ [notion_tool] 에러 발생:")
+        traceback.print_exc()
+        return f"Notion 도구 실행 중 오류가 발생했습니다: {str(e)}"
 
 # 이메일 전송 및 검색
 @tool
-async def email_tool(query: str) -> str:
-    """이메일을 전송하거나 검색합니다. 메일 보내기, 첨부파일 전송, 안 읽은 메일 확인 등을 처리합니다."""
+async def email_tool(query: str = "is:unread") -> str:
+    """이메일을 전송하거나 검색합니다. 메일 보내기, 첨부파일 전송, 안 읽은 메일 확인 등을 처리합니다.
+
+    query를 비우면 기본값으로 'is:unread'를 사용합니다.
+    """
     agent = get_email_agent()
     context = get_current_context()
     

@@ -45,8 +45,6 @@ class RAGRetriever:
         # Lazy loading: LLM을 실제 사용 시에만 로드
         self._llm = None
         self._rag_chain = None
-        self._rag_chain = None
-        self._smalltalk_chain = None
         self._evaluator = None
         
         logger.info("RAGRetriever 초기화 완료 (LLM lazy loading)")
@@ -79,13 +77,16 @@ class RAGRetriever:
 
 다음 규칙을 엄격히 준수하여 답변하세요:
 
-1. **내용 기반**: 오직 제공된 문서 내용에 근거하여 답변하며, 추측하지 마십시오.
+1. **답변 원칙**:
+   - 제공된 문서(Context)에 있는 내용만으로 답변하세요.
+   - **사용자가 묻는 정보가 문서에 명확히 없더라도, 문맥상 유추할 수 있거나 관련된 내용이 있다면 이를 찾아서 설명해 주세요.**
+   - 아예 관련 내용이 없을 때만 "죄송합니다. 관련 정보를 문서에서 찾을 수 없습니다."라고 답변하세요.
+
 2. **Markdown 필수**: 가독성을 위해 Markdown을 적극 활용하세요.
-   - **모든 목록(글머리 기호)과 소제목(`###`) 앞뒤에는 반드시 줄바꿈 문자(\\n)를 두 번 사용하여 빈 줄을 만드세요.** (매우 중요)
+   - **모든 목록(글머리 기호)과 소제목(`###`) 앞뒤에는 반드시 줄바꿈 문자를 두 번 사용하여 빈 줄을 만드세요.**
    - 핵심 내용은 **볼드체**로 강조합니다.
-3. **간결성**:
-   - 불필요한 빈 줄(3줄 이상 연속)은 피하되, **가독성과 마크다운 렌더링을 위해 필요한 줄바꿈은 아끼지 마십시오.**
-   - 답변은 명확하고 간결하게 작성하세요.
+
+3. **간결성**: 불필요한 서론을 빼고 핵심만 간결하게 답변하세요.
 4. **언어**: 한국어로 답변하세요."""),
             ("user", """다음 문서들을 참고하여 질문에 답변해주세요.
 
@@ -97,16 +98,6 @@ class RAGRetriever:
         ])
     
     @property
-    def smalltalk_prompt(self):
-        """Small talk 프롬프트 템플릿"""
-        return ChatPromptTemplate.from_messages([
-            ("system", """당신은 친근하고 도움이 되는 AI 어시스턴트입니다.
-일상적인 대화를 자연스럽게 나누고, 사용자에게 친절하게 응답하세요.
-한국어로 답변하세요."""),
-            ("user", "{query}")
-        ])
-    
-    @property
     def rag_chain(self):
         """RAG 체인 lazy loading"""
         if self._rag_chain is None:
@@ -114,35 +105,24 @@ class RAGRetriever:
             logger.info("RAG 체인 구성 완료")
         return self._rag_chain
     
-    @property
-    def smalltalk_chain(self):
-        """Small talk 체인 lazy loading"""
-        if self._smalltalk_chain is None:
-            self._smalltalk_chain = (
-                self.smalltalk_prompt
-                | self.llm
-                | StrOutputParser()
-            )
-            logger.info("Small talk 체인 구성 완료")
-        return self._smalltalk_chain
-    
     def _build_rag_chain(self):
         """LangChain 파이프 연산자(|)를 사용하여 RAG 체인 구성"""
         
         # 1. 컨텍스트 검색 및 동적 threshold 필터링
         @traceable(name="retrieve_and_filter")
         def retrieve_and_filter(inputs: Dict[str, Any]) -> Dict[str, Any]:
-            """문서 검색 및 동적 threshold 기반 필터링"""
+            """문서 검색 및 동적 threshold 기반 필터링 (후보군 확대 + 키워드 부스팅 + 최소 보장)"""
             query = inputs["query"]
             top_k = inputs.get("top_k", self.config.RAG_TOP_K)
             
             logger.info(f"문서 검색 중: '{query}' (Top-{top_k})")
             
-            # 벡터 검색 (더 많이 검색하여 동적 threshold 적용)
-            results = self.vector_store.search(query, top_k * 3)
+            # 1단계: 넉넉하게 많이 가져오기 (fetch_k=20)
+            fetch_k = 20
+            results = self.vector_store.search(query, fetch_k)
             
-            # 결과 변환 및 동적 threshold 필터링
-            retrieved_chunks = []
+            # 결과 변환
+            candidates = []
             all_similarities = []
             
             # 검색 결과 확인
@@ -157,9 +137,9 @@ class RAGRetriever:
                 similarity_list = results.get('distances', [[]])[0] if results.get('distances') else []
                 meta_list = results.get('metadatas', [[]])[0] if results.get('metadatas') else []
                 
-                logger.info(f"검색 결과: {len(doc_list)}개 문서, {len(similarity_list)}개 유사도 점수")
+                logger.info(f"후보군 검색 결과: {len(doc_list)}개 문서, {len(similarity_list)}개 유사도 점수")
                 
-                # 모든 유사도를 수집
+                # 모든 후보군 수집
                 for i in range(len(doc_list)):
                     if i < len(similarity_list):
                         similarity_score = float(similarity_list[i])
@@ -174,9 +154,44 @@ class RAGRetriever:
                         metadata=metadata,
                         score=similarity_score
                     )
-                    retrieved_chunks.append(chunk)
+                    candidates.append(chunk)
             
-            # 동적 threshold 계산
+            # 2단계: 키워드 점수 계산 및 부스팅
+            def apply_keyword_boosting(chunks: List[RetrievedChunk], query_text: str) -> List[RetrievedChunk]:
+                """키워드 매칭 점수를 추가하여 부스팅"""
+                query_words = set(query_text.lower().split())
+                scored_candidates = []
+                
+                for chunk in chunks:
+                    keyword_score = 0.0
+                    chunk_text_lower = chunk.text.lower()
+                    
+                    # 키워드 매칭 점수 계산 (2글자 이상인 단어만 체크)
+                    for word in query_words:
+                        if len(word) > 2 and word in chunk_text_lower:
+                            keyword_score += 0.02  # 키워드당 +0.02 부스팅
+                    
+                    # 부스팅된 점수로 새 청크 생성
+                    boosted_score = chunk.score + keyword_score
+                    boosted_chunk = RetrievedChunk(
+                        text=chunk.text,
+                        metadata=chunk.metadata,
+                        score=boosted_score
+                    )
+                    scored_candidates.append(boosted_chunk)
+                    
+                    if keyword_score > 0:
+                        logger.debug(f"키워드 부스팅: {chunk.metadata.get('filename', 'Unknown')} "
+                                   f"(기본: {chunk.score:.4f}, 부스팅: +{keyword_score:.4f}, 최종: {boosted_score:.4f})")
+                
+                return scored_candidates
+            
+            scored_candidates = apply_keyword_boosting(candidates, query)
+            
+            # 점수 순으로 정렬
+            scored_candidates.sort(key=lambda x: x.score, reverse=True)
+            
+            # 3단계: 동적 threshold 계산
             if all_similarities:
                 # 최고 점수와 평균 점수 계산
                 max_similarity = max(all_similarities)
@@ -195,27 +210,83 @@ class RAGRetriever:
                 dynamic_threshold = self.config.RAG_MIN_SIMILARITY_THRESHOLD
                 logger.warning(f"유사도 없음, 기본 threshold 사용: {dynamic_threshold}")
             
-            # 동적 threshold 기반 필터링
-            filtered_chunks = []
-            for chunk in retrieved_chunks:
+            # 4단계: Threshold 적용 (단, 최소 3개는 보장)
+            final_results = []
+            for chunk in scored_candidates:
+                if chunk.score > dynamic_threshold:
+                    final_results.append(chunk)
+                    logger.debug(f"  ✓ Threshold 통과: {chunk.metadata.get('filename', 'Unknown')}, "
+                               f"페이지: {chunk.metadata.get('page_number', '?')}, "
+                               f"점수: {chunk.score:.4f} > {dynamic_threshold:.4f}")
+            
+            # 안전장치: Threshold를 넘은 게 너무 적으면, 점수 높은 순으로 최소 3개 채우기
+            min_guaranteed = 3
+            if len(final_results) < min_guaranteed:
+                logger.warning(f"Threshold 통과 청크가 {len(final_results)}개로 부족합니다. "
+                             f"점수 높은 순으로 최소 {min_guaranteed}개 보장합니다.")
+                final_results = scored_candidates[:min_guaranteed]
+                logger.info(f"최소 보장 적용: {len(final_results)}개 청크 선택")
+            
+            logger.info(f"Threshold 필터링 결과: {len(final_results)}개 청크 (후보군 {len(candidates)}개 중)")
+            
+            # 5단계: 같은 페이지의 청크들을 묶어서 합치기
+            from collections import defaultdict
+            page_groups = defaultdict(list)
+            
+            for chunk in final_results:
                 filename = chunk.metadata.get('filename', 'Unknown')
-                page_num = chunk.metadata.get('page_number', '?')
+                page_num = chunk.metadata.get('page_number', 0)
+                key = (filename, page_num)
                 
-                if chunk.score >= dynamic_threshold:
-                    filtered_chunks.append(chunk)
-                    logger.info(f"  ✓ 파일: {filename}, 페이지: {page_num}, 유사도: {chunk.score:.4f} >= {dynamic_threshold:.4f}")
-                else:
-                    # logger.info(f"  ✗ 필터링: {filename}, 페이지: {page_num}, 유사도: {chunk.score:.4f} < {dynamic_threshold:.4f}")
-                    pass
+                chunk_index = chunk.metadata.get('chunk_index', 0)
+                
+                page_groups[key].append({
+                    'chunk': chunk,
+                    'score': chunk.score,
+                    'chunk_index': chunk_index
+                })
             
-            # 상위 k개만 선택
-            retrieved_chunks = filtered_chunks[:top_k]
+            # 각 페이지 그룹 내에서 chunk_index 순서로 정렬
+            merged_chunks = []
+            for (filename, page_num), group_chunks in page_groups.items():
+                # chunk_index 순서로 정렬
+                group_chunks.sort(key=lambda x: x['chunk_index'])
+                
+                # 같은 페이지의 텍스트 청크들을 합치기
+                merged_text_parts = []
+                max_score = max(g['score'] for g in group_chunks)
+                
+                for gc in group_chunks:
+                    merged_text_parts.append(gc['chunk'].text)
+                
+                merged_text = "\n".join(merged_text_parts)
+                
+                # 첫 번째 청크의 메타데이터를 사용하되, 점수는 그룹 내 최고 점수 사용
+                first_chunk = group_chunks[0]['chunk']
+                merged_chunk = RetrievedChunk(
+                    text=merged_text,
+                    metadata=first_chunk.metadata,
+                    score=max_score
+                )
+                
+                merged_chunks.append({
+                    'chunk': merged_chunk,
+                    'score': max_score
+                })
             
-            logger.info(f"{len(retrieved_chunks)}개 청크 최종 선택 (동적 threshold: {dynamic_threshold:.4f})")
+            # 점수로 정렬 (높은 순)
+            merged_chunks.sort(key=lambda x: x['score'], reverse=True)
+            
+            # 6단계: 그 중에서 Top-5 자르기
+            final_chunks = [mc['chunk'] for mc in merged_chunks[:top_k]]
+            
+            logger.info(f"최종 선택: {len(final_chunks)}개 페이지 그룹 "
+                      f"(후보군 {len(candidates)}개 → Threshold 통과 {len(final_results)}개 → "
+                      f"병합 {len(merged_chunks)}개 → Top-{top_k} {len(final_chunks)}개)")
             
             # 컨텍스트 구성
             context_parts = []
-            for i, chunk in enumerate(retrieved_chunks, 1):
+            for i, chunk in enumerate(final_chunks, 1):
                 context_parts.append(f"[문서 {i}]")
                 context_parts.append(f"파일: {chunk.metadata.get('filename', 'Unknown')}")
                 context_parts.append(f"페이지: {chunk.metadata.get('page_number', 'Unknown')}")
@@ -227,7 +298,7 @@ class RAGRetriever:
             return {
                 "query": query,
                 "context": context,
-                "retrieved_chunks": retrieved_chunks,
+                "retrieved_chunks": final_chunks,
                 "top_k": top_k,
                 "dynamic_threshold": dynamic_threshold
             }
@@ -270,102 +341,6 @@ class RAGRetriever:
         )
         
         return chain
-    
-    def needs_search(self, query: str) -> bool:
-        """
-        질문이 문서 검색이 필요한지 판단
-        
-        Args:
-            query: 사용자 질문
-            
-        Returns:
-            bool: 검색이 필요하면 True, Small talk이면 False
-        """
-        # Small talk 키워드 (검색 불필요)
-        smalltalk_keywords = [
-            "안녕", "하이", "헬로", "반가워", "고마워", "감사", "고마",
-            "날씨", "오늘", "내일", "어제", "시간", "몇 시",
-            "기분", "좋아", "싫어", "행복", "슬퍼", "화나",
-            "잘 지내", "어떻게 지내", "뭐해", "뭐하니",
-            "놀자", "재미", "즐거", "즐거워",
-            "고마워", "감사", "미안", "죄송",
-            "좋은 하루", "좋은 밤", "잘 자", "안녕히",
-            "뭐야", "그게 뭐야", "무엇", "뭔가",
-            "재밌", "웃겨", "하하", "헤헤"
-        ]
-        
-        # 문서 검색이 필요한 키워드
-        search_keywords = [
-            "규정", "정책", "규칙", "규칙", "가이드", "매뉴얼", "매뉴얼",
-            "연차", "휴가", "급여", "복지", "혜택", "지원",
-            "절차", "프로세스", "방법", "어떻게", "무엇",
-            "회사", "사내", "내부", "문서", "자료",
-            "찾아", "검색", "알려줘", "알려", "말해줘", "말해",
-            "확인", "조회", "조회해", "보여줘", "보여",
-            "설명", "설명해", "이해", "이해해"
-        ]
-        
-        query_lower = query.lower()
-        
-        # Small talk 키워드가 포함되어 있고 검색 키워드가 없으면 Small talk
-        has_smalltalk = any(keyword in query_lower for keyword in smalltalk_keywords)
-        has_search = any(keyword in query_lower for keyword in search_keywords)
-        
-        # 검색 키워드가 있으면 무조건 검색 필요
-        if has_search:
-            return True
-        
-        # 검색 키워드가 없고 Small talk 키워드가 있으면 Small talk
-        if has_smalltalk and not has_search:
-            return False
-        
-        # LLM으로 더 정확하게 판단
-        try:
-            from langchain_core.messages import SystemMessage, HumanMessage
-            
-            classification_prompt = f"""다음 질문이 회사 문서나 규정을 검색해야 하는 질문인지, 아니면 일상적인 대화(Small talk)인지 판단해주세요.
-
-질문: {query}
-
-회사 문서/규정 검색이 필요한 경우: "SEARCH"
-일상적인 대화인 경우: "SMALLTALK"
-
-답변 (SEARCH 또는 SMALLTALK만):"""
-            
-            messages = [
-                SystemMessage(content="당신은 질문을 분류하는 AI입니다. SEARCH 또는 SMALLTALK만 반환하세요."),
-                HumanMessage(content=classification_prompt)
-            ]
-            
-            response = self.llm.invoke(messages)
-            result = response.content.strip().upper()
-            needs_search = result == "SEARCH"
-            
-            logger.info(f"질문 분류: '{query}' -> {'RAG 검색' if needs_search else 'Small talk'}")
-            return needs_search
-            
-        except Exception as e:
-            logger.warning(f"질문 분류 중 오류: {e}, 기본값으로 RAG 검색 사용")
-            # 오류 발생 시 안전하게 RAG 검색 사용
-            return True
-    
-    @traceable(name="smalltalk_query")  # LangSmith 추적
-    def query_smalltalk(self, query: str) -> str:
-        """
-        Small talk 질문에 대한 답변 생성 (LLM만 사용)
-        
-        Args:
-            query: 사용자 질문
-            
-        Returns:
-            str: 생성된 답변
-        """
-        try:
-            answer = self.smalltalk_chain.invoke({"query": query})
-            return answer
-        except Exception as e:
-            logger.error(f"Small talk 답변 생성 중 오류: {e}")
-            return "죄송합니다. 일시적인 오류가 발생했습니다."
     
     @traceable(
         name="rag_query_full",
