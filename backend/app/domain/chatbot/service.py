@@ -261,6 +261,9 @@ class ChatService:
             return ai_message
         
         except Exception as e:
+            import traceback
+            print(f"❌ [ChatService] 메시지 처리 중 에러 발생:")
+            traceback.print_exc()
             error_message = f"죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}"
             self.session_manager.add_message(session_id, "assistant", error_message)
             return error_message

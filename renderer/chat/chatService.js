@@ -8,9 +8,6 @@
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const MULTI_AGENT_SESSION_KEY = 'multi_agent_session_id';
 
-// HR 키워드 (HR 팝업 제안용)
-const HR_KEYWORDS = ['연차', '휴가', '근로', '급여', '복지', '규정', '인사', 'hr', 'HR'];
-
 // 토큰 저장
 let accessToken = null;
 
@@ -129,17 +126,6 @@ export async function callChatModule(userText, history = []) {
     if (agentUsed === 'planner_tool' && result.answer.includes('추천')) {
       // planner_tool이 task_recommendations 형식으로 응답하는지 확인 필요
       // 일단 일반 텍스트로 처리
-    }
-
-    // HR 키워드 감지 시 HR 팝업 제안
-    if (HR_KEYWORDS.some(keyword => message.toLowerCase().includes(keyword))) {
-      // HR 팝업 열기 제안 추가
-      return {
-        type: 'text',
-        data: result.answer + '\n\n💡 더 자세한 HR 정보는 HR 도우미 팝업을 사용해보세요! (명령어: /hr)',
-        agent_used: agentUsed,
-        suggest_hr: true
-      };
     }
 
     // 일반 텍스트 응답
