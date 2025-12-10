@@ -1,14 +1,21 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
+
+# 프로젝트 루트 디렉토리 (backend/) 찾기
+# config.py는 backend/app/core/config.py에 있으므로 parent.parent.parent가 backend/
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = BASE_DIR / ".env"
 
 
 class Settings(BaseSettings):
     """애플리케이션 설정"""
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
-        case_sensitive=True
+        case_sensitive=True,
+        extra="ignore"  # .env에 정의되지 않은 필드 무시
     )
     
     # Database
@@ -34,6 +41,10 @@ class Settings(BaseSettings):
     NAVER_CLIENT_ID: str
     NAVER_CLIENT_SECRET: str
     NAVER_REDIRECT_URI: str
+    
+    # Naver Search API (트렌드 검색용)
+    NAVER_SEARCH_CLIENT_ID: str = ""
+    NAVER_SEARCH_CLIENT_SECRET: str = ""
     
     # OAuth - Slack (사용자 개인 연동)
     SLACK_CLIENT_ID: str = ""
@@ -67,6 +78,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     API_PREFIX: str = "/api/v1"
+    
+    # Report Workspace
+    REPORT_WORKSPACE_OWNER: str = "default_workspace"
     
     # Embedding
     EMBEDDING_MODEL: str = "text-embedding-3-large"

@@ -18,6 +18,7 @@ import readline  # 한글 입력 백스페이스 버그 수정
 import time
 import signal
 import sys
+import asyncio
 from pathlib import Path
 from typing import List, Dict, Optional
 from openai import OpenAI
@@ -27,6 +28,9 @@ import os
 from session_manager import SessionManager
 from ephemeral_rag import EphemeralRAG
 from domain_hints import get_domain_hint, format_hint_for_prompt
+from search.naver_news import NaverNewsSearcher
+from search.duckduckgo import DuckDuckGoSearcher
+from search.naver_datalab import NaverDataLabSearcher
 
 # ChromaDB import
 import chromadb
@@ -104,6 +108,30 @@ class IdeaGenerator:
         self.ephemeral_rag = None
         
         print("✅ 아이디어 생성 도구 초기화 완료")
+        
+        # 트렌드 검색기 초기화 (optional)
+        try:
+            self.trend_searcher = NaverNewsSearcher()
+            print("✅ 네이버 트렌드 검색 초기화 완료")
+        except Exception as e:
+            print(f"⚠️  트렌드 검색 초기화 실패 (기능 비활성화): {e}")
+            self.trend_searcher = None
+        
+        # 덕덕고 검색기 초기화
+        try:
+            self.duckduckgo_searcher = DuckDuckGoSearcher()
+            print("✅ DuckDuckGo 트렌드 검색 초기화 완료")
+        except Exception as e:
+            print(f"⚠️  DuckDuckGo 초기화 실패 (기능 비활성화): {e}")
+            self.duckduckgo_searcher = None
+        
+        # 네이버 데이터랩 검색기 초기화
+        try:
+            self.datalab_searcher = NaverDataLabSearcher()
+            print("✅ 네이버 데이터랩 검색 초기화 완료")
+        except Exception as e:
+            print(f"⚠️  네이버 데이터랩 초기화 실패 (기능 비활성화): {e}")
+            self.datalab_searcher = None
     
     def start_new_session(self) -> str:
         """
@@ -144,6 +172,69 @@ class IdeaGenerator:
         
         print(f"\n✅ 목적이 설정되었습니다: {purpose}\n")
         return purpose
+    
+    def fetch_trend_keywords(self, purpose: str) -> List[str]:
+        """
+        트렌드 키워드 검색 (네이버 뉴스 + DuckDuckGo + Google Trends)
+        
+        Args:
+            purpose: Q1 목적
+            
+        Returns:
+            List[str]: 트렌드 키워드 리스트
+        """
+        all_keywords = []
+        
+        # 1. 네이버 뉴스 검색
+        if self.trend_searcher:
+            print("🔍 네이버 트렌드 키워드 검색 중...")
+            try:
+                naver_keywords = asyncio.run(
+                    self.trend_searcher.extract_trend_keywords(purpose, num_articles=5)
+                )
+                if naver_keywords:
+                    print(f"   ✅ 네이버: {len(naver_keywords)}개 발견")
+                    all_keywords.extend(naver_keywords)
+            except Exception as e:
+                print(f"   ⚠️  네이버 검색 실패: {e}")
+        
+        # 2. DuckDuckGo 검색 (글로벌)
+        if self.duckduckgo_searcher:
+            print("🔍 DuckDuckGo 글로벌 트렌드 검색 중...")
+            try:
+                ddg_keywords = asyncio.run(
+                    self.duckduckgo_searcher.extract_trend_keywords(purpose, num_articles=5)
+                )
+                if ddg_keywords:
+                    print(f"   ✅ DuckDuckGo: {len(ddg_keywords)}개 발견")
+                    all_keywords.extend(ddg_keywords)
+            except Exception as e:
+                print(f"   ⚠️  DuckDuckGo 검색 실패: {e}")
+        
+        # 3. 네이버 데이터랩 검색
+        if self.datalab_searcher:
+            print("🔍 네이버 데이터랩 트렌드 검색 중...")
+            try:
+                datalab_keywords = asyncio.run(
+                    self.datalab_searcher.extract_trend_keywords(purpose)
+                )
+                if datalab_keywords:
+                    print(f"   ✅ 네이버 데이터랩: {len(datalab_keywords)}개 발견")
+                    all_keywords.extend(datalab_keywords)
+            except Exception as e:
+                print(f"   ⚠️  네이버 데이터랩 검색 실패: {e}")
+        
+        # 4. 중복 제거
+        unique_keywords = list(dict.fromkeys(all_keywords))
+        
+        if unique_keywords:
+            print(f"\n✅ 총 트렌드 키워드 {len(unique_keywords)}개:")
+            for kw in unique_keywords:
+                print(f"   - {kw}")
+        else:
+            print("⚠️  트렌드 키워드를 찾지 못했습니다.")
+        
+        return unique_keywords
     
     def q2_generate_warmup(self, purpose: str) -> List[str]:
         """
@@ -446,16 +537,17 @@ class IdeaGenerator:
             print(f"⚠️  영구 RAG 검색 실패: {e}")
             return []
     
-    def generate_ideas(self, purpose: str, keywords: List[Dict], top_k_techniques: int = 3) -> List[Dict]:
+    def generate_ideas(self, purpose: str, keywords: List[Dict], top_k_techniques: int = 3, trend_keywords: List[str] = None) -> List[Dict]:
         """
         아이디어 생성
         
-        Q1 목적, Q3 키워드, 영구 RAG (SCAMPER 등)를 결합하여 아이디어를 생성합니다.
+        Q1 목적, Q3 키워드, 영구 RAG (SCAMPER 등), 트렌드 키워드를 결합하여 아이디어를 생성합니다.
         
         Args:
             purpose: Q1 목적
             keywords: Q3에서 추출한 키워드 리스트
             top_k_techniques: 사용할 상위 기법 개수
+            trend_keywords: 네이버 뉴스에서 추출한 트렌드 키워드 (optional)
             
         Returns:
             List[Dict]: 생성된 아이디어 리스트
@@ -481,62 +573,70 @@ class IdeaGenerator:
         domain_hint = get_domain_hint(purpose)
         formatted_hint = format_hint_for_prompt(domain_hint)
         
-        # 5. LLM 프롬프트 생성
+        # 5. 트렌드 키워드 문자열 생성 (NEW)
+        trend_str = ""
+        if trend_keywords:
+            trend_str = f"""
+【최신 트렌드 키워드 (네이버 뉴스 기반)】
+{", ".join(trend_keywords)}
+
+※ 위 트렌드 키워드를 적극 활용하여 시의성 있는 아이디어를 생성하세요.
+"""
+        
+        # 6. LLM 프롬프트 생성
         prompt = f"""사용자가 "{purpose}"에 대한 아이디어를 원합니다.
 
-【자유연상 키워드】
+【🔴 핵심: 사용자 브레인스토밍 키워드 (비중 80%)】
 {keyword_str}
+
+※ 위 키워드는 사용자가 직접 떠올린 것입니다. 이 키워드를 중심으로 아이디어를 구성하세요.
+
+【🔵 참고: 최신 트렌드 키워드 (비중 20%)】
+{", ".join(trend_keywords) if trend_keywords else "없음"}
+
+※ 트렌드는 참고만 하세요. 사용자 키워드가 핵심입니다.
 
 【적용 가능한 브레인스토밍 기법】
 {techniques_str}
 {formatted_hint}
----
-
-**🚨 절대 규칙 (위반 시 답변 무효)**
-
-1. **허구 데이터 절대 금지**
-   ❌ 통계, 시장규모, 비용, 법규, 경쟁사 실적 등을 **절대 지어내지 마세요**
-   ❌ "2023년 40억 명", "월 10만원", "연평균 9.1% 성장" 같은 **허구의 수치 금지**
-   ✅ 모르면 언급하지 말고, 알고 있는 범위만 조심스럽게 표현하세요
-
-2. **현실적 실행 가능성** (사용자 상황에 맞게 조절)
-   ✅ 빠르게 시작 가능한 것 (며칠~몇 주 내)
-   ✅ 초기 투자 부담이 크지 않은 범위
-   ✅ 현재 가진 자원/역량으로 시도 가능한 것
-   ❌ "일론 머스크와 협업", "대기업 CEO 섭외", "수억 투자 유치" 같은 **극단적으로 비현실적 제안 금지**
-
-3. **직군별 맞춤**
-   - 유튜버 → 휴대폰 하나로 촬영 가능한 영상 구조
-   - 소상공인 → 네이버/인스타로 당장 시작 가능한 홍보
-   - 개발자 → 무료 API + 간단한 코드로 빠른 프로토타입
-   - 학생 → 발표 자료, 구글 문서, PPT로 바로 작성
-   - 회사원 → 팀 리소스 활용 가능한 실행 계획
-
-4. **보고서 스타일 금지, 행동 중심 작성**
-   ❌ "효율적인 마케팅 전략 수립을 통해..." (거창한 전략)
-   ✅ "네이버 블로그 만들고, 첫 글 3개 올린다. 제목에 '지역명+업종' 넣는다." (구체적 행동)
-
-5. **나쁜 예 (절대 금지)**
-   - "글로벌 시장 진출 전략..."
-   - "대형 투자사 IR..."
-   - "유명인 섭외..."
-   - "특허 출원 후..."
-   - "개발 비용 2000만원..."
-
-6. **좋은 예 (이렇게 작성)**
-   - "카카오톡 오픈채팅방 만들어서 주변 친구 10명 초대"
-   - "인스타그램에 휴대폰으로 찍은 사진 3장 올리고, 해시태그 5개 달기"
-   - "구글 스프레드시트로 일주일 매출 기록표 만들기"
 
 ---
+**🚨 필수 규칙**
 
-위 규칙을 엄격히 지키며 2-3개의 **빠르게 실행 가능한** 아이디어를 생성하세요:
+1. **반드시 3개 아이디어 생성**
+
+2. **비중 준수**: 사용자 키워드 80% + 트렌드 20%
+   - 아이디어의 핵심은 반드시 사용자 키워드에서 나와야 함
+   - 트렌드는 시의성 추가용으로만 살짝 활용
+
+3. **할루시네이션 금지**
+   ❌ 특정 도구/서비스의 기능을 단정짓기 금지
+      예: "네이버 클로바 API가 자동으로 자막 생성"
+   ❌ 통계, 비용, 시장규모 지어내기 금지
+      예: "월 100만원 수익 가능", "시장 규모 40조"
+   ✅ 모르는 건 "확인 필요"로 표시
+      예: "플랫폼별 최적 길이 조사 필요"
+
+4. **현실적 실행 가능**: 며칠~몇 주 내 시작 가능한 것만
 
 ---
-아이디어 제목: [간단한 제목]
-설명: [구체적 행동 위주. 허구 통계/비용 절대 금지. 빠르게 실행 가능한 것만]
-적용된 기법: [브레인스토밍 기법명]
----"""
+**출력 형식 (반드시 이 형식으로 3개 작성)**:
+
+---
+아이디어 제목: [제목]
+
+주제: [어떤 문제/니즈를 해결하는지]
+
+실행 방향: [무엇을 할지 - 구체적 도구나 수치 단정 금지, 방향성만]
+
+확인 필요 사항: [실행 전 조사해봐야 할 것들]
+
+기대효과: [예상 결과 - 숫자 단정 금지]
+
+적용된 기법: [기법명]
+---
+
+**⚠️ 반드시 위 형식으로 3개 모두 작성하세요!**"""
 
         try:
             response = self.openai_client.chat.completions.create(
@@ -565,7 +665,17 @@ class IdeaGenerator:
                 print(f"{'='*60}")
                 print(f"💡 아이디어 {i}: {idea.get('title', '제목 없음')}")
                 print(f"{'='*60}")
-                print(f"{idea.get('description', '설명 없음')}")
+                if idea.get('subject'):
+                    print(f"\n📌 주제: {idea.get('subject')}")
+                if idea.get('direction'):
+                    print(f"\n🎯 실행 방향:\n{idea.get('direction')}")
+                if idea.get('check_needed'):
+                    print(f"\n⚠️ 확인 필요 사항:\n{idea.get('check_needed')}")
+                if idea.get('expected_effect'):
+                    print(f"\n✨ 기대효과:\n{idea.get('expected_effect')}")
+                # 기존 형식 호환
+                if idea.get('description'):
+                    print(f"\n📝 설명: {idea.get('description')}")
                 print(f"\n🔧 적용 기법: {idea.get('technique', '기법 없음')}\n")
             
             return ideas
@@ -586,26 +696,47 @@ class IdeaGenerator:
         """
         ideas = []
         current_idea = {}
+        current_field = None
         
         for line in ideas_text.split('\n'):
             line = line.strip()
             
             if line.startswith('---'):
-                if current_idea:
+                if current_idea and current_idea.get('title'):
                     ideas.append(current_idea)
-                    current_idea = {}
+                current_idea = {}
+                current_field = None
             elif line.startswith('아이디어 제목:') or line.startswith('제목:'):
                 current_idea['title'] = line.split(':', 1)[1].strip()
-            elif line.startswith('설명:'):
-                current_idea['description'] = line.split(':', 1)[1].strip()
+                current_field = None
+            elif line.startswith('주제:'):
+                current_idea['subject'] = line.split(':', 1)[1].strip()
+                current_field = 'subject'
+            elif line.startswith('실행 방향:'):
+                current_idea['direction'] = line.split(':', 1)[1].strip()
+                current_field = 'direction'
+            elif line.startswith('확인 필요 사항:') or line.startswith('확인 필요:'):
+                current_idea['check_needed'] = line.split(':', 1)[1].strip()
+                current_field = 'check_needed'
+            elif line.startswith('기대효과:') or line.startswith('기대 효과:'):
+                current_idea['expected_effect'] = line.split(':', 1)[1].strip()
+                current_field = 'expected_effect'
             elif line.startswith('적용된 기법:') or line.startswith('기법:'):
                 current_idea['technique'] = line.split(':', 1)[1].strip()
-            elif current_idea and 'description' in current_idea and line:
-                # 설명 이어붙이기
-                current_idea['description'] += ' ' + line
+                current_field = None
+            # 기존 형식 호환 (설명:)
+            elif line.startswith('설명:'):
+                current_idea['description'] = line.split(':', 1)[1].strip()
+                current_field = 'description'
+            elif current_field and line:
+                # 현재 필드에 이어붙이기
+                if current_field in current_idea:
+                    current_idea[current_field] += ' ' + line
+                else:
+                    current_idea[current_field] = line
         
         # 마지막 아이디어 추가
-        if current_idea:
+        if current_idea and current_idea.get('title'):
             ideas.append(current_idea)
         
         return ideas
@@ -829,9 +960,266 @@ class IdeaGenerator:
         self.current_session_id = None
         self.ephemeral_rag = None
     
+    # ============================================================
+    # API용 메서드 (엔드포인트에서 호출)
+    # ============================================================
+    
+    async def generate_ideas_for_api(
+        self, 
+        session_id: str, 
+        purpose: str, 
+        associations: List[str]
+    ) -> List[Dict]:
+        """
+        API에서 호출 가능한 아이디어 생성 메서드
+        
+        Args:
+            session_id: 세션 ID
+            purpose: Q1 목적
+            associations: Q3 자유연상 키워드 리스트
+            
+        Returns:
+            List[Dict]: 생성된 아이디어 리스트 (SWOT 분석 포함)
+        """
+        print(f"[API] 아이디어 생성 시작 - 세션: {session_id}")
+        
+        # 1. Ephemeral RAG 초기화
+        ephemeral_rag = EphemeralRAG(session_id=session_id)
+        
+        # 2. 연상 키워드 추출 (유사도 기반)
+        keywords_data = ephemeral_rag.extract_keywords_by_similarity(
+            purpose=purpose,
+            top_k=7
+        )
+        extracted_keywords = [kw['keyword'] for kw in keywords_data]
+        print(f"[API] 추출된 키워드: {extracted_keywords}")
+        
+        # 3. 트렌드 키워드 검색 (3개 소스)
+        trend_keywords = await self._fetch_trend_keywords_async(purpose)
+        print(f"[API] 트렌드 키워드 (필터링 전): {len(trend_keywords)}개")
+        
+        # 4. 트렌드 키워드 필터링 (사용자 키워드 기준)
+        if trend_keywords:
+            trend_keywords = ephemeral_rag.filter_trend_keywords(trend_keywords, top_k=10)
+            print(f"[API] 트렌드 키워드 (필터링 후): {trend_keywords}")
+        
+        # 5. 영구 RAG에서 브레인스토밍 기법 검색
+        techniques_results = self._search_permanent_rag_for_api(
+            query=purpose,
+            n_results=3,
+            ephemeral_rag=ephemeral_rag
+        )
+        
+        # 6. 아이디어 생성
+        ideas = self._generate_ideas_with_prompt(
+            purpose=purpose,
+            keywords=extracted_keywords,
+            techniques=techniques_results,
+            trend_keywords=trend_keywords
+        )
+        
+        # 7. SWOT 분석 추가
+        for idea in ideas:
+            swot = self._perform_swot_analysis(idea)
+            swot_text = f"""
+
+📊 분석 결과:
+• 강점: {swot.get('strengths', 'N/A')}
+• 약점: {swot.get('weaknesses', 'N/A')}
+• 기회: {swot.get('opportunities', 'N/A')}
+• 위협: {swot.get('threats', 'N/A')}"""
+            idea['analysis'] = swot_text
+        
+        print(f"[API] 아이디어 생성 완료: {len(ideas)}개")
+        return ideas
+    
+    async def _fetch_trend_keywords_async(self, purpose: str) -> List[str]:
+        """트렌드 키워드 비동기 검색 (API용)"""
+        all_keywords = []
+        
+        if self.trend_searcher:
+            try:
+                naver_keywords = await self.trend_searcher.extract_trend_keywords(purpose, num_articles=5)
+                if naver_keywords:
+                    all_keywords.extend(naver_keywords)
+                    print(f"[API] 네이버 뉴스: {len(naver_keywords)}개")
+            except Exception as e:
+                print(f"[API] 네이버 뉴스 검색 실패: {e}")
+        
+        if self.duckduckgo_searcher:
+            try:
+                ddg_keywords = await self.duckduckgo_searcher.extract_trend_keywords(purpose, num_articles=5)
+                if ddg_keywords:
+                    all_keywords.extend(ddg_keywords)
+                    print(f"[API] DuckDuckGo: {len(ddg_keywords)}개")
+            except Exception as e:
+                print(f"[API] DuckDuckGo 검색 실패: {e}")
+        
+        if self.datalab_searcher:
+            try:
+                datalab_keywords = await self.datalab_searcher.extract_trend_keywords(purpose)
+                if datalab_keywords:
+                    all_keywords.extend(datalab_keywords)
+                    print(f"[API] 네이버 데이터랩: {len(datalab_keywords)}개")
+            except Exception as e:
+                print(f"[API] 네이버 데이터랩 검색 실패: {e}")
+        
+        return list(dict.fromkeys(all_keywords))
+    
+    def _search_permanent_rag_for_api(self, query: str, n_results: int = 3, ephemeral_rag: EphemeralRAG = None) -> List[Dict]:
+        """영구 RAG에서 브레인스토밍 기법 검색 (API용)"""
+        if not self.permanent_collection:
+            return []
+        
+        try:
+            if ephemeral_rag:
+                query_embedding = ephemeral_rag.embed_text(query)
+            else:
+                response = self.openai_client.embeddings.create(model=self.embedding_model, input=query)
+                query_embedding = response.data[0].embedding
+            
+            results = self.permanent_collection.query(query_embeddings=[query_embedding], n_results=n_results)
+            
+            techniques = []
+            if results['documents'] and len(results['documents'][0]) > 0:
+                for i in range(len(results['documents'][0])):
+                    techniques.append({
+                        'title': results['metadatas'][0][i].get('title', 'N/A'),
+                        'content': results['documents'][0][i],
+                    })
+            return techniques
+        except Exception as e:
+            print(f"[API] 영구 RAG 검색 실패: {e}")
+            return []
+    
+    def _generate_ideas_with_prompt(self, purpose: str, keywords: List[str], techniques: List[Dict], trend_keywords: List[str] = None) -> List[Dict]:
+        """프롬프트로 아이디어 생성 (API용)"""
+        keyword_str = ", ".join(keywords[:7])
+        techniques_str = "\n\n".join([f"[기법 {i+1}] {t['title']}\n{t['content'][:500]}..." for i, t in enumerate(techniques)]) if techniques else "(기법 없음)"
+        
+        domain_hint = get_domain_hint(purpose)
+        formatted_hint = format_hint_for_prompt(domain_hint)
+        
+        prompt = f"""사용자가 "{purpose}"에 대한 아이디어를 원합니다.
+
+【🔴 핵심: 사용자 브레인스토밍 키워드 (비중 80%)】
+{keyword_str}
+
+【🔵 참고: 최신 트렌드 키워드 (비중 20%)】
+{", ".join(trend_keywords) if trend_keywords else "없음"}
+
+【적용 가능한 브레인스토밍 기법】
+{techniques_str}
+{formatted_hint}
+
+---
+**🚨 필수 규칙**
+1. 반드시 3개 아이디어 생성
+2. 비중 준수: 사용자 키워드 80% + 트렌드 20%
+3. 할루시네이션 금지 (통계, 비용, 시장규모 지어내기 금지)
+4. 현실적 실행 가능: 며칠~몇 주 내 시작 가능한 것만
+
+**출력 형식**:
+---
+아이디어 제목: [제목]
+주제: [문제/니즈]
+실행 방향: [방향성만, 도구 단정 금지]
+확인 필요 사항: [조사 필요 항목]
+기대효과: [숫자 단정 금지]
+적용된 기법: [기법명]
+---"""
+
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self.llm_model,
+                messages=[
+                    {"role": "system", "content": "당신은 현실적인 기획자입니다. 허구의 통계나 비용을 절대 지어내지 않습니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=2000
+            )
+            ideas_text = response.choices[0].message.content.strip()
+            return self._parse_ideas_for_api(ideas_text)
+        except Exception as e:
+            print(f"[API] 아이디어 생성 실패: {e}")
+            return []
+    
+    def _parse_ideas_for_api(self, ideas_text: str) -> List[Dict]:
+        """LLM 응답에서 아이디어 파싱 (API용)"""
+        ideas = []
+        current_idea = {}
+        current_field = None
+        
+        for line in ideas_text.split('\n'):
+            line = line.strip()
+            
+            if line.startswith('---'):
+                if current_idea and current_idea.get('title'):
+                    # description 생성 (주제 + 실행방향 + 확인필요 + 기대효과)
+                    desc_parts = []
+                    if current_idea.get('subject'):
+                        desc_parts.append(f"📌 주제: {current_idea['subject']}")
+                    if current_idea.get('direction'):
+                        desc_parts.append(f"🎯 실행 방향: {current_idea['direction']}")
+                    if current_idea.get('check_needed'):
+                        desc_parts.append(f"⚠️ 확인 필요: {current_idea['check_needed']}")
+                    if current_idea.get('expected_effect'):
+                        desc_parts.append(f"✨ 기대효과: {current_idea['expected_effect']}")
+                    if current_idea.get('technique'):
+                        desc_parts.append(f"🔧 적용 기법: {current_idea['technique']}")
+                    current_idea['description'] = '\n\n'.join(desc_parts)
+                    ideas.append(current_idea)
+                current_idea = {}
+                current_field = None
+            elif line.startswith('아이디어 제목:') or line.startswith('제목:'):
+                current_idea['title'] = line.split(':', 1)[1].strip()
+            elif line.startswith('주제:'):
+                current_idea['subject'] = line.split(':', 1)[1].strip()
+                current_field = 'subject'
+            elif line.startswith('실행 방향:'):
+                current_idea['direction'] = line.split(':', 1)[1].strip()
+                current_field = 'direction'
+            elif line.startswith('확인 필요 사항:') or line.startswith('확인 필요:'):
+                current_idea['check_needed'] = line.split(':', 1)[1].strip()
+                current_field = 'check_needed'
+            elif line.startswith('기대효과:') or line.startswith('기대 효과:'):
+                current_idea['expected_effect'] = line.split(':', 1)[1].strip()
+                current_field = 'expected_effect'
+            elif line.startswith('적용된 기법:') or line.startswith('기법:'):
+                current_idea['technique'] = line.split(':', 1)[1].strip()
+                current_field = None
+            elif current_field and line:
+                if current_field in current_idea:
+                    current_idea[current_field] += ' ' + line
+                else:
+                    current_idea[current_field] = line
+        
+        # 마지막 아이디어
+        if current_idea and current_idea.get('title'):
+            desc_parts = []
+            if current_idea.get('subject'):
+                desc_parts.append(f"📌 주제: {current_idea['subject']}")
+            if current_idea.get('direction'):
+                desc_parts.append(f"🎯 실행 방향: {current_idea['direction']}")
+            if current_idea.get('check_needed'):
+                desc_parts.append(f"⚠️ 확인 필요: {current_idea['check_needed']}")
+            if current_idea.get('expected_effect'):
+                desc_parts.append(f"✨ 기대효과: {current_idea['expected_effect']}")
+            if current_idea.get('technique'):
+                desc_parts.append(f"🔧 적용 기법: {current_idea['technique']}")
+            current_idea['description'] = '\n\n'.join(desc_parts)
+            ideas.append(current_idea)
+        
+        return ideas
+    
+    # ============================================================
+    # 콘솔용 메서드 (기존 유지)
+    # ============================================================
+    
     def run(self):
         """
-        전체 플로우 실행
+        전체 플로우 실행 (콘솔용)
         
         Q1 → Q2 → Q3 → 아이디어 생성 → 분석 → 삭제 확인
         """
@@ -841,6 +1229,9 @@ class IdeaGenerator:
             
             # Q1: 목적 입력
             purpose = self.q1_ask_purpose()
+            
+            # [NEW] 트렌드 키워드 검색
+            trend_keywords = self.fetch_trend_keywords(purpose)
             
             # Q2: 워밍업 질문 생성 + "네" 대기
             warmup_questions = self.q2_generate_warmup(purpose)
@@ -855,8 +1246,13 @@ class IdeaGenerator:
             print("\n🔍 Q1과 Q3 간 유사도 기반 키워드 추출 중...\n")
             keywords = self.ephemeral_rag.extract_keywords_by_similarity(purpose, top_k=7)
             
+            # [NEW] 트렌드 키워드 필터링 (사용자 키워드 기준)
+            if trend_keywords:
+                print("\n🔍 트렌드 키워드를 사용자 입력 기준으로 필터링 중...")
+                trend_keywords = self.ephemeral_rag.filter_trend_keywords(trend_keywords, top_k=10)
+            
             # 아이디어 생성
-            ideas = self.generate_ideas(purpose, keywords, top_k_techniques=3)
+            ideas = self.generate_ideas(purpose, keywords, top_k_techniques=3, trend_keywords=trend_keywords)
             
             if not ideas:
                 print("⚠️  아이디어 생성에 실패했습니다.")

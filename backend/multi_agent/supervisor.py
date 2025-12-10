@@ -59,6 +59,12 @@ class SupervisorAgent:
         # 전문 에이전트 도구 가져오기
         self.tools = get_all_agent_tools()
         
+        # 도구 목록 로깅
+        print(f"\n[SUPERVISOR INIT] Loaded {len(self.tools)} tools:")
+        for tool in self.tools:
+            print(f"  - {tool.name}: {tool.description[:80]}...")
+        print()
+        
         # System message 생성
         self.system_message = self._create_system_message()
         
@@ -120,17 +126,29 @@ class SupervisorAgent:
      * "아이디어를 만든다는 게 뭐야?" → 정보 질문
      * "브레인스토밍 방법 알려줘" → 기법 설명 요청
 
-4. **planner_tool**: 일정 관리, 계획 수립
-   - 키워드: 일정, 계획, 스케줄, 할 일, 업무, 작업, 정리, 관리, 시간, 오늘, 내일, 이번 주, 다음 주, 우선순위, 마감, 데드라인, 목표, 생산성, 효율, 타임라인, 일과
-   - 예시: "오늘 할 일을 정리해줘", "일정 관리 방법 알려줘", "업무 우선순위 정하는 법"
+4. **report_tool**: 보고서 기능 전반 (업무 플래닝, 보고서 생성, 보고서 기반 Q&A)
 
-5. **report_tool**: 리포트 생성, 실적 분석
-   - 키워드: 리포트, 보고서, 실적, 성과, 분석, 통계, 데이터, 결과, 평가, 지표, KPI, 매출, 수치, 추이, 트렌드, 요약, 정리, 일간, 주간, 월간, 분기, 연간
-   - 예시: "이번 주 실적을 분석해줘", "월간 리포트 작성해줘", "성과 평가 자료 만들어줘"
+   다음과 같은 경우에 report_tool로 라우팅합니다:
 
-6. **therapy_tool**: 심리 상담, 정신 건강 지원
+   **(1) 금일 업무 플래닝 / 오늘 업무 추천**
+   - 키워드: 오늘 할 일, 오늘 업무, 플래닝, 업무 추천, 계획 추천, 업무 정리
+   - 예시: "오늘 할 일 추천해줘", "금일 업무 어떻게 정리하지?"
+
+   **(2) 보고서 생성(일일/주간/월간)**
+   - 키워드: 보고서, 리포트, 일일보고서, 주간보고서, 월간보고서, 작성, 생성
+   - 예시: "일일보고서 작성해줘", "이번 주 보고서 만들어줘"
+
+   **(3) 보고서 기반 질의응답(RAG 검색)**
+   - 키워드: 지난주, 전날, 미종결, 기록 찾아줘, 보고서에서, 언제 했었지?, 과거 업무
+   - 예시: "지난주 미종결 업무 뭐였지?", "어제 누구 상담했었어?"
+
+   상세한 판단, 프롬프트 엔지니어링, 보고서 흐름 FSM, RAG 처리 등은 모두 report_tool 내부의 Router가 담당합니다.
+   Supervisor는 단순히 '보고서 관련 요청'을 식별해 report_tool로 넘기기만 합니다.
+
+
+5. **therapy_tool**: 심리 상담, 정신 건강 지원
    - 키워드: 
-     * 기본 감정: 힘들어, 상담, 짜증, 우울, 불안, 스트레스, 고민, 걱정, 슬프, 외로, 화나, 답답, 심리, 아들러
+     * 기본 감정: 힘들어, 상담, 짜증, 우울, 불안, 스트레스, 고민, 걱정, 슬프, 외로, 화나, 답답, 심리, 아들러, 슬퍼, 슬프다
      * 부정적 감정: 절망, 포기, 무기력, 자책, 후회, 미안, 두려움, 공포, 불안감, 초조, 분노, 화남, 짜증나, 성가심, 불쾌, 슬픔, 비참, 절망적, 우울함, 침체, 외로움, 고독, 쓸쓸, 허전, 외톨이, 답답함, 막막, 난처, 곤란, 피곤, 지침, 무력감, 의욕없음, 수치, 수치심, 열받, 열받아, 화낼, 미치, 미쳐, 억울, 억울해, 멍하
      * 관계/대인관계: 갈등, 싸움, 다툼, 오해, 불화, 이별, 헤어짐, 이혼, 결별, 배신, 상처, 아픔, 서운, 소외, 왕따, 따돌림, 무시, 배제, 멀리하는, 따로 노는, 겉돌고, 혼자, 남겨지는, 불편
      * 직장/학업 스트레스: 직장, 업무, 과로, 번아웃, 시험, 공부, 학업, 성적, 압박, 실패, 좌절, 낙담, 실망, 상사, 팀장, 부장, 동기, 동료, 욕, 쌍욕, 폭언, 인격모독, 소리지르, 화풀이, 그만두, 퇴사, 사직, 적응, 분위기, 문화, 익숙, 부담, 어울리, 소통, 환경, 출근, 노력, 긴장, 낯설, 대화, 규칙, 절차, 복잡, 시스템, 효율, 회의, 의견, 표현, 출퇴근, 루틴, 리듬, 변화, 부담감, 프로젝트
@@ -159,20 +177,40 @@ class SupervisorAgent:
      * **내용 조회 및 설명: "내 노션에 있는 X에 대해 얘기해줘", "내 노션의 X 페이지 내용 알려줘", "내 노션 개인정리에 있는 Y 설명해줘"**
 
 
-2. **"메일", "이메일"** 관련 요청(전송, 검색, 첨부) → **무조건 email_tool**
+8. **"메일", "이메일"** 관련 요청(전송, 검색, 첨부) → **무조건 email_tool**
    - 예: "이거 메일로 보내줘" → email_tool
    - 예: "안 읽은 메일 있어?" → email_tool
 
-3. **"브레인스토밍"** 단어가 명시적으로 포함 → **무조건 brainstorming_tool**
+9. **insurance_tool**: 보험/의료급여 법규 및 정책 문서 기반 정보 제공
+   - **핵심 의도**: 사용자가 보험 상품, 의료급여 규정, 청구 절차, 법적 조건 등에 대해 **정확한 법규/정책 정보를 문서 기반으로 필요로 하는 경우**
+   - **사용 조건** (다음 중 하나 이상):
+     * 보험/의료급여 관련 법적 조항, 규정, 정책에 대한 질문
+     * 청구 절차, 보장 범위, 환수 기준 등 구체적인 기준 확인 필요
+     * 특약, 약관, 조건 등 계약/법규 내용 관련 질문
+     * 상해요인 판단, 급여 제한, 금지 사항 등 의료급여 정책 관련 질문
+   - **실제 사용 예시** (실제 문서 데이터 기반):
+     * ✅ "민법 제741조와 의료급여법 제23조의 부당이득 개념의 차이는 무엇인가?"
+     * ✅ "의료급여비용의 환수 기준은 무엇인가?"
+     * ✅ "자살시도자의 경우 의료급여 적용 기준은?"
+     * ✅ "도급인의 책임이 인정되는 경우와 인정되지 않는 경우의 차이는?"
+     * ✅ "상해요인 조사 시 119구급기록지 확인 조건은?"
+   - **비사용 예시** (다른 도구 사용):
+     * ❌ "보험이 뭐예요?" → 일반 상식 (chatbot_tool)
+     * ❌ "보험금을 청구하고 싶은데 불안해" → 감정 표현 (therapy_tool)
+     * ❌ "보험료 지출 관리 계획을 세워줄래" → 계획 수립 (planner_tool)
 
-3. **감정 표현** (힘들어, 우울해, 스트레스 등) → **therapy_tool 우선**
+# 3. **법적 정책 정보 기반의 보험/의료급여 질문** → **insurance_tool**
+
+# 3. **"브레인스토밍"** 단어가 명시적으로 포함 → **무조건 brainstorming_tool**
+
+# 3. **감정 표현** (힘들어, 우울해, 스트레스 등) → **therapy_tool 우선**
 
 **🟡 일반 규칙:**
-4. 회사 규정/정책/문서 검색 → rag_tool
-5. 일정/계획 관리 → planner_tool
-6. 리포트/실적 분석 → report_tool
-7. 메일 전송, 검색, 첨부 → email_tool
-8. 일반 대화/인사/잡담 → chatbot_tool
+10. 회사 규정/정책/문서 검색 → rag_tool
+11. 일정/계획 관리 → planner_tool
+12. 리포트/실적 분석 → report_tool
+13. 메일 전송, 검색, 첨부 → email_tool
+14. 일반 대화/인사/잡담 → chatbot_tool
 
 **중요한 규칙:**
 - **사용자의 의도를 정확히 파악하는 것이 최우선입니다.**
@@ -399,6 +437,39 @@ class SupervisorAgent:
                         "action": "process_query",
                         "result": "success"
                     })
+            # 사용된 도구 추출 및 intent 추출
+            intermediate_steps = []
+            detected_intent = None
+            for msg in messages:
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    for tool_call in msg.tool_calls:
+                        tool_name = tool_call.get('name', 'unknown')
+                        agent_used = tool_name.replace('_tool', '')
+                        
+                        # 디버깅 로그 추가
+                        print(f"[SUPERVISOR DEBUG] Tool called: {tool_name} for query: {request.query[:50]}...")
+                        
+                        intermediate_steps.append({
+                            "agent": agent_used,
+                            "action": "process_query",
+                            "result": "success"
+                        })
+            
+            # report_tool이 사용된 경우, answer에서 intent 마커 확인
+            if agent_used == "report" and answer and answer.startswith("__INTENT_LOOKUP__"):
+                detected_intent = "lookup"
+                # 마커 제거 (프론트엔드에서도 처리하지만, 백엔드에서도 정리)
+                answer = answer.replace("__INTENT_LOOKUP__", "", 1)
+            elif agent_used == "report" and answer:
+                # report_tool이 사용되었지만 마커가 없는 경우, ReportAgent에서 intent 확인
+                try:
+                    from multi_agent.tools.agent_tools import get_report_agent
+                    report_agent = get_report_agent()
+                    if hasattr(report_agent, 'router'):
+                        detected_intent = await report_agent.router.classify_intent(request.query)
+                        print(f"[DEBUG] Supervisor - report_tool intent 추출: {detected_intent}")
+                except Exception as e:
+                    print(f"[WARNING] Intent 추출 실패: {e}")
             
             # 처리 시간 계산
             processing_time = time.time() - start_time
@@ -408,6 +479,7 @@ class SupervisorAgent:
                 query=request.query,
                 answer=answer,
                 agent_used=agent_used,
+                intent=detected_intent,  # intent 필드 추가
                 intermediate_steps=intermediate_steps if intermediate_steps else [
                     {
                         "agent": agent_used,
@@ -493,4 +565,3 @@ class SupervisorAgent:
             })
         
         return agents
-

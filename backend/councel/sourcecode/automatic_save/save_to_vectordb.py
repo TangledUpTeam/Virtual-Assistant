@@ -11,13 +11,24 @@ import os
 import json
 import sys
 import shutil
-import time
 import gc
+import logging
+import warnings
 from pathlib import Path
 from typing import List, Dict, Any
 import chromadb
 from chromadb.config import Settings
-from tqdm import tqdm
+
+# ChromaDB의 경고 메시지 억제 (Add of existing embedding ID 등)
+logging.getLogger("chromadb").setLevel(logging.ERROR)
+# ChromaDB 내부 모듈들의 로깅도 억제
+logging.getLogger("chromadb.db").setLevel(logging.ERROR)
+logging.getLogger("chromadb.segment").setLevel(logging.ERROR)
+# warnings 모듈로도 경고 억제
+warnings.filterwarnings("ignore", category=UserWarning, module="chromadb")
+# stderr 출력 억제를 위한 설정
+import io
+from contextlib import redirect_stderr
 
 # Vector DB 매니저
 class VectorDBManager:
@@ -75,7 +86,6 @@ class VectorDBManager:
         try:
             # 기존 컬렉션이 있는지 확인
             collection = self.client.get_collection(name=collection_name)
-            print(f"기존 컬렉션이 존재합니다.")
             return collection
             
         except Exception:
@@ -102,18 +112,26 @@ class VectorDBManager:
             # 컬렉션 생성 또는 기존 컬렉션 가져오기
             collection = self.create_or_get_collection(collection_name)
             
-            # 기존 데이터가 있고 skip_existing이 True면 건너뛰기
+            # 기존 데이터 개수 확인
             existing_count = collection.count()
 
-            # 기존 ID 목록 가져오기 (중복 방지)
+            # 기존 ID 목록 가져오기 (중복 방지) - 스트리밍 방식으로 ID만 조회
+            # 메모리 최적화: include=["ids"]로 ID만 로드 (embeddings, documents, metadatas 제외)
             existing_ids = set()
             if existing_count > 0:
                 try:
-                    # 모든 기존 ID 가져오기
-                    existing_data = collection.get()
-                    existing_ids = set(existing_data['ids'])
+                    # ID만 가져오기 (메모리 최적화: include=["ids"]로 ID만 로드)
+                    # ChromaDB는 offset을 지원하지 않으므로 전체 ID를 한 번에 가져오되,
+                    # ID만 로드하므로 메모리 사용량이 크게 감소함
+                    existing_data = collection.get(
+                        include=["ids"]  # ID만 가져오기 (메모리 최적화)
+                    )
+                    if existing_data and existing_data.get('ids'):
+                        existing_ids = set(existing_data['ids'])
+                            
                 except Exception as e:
-                    print(f"기존 ID 확인 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
+                    # 기존 ID 확인 실패 시 조용히 넘어감 (ChromaDB 버전 차이로 인한 오류일 수 있음)
+                    pass
             
             # 데이터 준비
             ids = []
@@ -141,28 +159,42 @@ class VectorDBManager:
             if not ids:
                 return 0
             
-            # 배치로 저장
+            # 배치로 저장 (스트리밍 방식)
             total_items = len(ids)
             
             successful_batches = 0
             failed_batches = 0
             
-            for i in tqdm(range(0, total_items, batch_size), desc="저장 진행률"):
+            for i in range(0, total_items, batch_size):
                 end_idx = min(i + batch_size, total_items)
                 
                 try:
-                    # 컬렉션에 데이터 추가
-                    collection.add(
-                        ids=ids[i:end_idx],
-                        embeddings=embeddings[i:end_idx],
-                        documents=documents[i:end_idx],
-                        metadatas=metadatas[i:end_idx]
-                    )
+                    # 컬렉션에 데이터 추가 (ChromaDB 경고 메시지 억제)
+                    # stderr를 임시로 리다이렉트하여 "Add of existing embedding ID" 메시지 억제
+                    with redirect_stderr(io.StringIO()):
+                        collection.add(
+                            ids=ids[i:end_idx],
+                            embeddings=embeddings[i:end_idx],
+                            documents=documents[i:end_idx],
+                            metadatas=metadatas[i:end_idx]
+                        )
                     successful_batches += 1
                     
+                    # 배치 처리 후 메모리 해제를 위한 힌트 (실제 해제는 루프 종료 후)
+                    
                 except Exception as e:
+                    # ChromaDB의 중복 에러는 무시 (이미 존재하는 경우)
+                    error_msg = str(e).lower()
+                    if "existing" in error_msg or "duplicate" in error_msg or "already exists" in error_msg:
+                        # 중복 에러는 조용히 건너뛰기
+                        successful_batches += 1
+                        continue
                     print(f"\n배치 저장 실패: {e}") # 예외처리 print문은 배포 전 삭제 예정
                     failed_batches += 1
+            
+            # 메모리 해제를 위한 정리
+            del ids, embeddings, documents, metadatas
+            gc.collect()
             
             return total_items
         
@@ -223,20 +255,41 @@ def main():
         # Vector DB 매니저 초기화
         db_manager = VectorDBManager(str(vector_db_dir))
         
-        # 모든 임베딩 파일의 데이터를 하나로 합치기
-        all_data = []
+        # 스트리밍 처리: 파일별로 순차 처리하고 각 파일 처리 후 메모리 해제
+        total_saved = 0
         file_stats = []
         
         for emb_file in embedding_files:
-            
             try:
+                # 파일별로 데이터 로드
                 data = db_manager.load_embedding_file(emb_file)
-                all_data.extend(data)
+                
+                if not data:
+                    file_stats.append({
+                        'file': emb_file.name,
+                        'count': 0,
+                        'status': '경고: 데이터 없음'
+                    })
+                    continue
+                
+                # 즉시 Vector DB에 저장 (스트리밍 처리)
+                saved_count = db_manager.save_to_collection(
+                    collection_name=collection_name,
+                    data=data,
+                    batch_size=1000
+                )
+                
+                total_saved += saved_count
                 file_stats.append({
                     'file': emb_file.name,
                     'count': len(data),
+                    'saved': saved_count,
                     'status': '성공'
                 })
+                
+                # 메모리 해제
+                del data
+                gc.collect()
                 
             except Exception as e:
                 file_stats.append({
@@ -244,39 +297,11 @@ def main():
                     'count': 0,
                     'status': f'실패: {e}'
                 })
-                print(f"로드 실패: {e}")
+                print(f"로드 실패: {emb_file.name} - {e}")
         
-        # 로드 결과 요약
-        
-        if not all_data:
-            print("오류: 로드된 데이터가 없습니다.")
-            sys.exit(1)
-        
-        # Vector DB에 저장
-        total_saved = db_manager.save_to_collection(
-            collection_name=collection_name,
-            data=all_data,
-            batch_size=1000
-        )
-        
-        # 검증
-        # verification = db_manager.verify_collection(collection_name)
-        
-        # print(f"\n컬렉션 정보:")
-        # print(f"  - 이름: {verification['name']}")
-        # print(f"  - 저장된 항목 수: {verification['count']}개")
-        # print(f"  - 메타데이터: {verification['metadata']}")
-        # if 'sample_id' in verification:
-        #     print(f"  - 샘플 ID: {verification['sample_id']}")
-        
-        # # 최종 결과
-        # print(f"\n{'='*60}")
-        # print("전체 작업 완료!")
-        # print(f"{'='*60}")
-        # print(f"총 삽입된 벡터 개수: {total_saved}개")
-        # print(f"컬렉션 이름: {collection_name}")
-        # print(f"DB 저장 위치: {vector_db_dir}")
-        # print(f"{'='*60}")
+        # 처리 결과 확인
+        if total_saved == 0:
+            print("경고: 저장된 데이터가 없습니다.")
         
     except KeyboardInterrupt:
         print("\n\n작업이 사용자에 의해 중단되었습니다.")

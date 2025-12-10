@@ -10,12 +10,16 @@ from app.core.config import settings
 from app.api.v1 import api_router
 from app.infrastructure.database import engine, Base
 
+import warnings
+# LangSmith UUID v7 경고 억제
+warnings.filterwarnings("ignore", message=".*LangSmith now uses UUID v7.*")
+warnings.filterwarnings("ignore", message=".*Future versions will require UUID v7.*")
+
 # 경로 설정
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Virtual-Assistant 루트
-COUNCEL_DIR = BASE_DIR / "backend" / "councel"
-sys.path.insert(0, str(COUNCEL_DIR))
 
-from sourcecode.automatic_save import automatic_save
+# 모듈 RAG 초기화
+from app.load_modules import init_all_modules
 
 # Tools Router 추가
 import sys
@@ -46,15 +50,11 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created")
     
-    # Vector DB 자동 생성 (심리 상담 시스템용)
+    # 모듈별 RAG 초기화 (load_modules)
     try:
-        success = automatic_save()
-        if success:
-            pass
-        else:
-            print("⚠️  Therapy Vector DB initialization failed")
+        init_all_modules()
     except Exception as e:
-        print(f"⚠️  Therapy Vector DB initialization error: {e}")
+        print(f"⚠️  Module initialization error: {e}")
     
     yield
     
@@ -93,10 +93,36 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 PUBLIC_DIR = BASE_DIR / "public"
 RENDERER_DIR = BASE_DIR / "renderer"
 
-# 정적 파일 서빙
+# 보고서 HTML 파일 서빙 (타입별로 분리)
+# 중요: 더 구체적인 경로를 먼저 마운트해야 함
+REPORTS_BASE_DIR = BASE_DIR / "backend" / "output"
+# 디렉토리가 없으면 생성
+REPORTS_BASE_DIR.mkdir(parents=True, exist_ok=True)
+
+# 일일보고서 (더 구체적인 경로를 먼저 마운트)
+daily_dir = REPORTS_BASE_DIR / "daily"
+daily_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/reports/daily", StaticFiles(directory=str(daily_dir)), name="reports_daily")
+
+# 주간보고서
+weekly_dir = REPORTS_BASE_DIR / "weekly"
+weekly_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/reports/weekly", StaticFiles(directory=str(weekly_dir)), name="reports_weekly")
+
+# 월간보고서
+monthly_dir = REPORTS_BASE_DIR / "monthly"
+monthly_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/reports/monthly", StaticFiles(directory=str(monthly_dir)), name="reports_monthly")
+
+# 정적 파일 서빙 (보고서 경로 이후에 마운트)
 app.mount("/public", StaticFiles(directory=str(PUBLIC_DIR)), name="public")
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.mount("/renderer", StaticFiles(directory=str(RENDERER_DIR)), name="renderer")
+
+print(f"✅ 보고서 HTML 서빙 경로 등록:")
+print(f"   - /static/reports/daily -> {daily_dir}")
+print(f"   - /static/reports/weekly -> {weekly_dir}")
+print(f"   - /static/reports/monthly -> {monthly_dir}")
 
 
 # Health Check
@@ -163,6 +189,16 @@ async def main_page():
         return FileResponse(main_page)
     else:
         return {"error": "Main page not found"}
+
+
+@app.get("/report")
+async def report_page():
+    """보고서 팝업 페이지 (일렉트론용)"""
+    report_page = BASE_DIR / "report-popup.html"
+    if report_page.exists():
+        return FileResponse(report_page)
+    else:
+        return {"error": "Report page not found"}
 
 
 if __name__ == "__main__":

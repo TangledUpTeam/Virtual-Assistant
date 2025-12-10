@@ -277,7 +277,7 @@ async function sendChatbotMessage(userText) {
 
 // 오늘 추천 업무 가져오기 (수동 라우팅)
 // taskService.js의 getTodayPlan() 함수 사용
-// import { getTodayPlan } from '../tasks/taskService.js';
+// import { getTodayPlan } from '../report/taskService.js';
 // 
 // "오늘 뭐할지 추천" 등의 키워드가 있으면 TodayPlan API 호출
 // if (userText.includes('오늘') && (userText.includes('추천') || userText.includes('뭐할'))) {
@@ -289,4 +289,4 @@ async function sendChatbotMessage(userText) {
  * 선택한 업무 저장 (taskService.js에서 re-export)
  * chatPanel.js에서 사용하기 위해 유지
  */
-export { saveSelectedTasks } from '../tasks/taskService.js';
+export { saveSelectedTasks } from '../report/taskService.js';

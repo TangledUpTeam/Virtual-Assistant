@@ -22,8 +22,8 @@ function createLandingWindow() {
     backgroundColor: '#ffffff',
     webPreferences: {
       contextIsolation: false,
-      nodeIntegration: true
-      // partition을 설정하지 않으면 앱 종료 시 세션 삭제됨
+      nodeIntegration: true,
+      partition: 'persist:main'  // 캐릭터 창과 세션 공유
     }
   });
 
@@ -115,11 +115,15 @@ function createCharacterWindow() {
     backgroundColor: '#00000000',
     webPreferences: {
       contextIsolation: false,
-      nodeIntegration: true
+      nodeIntegration: true,
+      partition: 'persist:main' // 세션 공유를 위한 partition 설정
     }
   });
 
   // 개발 모드: 캐시 + localStorage 완전 삭제
+  // ⚠️ 주석 처리: persist:main 세션의 쿠키(JWT 토큰)까지 삭제되는 문제
+  // 앱 시작 시 이미 캐시 삭제가 진행되므로 여기서는 불필요
+  /*
   characterWin.webContents.session.clearCache().then(() => {
     console.log('🔄 캐시 삭제 완료');
   });
@@ -129,6 +133,7 @@ function createCharacterWindow() {
   }).then(() => {
     console.log('🗑️  localStorage 삭제 완료');
   });
+  */
 
   // 메인 페이지 로드 (캐릭터 화면)
   characterWin.loadURL('http://localhost:8000/main');
@@ -213,15 +218,94 @@ ipcMain.on('va:report-panel-toggle', (_e, isOpen) => {
 });
 
 // 시작하기 버튼 클릭 시 캐릭터 창 생성
-ipcMain.on('va:start-character', () => {
+ipcMain.on('va:start-character', async () => {
   console.log('✨ 캐릭터 시작!');
 
-  // 캐릭터 창이 없으면 생성
+  // 캐릭터 창이 없으면 생성 (하지만 아직 URL 로드하지 않음)
   if (!characterWin) {
-    createCharacterWindow();
+    // 캐릭터 창 생성 로직을 인라인으로 실행
+    const { screen } = require('electron');
+
+    // 로그인 창이 있던 디스플레이 찾기
+    const displays = screen.getAllDisplays();
+    let targetDisplay = displays[0];
+
+    if (loginWindowBounds) {
+      const loginCenterX = loginWindowBounds.x + loginWindowBounds.width / 2;
+      const loginCenterY = loginWindowBounds.y + loginWindowBounds.height / 2;
+
+      for (const display of displays) {
+        const { x, y, width, height } = display.bounds;
+        if (loginCenterX >= x && loginCenterX < x + width &&
+          loginCenterY >= y && loginCenterY < y + height) {
+          targetDisplay = display;
+          console.log('📍 로그인 창이 있던 디스플레이 찾음:', displays.indexOf(display) + 1);
+          break;
+        }
+      }
+    }
+
+    const { x, y, width, height } = targetDisplay.workArea;
+    console.log(`📐 캐릭터 창 크기: ${width}x${height}, 위치: (${x}, ${y})`);
+
+    characterWin = new BrowserWindow({
+      width: width,
+      height: height,
+      x: x,
+      y: y,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      resizable: false,
+      hasShadow: false,
+      skipTaskbar: true,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        contextIsolation: false,
+        nodeIntegration: true,
+        partition: 'persist:main'
+      }
+    });
+
+    console.log('📦 캐릭터 창 생성 완료 (URL 로드 전)');
   }
 
-  // 로그인 창 닫기
+  // 🍪 쿠키 복사: loginWin → characterWin (URL 로드 전에 실행!)
+  if (loginWin && !loginWin.isDestroyed() && characterWin && !characterWin.isDestroyed()) {
+    try {
+      const loginSession = loginWin.webContents.session;
+      const charSession = characterWin.webContents.session;
+
+      // loginWin의 모든 쿠키 가져오기
+      const cookies = await loginSession.cookies.get({});
+      console.log(`🍪 쿠키 ${cookies.length}개 복사 시작...`);
+
+      // characterWin에 쿠키 설정
+      for (const cookie of cookies) {
+        await charSession.cookies.set({
+          url: `http://localhost:8000`,
+          name: cookie.name,
+          value: cookie.value,
+          path: cookie.path || '/',
+          httpOnly: cookie.httpOnly || false,
+          secure: cookie.secure || false,
+          sameSite: cookie.sameSite || 'unspecified'
+        });
+      }
+
+      console.log('✅ 쿠키 복사 완료');
+    } catch (error) {
+      console.error('❌ 쿠키 복사 실패:', error);
+    }
+  }
+
+  // 쿠키 복사 후 URL 로드
+  if (characterWin && !characterWin.isDestroyed()) {
+    characterWin.loadURL('http://localhost:8000/main');
+    console.log('📦 캐릭터 로딩 중...');
+  }
+
+  // 쿠키 복사 후 로그인 창 닫기
   if (loginWin && !loginWin.isDestroyed()) {
     loginWin.close();
   }
@@ -259,7 +343,6 @@ ipcMain.on('va:request-quit', () => {
 
 // 브레인스토밍 팝업 열기
 let brainstormingWin = null;
-
 
 function openBrainstormingPopup() {
   console.log('🧠 브레인스토밍 팝업 생성');
@@ -355,8 +438,103 @@ function openBrainstormingPopup() {
 
     brainstormingWin = null;
   });
+}
 
-  console.log('✅ 브레인스토밍 팝업 생성 완료');
+// 보고서 팝업 열기
+let reportWin = null;
+
+async function openReportPopup() {
+  console.log('📝 보고서 팝업 생성');
+
+  // 이미 팝업이 열려있으면 포커스만
+  if (reportWin && !reportWin.isDestroyed()) {
+    reportWin.focus();
+    return;
+  }
+
+  // 보고서 팝업 창 생성 (하지만 아직 URL 로드하지 않음)
+  reportWin = new BrowserWindow({
+    width: 700,
+    height: 732, // 700 + 32 (타이틀바)
+    center: true,
+    resizable: true,
+    frame: false, // 툴바 제거
+    backgroundColor: '#f5f5f5', // HTML 배경색과 일치
+    transparent: false, // 투명도 비활성화 (둥근 모서리와 충돌 방지)
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: true,
+      partition: 'persist:main' // 메인 창과 같은 세션 공유
+    },
+    parent: characterWin, // 부모 창 설정
+    modal: false,
+    alwaysOnTop: true, // 항상 위에 표시
+    titleBarStyle: 'customButtonsOnHover', // macOS 버튼 완전 숨김
+    trafficLightPosition: { x: -100, y: -100 } // 버튼을 화면 밖으로
+  });
+
+  // 🍪 쿠키 복사: characterWin → reportWin (URL 로드 전에 실행!)
+  if (characterWin && !characterWin.isDestroyed() && reportWin && !reportWin.isDestroyed()) {
+    try {
+      const charSession = characterWin.webContents.session;
+      const reportSession = reportWin.webContents.session;
+
+      // characterWin의 모든 쿠키 가져오기
+      const cookies = await charSession.cookies.get({});
+      console.log(`🍪 [Report] 쿠키 ${cookies.length}개 복사 시작...`);
+
+      // reportWin에 쿠키 설정
+      for (const cookie of cookies) {
+        await reportSession.cookies.set({
+          url: `http://localhost:8000`,
+          name: cookie.name,
+          value: cookie.value,
+          path: cookie.path || '/',
+          httpOnly: cookie.httpOnly || false,
+          secure: cookie.secure || false,
+          sameSite: cookie.sameSite || 'unspecified'
+        });
+      }
+
+      console.log('✅ [Report] 쿠키 복사 완료');
+    } catch (error) {
+      console.error('❌ [Report] 쿠키 복사 실패:', error);
+    }
+  }
+
+  // 쿠키 복사 후 보고서 전용 페이지 로드 (HTTP 프로토콜 사용)
+  if (reportWin && !reportWin.isDestroyed()) {
+    reportWin.loadURL('http://localhost:8000/report');
+  }
+
+  // 페이지 로드 완료
+  reportWin.webContents.on('did-finish-load', () => {
+    console.log('📝 보고서 팝업 로드 완료');
+  });
+
+  // 개발자 도구 (F12)
+  reportWin.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      if (reportWin.webContents.isDevToolsOpened()) {
+        reportWin.webContents.closeDevTools();
+      } else {
+        reportWin.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+  });
+
+  reportWin.on('closed', () => {
+    console.log('📝 보고서 팝업 닫힘');
+
+    // 챗봇에 종료 이벤트 전송
+    if (characterWin && !characterWin.isDestroyed()) {
+      characterWin.webContents.send('report-closed', {
+        // 단순히 종료만 알림
+      });
+    }
+
+    reportWin = null;
+  });
 }
 
 // IPC: 챗봇에서 브레인스토밍 팝업 열기
@@ -376,6 +554,49 @@ ipcMain.on('toggle-brainstorming-maximize', () => {
   }
 });
 
+// 보고서 팝업 열기 요청
+ipcMain.on('open-report-popup', () => {
+  console.log('📨 보고서 팝업 요청 받음');
+  openReportPopup();
+});
+
+// 보고서 팝업에서 메인 창의 쿠키 가져오기 요청
+ipcMain.handle('get-main-cookies', async () => {
+  console.log('🍪 메인 창 쿠키 요청 받음');
+
+  if (characterWin && !characterWin.isDestroyed()) {
+    try {
+      const mainSession = characterWin.webContents.session;
+      const cookies = await mainSession.cookies.get({ url: 'http://localhost:8000' });
+      console.log(`🍪 메인 창 쿠키 ${cookies.length}개 반환`);
+
+      // 쿠키를 객체로 변환
+      const cookieObj = {};
+      cookies.forEach(cookie => {
+        cookieObj[cookie.name] = cookie.value;
+      });
+
+      return cookieObj;
+    } catch (error) {
+      console.error('❌ 쿠키 가져오기 실패:', error);
+      return {};
+    }
+  }
+
+  return {};
+});
+
+// 보고서 창 최대화 토글
+ipcMain.on('toggle-report-maximize', () => {
+  if (reportWin && !reportWin.isDestroyed()) {
+    if (reportWin.isMaximized()) {
+      reportWin.unmaximize();
+    } else {
+      reportWin.maximize();
+    }
+  }
+});
+
 // 브레인스토밍 창 닫기 (렌더러에서 요청)
 ipcMain.on('close-brainstorming-window', () => {
   console.log('🧠 브레인스토밍 창 닫기 요청 (세션 삭제 완료)');
@@ -390,13 +611,13 @@ let notionOAuthWin = null;
 
 ipcMain.on('open-notion-oauth', async (event, authUrl) => {
   console.log('🔗 Notion OAuth 창 열기:', authUrl);
-  
+
   // 이미 창이 열려있으면 포커스
   if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
     notionOAuthWin.focus();
     return;
   }
-  
+
   // OAuth 전용 창 생성 (세션 공유)
   notionOAuthWin = new BrowserWindow({
     width: 800,
@@ -408,7 +629,7 @@ ipcMain.on('open-notion-oauth', async (event, authUrl) => {
       // partition 제거 - 기본 세션 사용하여 로그인 상태 유지
     }
   });
-  
+
   // Notion 쿠키만 삭제 (로그인 세션은 유지)
   const { session } = require('electron');
   try {
@@ -422,52 +643,52 @@ ipcMain.on('open-notion-oauth', async (event, authUrl) => {
   } catch (error) {
     console.error('⚠️ Notion 쿠키 삭제 실패:', error);
   }
-  
+
   // OAuth URL 로드
   notionOAuthWin.loadURL(authUrl);
-  
+
   // URL 변경 감지 (콜백 URL로 리디렉션되면 자동으로 처리)
   notionOAuthWin.webContents.on('will-redirect', (event, url) => {
     console.log('🔄 리디렉션 감지:', url);
-    
+
     // 콜백 URL인지 확인
     if (url.startsWith('http://localhost:8000/api/v1/auth/notion/callback')) {
       console.log('✅ Notion OAuth 콜백 감지 - 창 닫기');
-      
+
       // 콜백 URL을 메인 창에서 처리하도록 로드
       if (loginWin && !loginWin.isDestroyed()) {
         // 콜백을 처리하고 /landing으로 리디렉션될 것임
         loginWin.loadURL(url);
       }
-      
+
       // OAuth 창 즉시 닫기
       if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
         notionOAuthWin.close();
       }
     }
   });
-  
+
   // did-navigate 이벤트도 감지 (일부 경우 will-redirect가 안 잡힐 수 있음)
   notionOAuthWin.webContents.on('did-navigate', (event, url) => {
     console.log('🔄 네비게이션 감지:', url);
-    
+
     // 콜백 URL이거나 /landing으로 리디렉션되면 창 닫기
-    if (url.startsWith('http://localhost:8000/api/v1/auth/notion/callback') || 
-        url.includes('/landing?notion_connected=true')) {
+    if (url.startsWith('http://localhost:8000/api/v1/auth/notion/callback') ||
+      url.includes('/landing?notion_connected=true')) {
       console.log('✅ Notion OAuth 완료 - 창 닫기');
-      
+
       // 메인 창에 알림
       if (loginWin && !loginWin.isDestroyed()) {
         loginWin.loadURL('http://localhost:8000/landing?notion_connected=true');
       }
-      
+
       // OAuth 창 즉시 닫기
       if (notionOAuthWin && !notionOAuthWin.isDestroyed()) {
         notionOAuthWin.close();
       }
     }
   });
-  
+
   // 창 닫힘 이벤트
   notionOAuthWin.on('closed', () => {
     console.log('🔗 Notion OAuth 창 닫힘');
