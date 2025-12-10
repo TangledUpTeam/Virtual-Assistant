@@ -126,6 +126,9 @@ async def send_message(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"❌ [Chatbot API] 메시지 처리 중 에러 발생:")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"메시지 처리 실패: {str(e)}")
 
 

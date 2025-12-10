@@ -44,7 +44,7 @@ class EmailAgent(BaseAgent):
             api_key=settings.OPENAI_API_KEY
         )
 
-    async def process(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def process(self, query: Optional[str], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """이메일 작업 처리 메인 파이프라인"""
         print(f"\n📨 [Email Agent] 처리 시작: {query}")
         try:
@@ -56,10 +56,17 @@ class EmailAgent(BaseAgent):
                 print(f"❌ [Email Agent] User ID 없음")
                 return {"success": False, "answer": "로그인이 필요한 기능입니다."}
 
-            # 2. 의도 및 정보 분석
-            print(f"   - LLM 분석 시작...")
-            action = await self._analyze_request(query, context)
-            print(f"✅ [Email Agent] 분석 완료: {action}")
+            # 쿼리 정규화 및 기본값 적용
+            normalized_query = (query or "").strip()
+            if not normalized_query:
+                # 검색어가 없을 때는 기본값으로 안 읽은 메일 조회
+                print("   - 검색어 없음 → 기본 검색어 'is:unread' 적용")
+                action = EmailAction(intent="search", search_query="is:unread")
+            else:
+                # 2. 의도 및 정보 분석
+                print(f"   - LLM 분석 시작...")
+                action = await self._analyze_request(normalized_query, context)
+                print(f"✅ [Email Agent] 분석 완료: {action}")
             
             # 3. 작업 수행
             if action.intent == "send":

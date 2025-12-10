@@ -36,6 +36,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=False,  # Windows에서 multiprocessing 문제 방지
-        log_config=None,
+        #log_config=None,
         use_colors=False
     )

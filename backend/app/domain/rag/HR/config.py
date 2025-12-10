@@ -107,12 +107,12 @@ class RAGConfig:
     
     # 하이브리드 검색 설정 (벡터 + BM25)
     USE_HYBRID_SEARCH: bool = True
-    VECTOR_WEIGHT: float = 0.7  # 벡터 검색 가중치 (70%)
-    BM25_WEIGHT: float = 0.3    # BM25 검색 가중치 (30%)
+    VECTOR_WEIGHT: float = 0.8  # 벡터 검색 가중치 
+    BM25_WEIGHT: float = 0.2    # BM25 검색 가중치 
     
     # 검색 설정
-    RAG_TOP_K: int = 3
-    RAG_MAX_TOP_K: int = 4
+    RAG_TOP_K: int = 5
+    RAG_MAX_TOP_K: int = 8
     RAG_MIN_SIMILARITY_THRESHOLD: float = 0.25  # 최소 threshold
     RAG_MAX_SIMILARITY_THRESHOLD: float = 0.375  # 최대 threshold (min의 1.5배)
     # 동적 threshold는 항상 활성화: 검색 결과에 따라 min~max 범위 내에서 자동 조정

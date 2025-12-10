@@ -273,8 +273,8 @@ async function handleSendMessage() {
     // 키워드 기반 하드코딩 제거: 백엔드 인텐트 분류에 맡김
     const result = await sendMultiAgentMessage(text);
 
-    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
-    const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
+    // HR(RAG) 및 Notion 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool' || result.agent_used === 'notion_agent');
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
