@@ -437,23 +437,8 @@ class SupervisorAgent:
                         "action": "process_query",
                         "result": "success"
                     })
-            # 사용된 도구 추출 및 intent 추출
-            intermediate_steps = []
-            detected_intent = None
-            for msg in messages:
-                if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                    for tool_call in msg.tool_calls:
-                        tool_name = tool_call.get('name', 'unknown')
-                        agent_used = tool_name.replace('_tool', '')
-                        
-                        # 디버깅 로그 추가
-                        print(f"[SUPERVISOR DEBUG] Tool called: {tool_name} for query: {request.query[:50]}...")
-                        
-                        intermediate_steps.append({
-                            "agent": agent_used,
-                            "action": "process_query",
-                            "result": "success"
-                        })
+                    
+            detected_intent = None  # 기본값 초기화
             
             # report_tool이 사용된 경우, answer에서 intent 마커 확인
             if agent_used == "report" and answer and answer.startswith("__INTENT_LOOKUP__"):
