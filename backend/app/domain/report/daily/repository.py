@@ -16,6 +16,25 @@ class DailyReportRepository:
     """일일보고서 Repository"""
     
     @staticmethod
+    def get_by_id(
+        db: Session,
+        report_id
+    ) -> Optional[DailyReport]:
+        """
+        ID로 보고서 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            report_id: 보고서 UUID
+            
+        Returns:
+            DailyReport 또는 None
+        """
+        return db.query(DailyReport).filter(
+            DailyReport.id == report_id
+        ).first()
+    
+    @staticmethod
     def get_by_owner_and_date(
         db: Session,
         owner: str,
@@ -88,6 +107,29 @@ class DailyReportRepository:
         ).order_by(
             DailyReport.date.asc()
         ).all()
+    
+    @staticmethod
+    def list_by_owner_and_period_range(
+        db: Session,
+        owner: str,
+        period_start: date,
+        period_end: date
+    ) -> List[DailyReport]:
+        """
+        작성자와 기간 범위로 보고서 조회 (list_by_owner_and_date_range의 별칭)
+        
+        Args:
+            db: 데이터베이스 세션
+            owner: 작성자
+            period_start: 시작 날짜
+            period_end: 종료 날짜
+            
+        Returns:
+            DailyReport 리스트 (날짜순 정렬)
+        """
+        return DailyReportRepository.list_by_owner_and_date_range(
+            db, owner, period_start, period_end
+        )
     
     @staticmethod
     def count_by_owner(db: Session, owner: str) -> int:

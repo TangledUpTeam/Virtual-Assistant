@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>일일 업무 보고서</title>
+    <title>주간 업무 보고서</title>
     <style>
         * {
             margin: 0;
@@ -47,7 +47,7 @@
         .header-table .label {
             background-color: #e8f4ff;
             font-weight: bold;
-            width: 100px;
+            width: 120px;
             text-align: center;
         }
 
@@ -78,6 +78,30 @@
             background-color: white;
         }
 
+        .important-list {
+            list-style: decimal;
+            padding-left: 25px;
+        }
+
+        .important-list li {
+            margin-bottom: 8px;
+            line-height: 1.8;
+            padding: 5px;
+        }
+
+        .important-list input {
+            width: 100%;
+            border: none;
+            padding: 5px;
+            font-size: 14px;
+            background: transparent;
+        }
+
+        .important-list input:focus {
+            background-color: #f8f9fa;
+            outline: none;
+        }
+
         .work-table {
             width: 100%;
             border-collapse: collapse;
@@ -97,12 +121,12 @@
             border: 1px solid #ddd;
         }
 
-        .work-table .task-name-cell {
-            width: 25%;
+        .work-table .category-cell {
+            width: 20%;
         }
 
-        .work-table .detail-cell {
-            width: 60%;
+        .work-table .content-cell {
+            width: 65%;
         }
 
         .work-table .note-cell {
@@ -129,22 +153,6 @@
         .work-table textarea:focus {
             background-color: #f8f9fa;
             outline: none;
-        }
-
-        .text-area {
-            width: 100%;
-            min-height: 100px;
-            padding: 15px;
-            border: none;
-            resize: vertical;
-            font-family: inherit;
-            font-size: 14px;
-            line-height: 1.8;
-        }
-
-        .text-area:focus {
-            outline: none;
-            background-color: #f8f9fa;
         }
 
         .add-row-btn {
@@ -207,81 +215,56 @@
     <button class="pdf-save-button" id="downloadPdfBtn">PDF 저장하기</button>
     
     <div class="container" id="report-container">
-        <div class="report-title">일일 업무 보고서</div>
+        <div class="report-title">주간 업무 보고서</div>
 
         <table class="header-table">
             <tr>
-                <td class="label">일자</td>
-                <td><input type="date" id="date" value="{{ header.작성일자 }}"></td>
-                <td class="label">요일</td>
-                <td><input type="text" id="dayOfWeek" readonly style="background-color: #f8f9fa;"></td>
-                <td class="label">작성자</td>
-                <td><input type="text" id="author" value="{{ header.성명 }}" class="author-input"></td>
+                <td class="label">작성일자</td>
+                <td><input type="date" id="date" value="2025-11-14"></td>
+                <td class="label">성명</td>
+                <td><input type="text" id="author" value="김준경"></td>
             </tr>
         </table>
 
         <div class="section">
-            <div class="section-title">업무 내용</div>
-            <table class="work-table">
-                <thead>
-                    <tr>
-                        <th>업무명</th>
-                        <th>상세내용</th>
-                    </tr>
-                </thead>
-                <tbody id="work-tbody">
-                    {% for task in detail_tasks %}
-                    <tr>
-                        <td class="task-name-cell">
-                            <input type="text" value="{{ task.category }}" class="task-category-input">
-                        </td>
-                        <td class="detail-cell">
-                            <textarea class="task-detail-input">{{ task.text }}</textarea>
-                        </td>
-                        <td class="note-cell" style="display: none;">
-                            <input type="hidden" value="{{ task.note }}" class="task-note-input">
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% if detail_tasks|length == 0 %}
-                    <tr>
-                        <td class="task-name-cell">
-                            <input type="text" placeholder="업무명 입력" readonly>
-                        </td>
-                        <td class="detail-cell">
-                            <textarea placeholder="상세내용 입력" readonly></textarea>
-                        </td>
-                        <td class="note-cell">
-                            <input type="text" placeholder="비고" readonly>
-                        </td>
-                    </tr>
-                    {% endif %}
-                </tbody>
-            </table>
+            <div class="section-title">주간 중요 업무</div>
+            <div class="section-content">
+                <ol class="important-list">
+                    <li><input type="text" value="고객 상담 자료 정리" readonly></li>
+                    <li><input type="text" value="상담 기반 보장안 구성" readonly></li>
+                    <li><input type="text" value="포트폴리오 진단 리포트 작성" readonly></li>
+                </ol>
+            </div>
         </div>
 
         <div class="section">
-            <div class="section-title">특이사항</div>
-            <div class="section-content">
-                <textarea class="text-area notes-input">{{ notes }}</textarea>
-            </div>
+            <div class="section-title">주간 세부 업무</div>
+            <table class="work-table">
+                <thead>
+                    <tr>
+                        <th>분류</th>
+                        <th>업무내용</th>
+                        <th>비고</th>
+                    </tr>
+                </thead>
+                <tbody id="work-tbody">
+                    <tr>
+                        <td class="category-cell">
+                            <input type="text" value="" readonly>
+                        </td>
+                        <td class="content-cell">
+                            <textarea readonly></textarea>
+                        </td>
+                        <td class="note-cell">
+                            <input type="text" value="" readonly>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
     <script>
-        // 날짜 변경 시 요일 자동 계산
-        document.getElementById('date').addEventListener('change', function() {
-            const date = new Date(this.value);
-            const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-            document.getElementById('dayOfWeek').value = days[date.getDay()];
-        });
-
-        // 초기 요일 설정
-        const dateInput = document.getElementById('date');
-        if (dateInput.value) {
-            dateInput.dispatchEvent(new Event('change'));
-        }
-
         // PDF 다운로드
         document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
             const button = document.getElementById('downloadPdfBtn');
@@ -291,21 +274,18 @@
             button.textContent = 'PDF 생성 중...';
             
             try {
-                const reportId = "{{ report_id }}" || null;
-                const dateInput = document.getElementById('date');
-                const reportDate = dateInput ? dateInput.value : null;
+                const reportId = "08b2b64a-ff7f-49ca-8d77-5ce815e2ff86" || null;
+                const reportDate = document.getElementById('date').value;
                 
-                // report_id가 없거나 유효하지 않으면 날짜 사용
-                let url = 'http://localhost:8000/api/v1/reports/daily/pdf?';
-                if (reportId && reportId !== 'null' && reportId !== '' && reportId.trim() !== '') {
-                    url += `report_id=${encodeURIComponent(reportId)}`;
+                let url = '/api/v1/reports/weekly/pdf?';
+                if (reportId && reportId !== 'null' && reportId !== '') {
+                    url += `report_id=${reportId}`;
                 } else if (reportDate) {
-                    url += `report_date=${encodeURIComponent(reportDate)}`;
+                    url += `report_date=${reportDate}`;
                 } else {
                     throw new Error('보고서 ID 또는 날짜가 필요합니다.');
                 }
                 
-                console.log('[PDF] 요청 URL:', url);
                 const response = await fetch(url);
                 
                 if (!response.ok) {
@@ -316,7 +296,7 @@
                 const url_obj = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url_obj;
-                a.download = `일일업무보고서_${reportDate || 'unknown'}.pdf`;
+                a.download = `주간업무보고서_${reportDate || 'unknown'}.pdf`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);

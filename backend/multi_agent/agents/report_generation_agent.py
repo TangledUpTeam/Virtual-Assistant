@@ -73,6 +73,13 @@ class ReportGenerationAgent(ReportBaseAgent):
         if context and context.get("prompt_registry"):
             self.configure_prompts(context.get("prompt_registry"))
 
+        # 일일보고서 작성 요청 감지
+        query_lower = query.lower().strip()
+        if ("일일" in query_lower or "daily" in query_lower) and \
+           ("보고서" in query_lower or "report" in query_lower) and \
+           ("작성" in query_lower or "입력" in query_lower or "write" in query_lower):
+            return "일일보고서 입력 화면을 표시합니다. 업무를 입력하고 완료 버튼을 눌러주세요."
+
         # 일반적인 쿼리는 간단한 응답만 반환
         # 실제 작업은 직접 호출 메서드 사용
         return "보고서 작성을 도와드리겠습니다. 구체적인 작업을 요청해주세요."
@@ -361,10 +368,15 @@ class ReportGenerationAgent(ReportBaseAgent):
         
         target_date = date(year, month, 1)
         
+        # KPI 계산 (카테고리 기반)
+        from app.domain.report.monthly.kpi_calculator import calculate_monthly_kpi
+        kpi_data = calculate_monthly_kpi(db=db, year=year, month=month)
+        
         report = generate_monthly_report(
             db=db,
             owner=owner,
             target_date=target_date,
+            kpi_data=kpi_data,  # KPI 데이터 전달
             display_name=display_name,
             prompt_registry=self.prompt_registry
         )

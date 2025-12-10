@@ -15,6 +15,52 @@ class MonthlyReportRepository:
     """월간보고서 Repository"""
     
     @staticmethod
+    def get_by_id(
+        db: Session,
+        report_id
+    ) -> Optional[MonthlyReport]:
+        """
+        ID로 보고서 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            report_id: 보고서 UUID
+            
+        Returns:
+            MonthlyReport 또는 None
+        """
+        return db.query(MonthlyReport).filter(
+            MonthlyReport.id == report_id
+        ).first()
+    
+    @staticmethod
+    def list_by_owner_and_period_range(
+        db: Session,
+        owner: str,
+        period_start: date,
+        period_end: date
+    ) -> List[MonthlyReport]:
+        """
+        작성자와 기간 범위로 월간보고서 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            owner: 작성자
+            period_start: 시작일
+            period_end: 종료일
+            
+        Returns:
+            MonthlyReport 리스트 (기간순 정렬)
+        """
+        return db.query(MonthlyReport).filter(
+            MonthlyReport.owner == owner,
+            MonthlyReport.period_start >= period_start,
+            MonthlyReport.period_end <= period_end
+        ).order_by(
+            MonthlyReport.period_start.asc()
+        ).all()
+    
+    @staticmethod
     def get_by_owner_and_period(
         db: Session,
         owner: str,
@@ -79,6 +125,33 @@ class MonthlyReportRepository:
         return db.query(MonthlyReport).filter(
             MonthlyReport.owner == owner
         ).count()
+    
+    @staticmethod
+    def list_by_owner_and_period_range(
+        db: Session,
+        owner: str,
+        period_start: date,
+        period_end: date
+    ) -> List[MonthlyReport]:
+        """
+        작성자와 기간 범위로 월간보고서 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            owner: 작성자
+            period_start: 시작일
+            period_end: 종료일
+            
+        Returns:
+            MonthlyReport 리스트 (기간순 정렬)
+        """
+        return db.query(MonthlyReport).filter(
+            MonthlyReport.owner == owner,
+            MonthlyReport.period_start >= period_start,
+            MonthlyReport.period_end <= period_end
+        ).order_by(
+            MonthlyReport.period_start.asc()
+        ).all()
     
     @staticmethod
     def create(

@@ -122,62 +122,75 @@ def generate_weekly_report(
         "성명": actual_display_name  # HTML 보고서에 표시할 이름
     }
     
-    # weekday_tasks의 날짜 키를 요일 키로 변환
+    # weekday_tasks 처리: 새로운 구조 (요일명 키 + tasks/notes 객체) 또는 기존 구조 (날짜 키 + 리스트)
     weekday_tasks_raw = weekly_data.get("weekday_tasks", {})
     weekday_tasks_converted = {}
     
     # 요일 한글 이름 매핑 (0=월요일, 4=금요일)
     weekday_names = ['월요일', '화요일', '수요일', '목요일', '금요일']
+    weekday_short_names = ['월', '화', '수', '목', '금']
     
-    # 날짜별로 정렬하여 요일로 매핑
-    current_date = monday
-    missing_dates = []
-    for day_idx in range(5):
-        weekday_name = weekday_names[day_idx]
-        date_str = current_date.isoformat()
-        
-        # 날짜 키로 업무 찾기
-        if date_str in weekday_tasks_raw:
-            tasks = weekday_tasks_raw[date_str]
-            weekday_tasks_converted[weekday_name] = tasks
-            print(f"[DEBUG] {weekday_name} ({date_str}) 업무 {len(tasks)}개 변환 완료")
-        else:
-            # 날짜 키가 없으면 빈 리스트
-            weekday_tasks_converted[weekday_name] = []
-            missing_dates.append(date_str)
-            print(f"[WARNING] {weekday_name} ({date_str}) 업무 데이터 없음 - LLM이 해당 날짜를 누락함")
-        
-        current_date += timedelta(days=1)
+    # 새로운 구조인지 확인 (요일명 키 사용)
+    is_new_structure = False
+    if weekday_tasks_raw:
+        first_key = list(weekday_tasks_raw.keys())[0]
+        if first_key in weekday_short_names:
+            is_new_structure = True
     
-    if missing_dates:
-        print(f"[WARNING] weekday_tasks_raw에 누락된 날짜: {missing_dates}")
-        print(f"[DEBUG] weekday_tasks_raw에 포함된 날짜 키: {list(weekday_tasks_raw.keys())}")
+    if is_new_structure:
+        # 새로운 구조: { "월": { "tasks": [...], "notes": "..." }, ... }
+        print(f"[DEBUG] 새로운 구조 감지: 요일명 키 사용")
+        for day_idx, short_name in enumerate(weekday_short_names):
+            weekday_name = weekday_names[day_idx]
+            if short_name in weekday_tasks_raw:
+                day_data = weekday_tasks_raw[short_name]
+                if isinstance(day_data, dict):
+                    # tasks와 notes 추출
+                    tasks = day_data.get("tasks", [])
+                    notes = day_data.get("notes", "")
+                    weekday_tasks_converted[weekday_name] = tasks
+                    print(f"[DEBUG] {weekday_name} ({short_name}) 업무 {len(tasks)}개, notes: {notes}")
+                else:
+                    # dict가 아니면 리스트로 처리 (하위 호환)
+                    weekday_tasks_converted[weekday_name] = day_data if isinstance(day_data, list) else []
+            else:
+                weekday_tasks_converted[weekday_name] = []
+                print(f"[WARNING] {weekday_name} ({short_name}) 업무 데이터 없음")
+    else:
+        # 기존 구조: { "YYYY-MM-DD": [...], ... } 또는 { "월요일": [...], ... }
+        print(f"[DEBUG] 기존 구조 감지: 날짜 또는 요일명 키 사용")
+        current_date = monday
+        for day_idx in range(5):
+            weekday_name = weekday_names[day_idx]
+            date_str = current_date.isoformat()
+            
+            # 날짜 키로 업무 찾기
+            if date_str in weekday_tasks_raw:
+                tasks = weekday_tasks_raw[date_str]
+                weekday_tasks_converted[weekday_name] = tasks if isinstance(tasks, list) else []
+                print(f"[DEBUG] {weekday_name} ({date_str}) 업무 {len(weekday_tasks_converted[weekday_name])}개 변환 완료")
+            elif weekday_name in weekday_tasks_raw:
+                # 요일명 키로도 확인 (하위 호환)
+                tasks = weekday_tasks_raw[weekday_name]
+                weekday_tasks_converted[weekday_name] = tasks if isinstance(tasks, list) else []
+                print(f"[DEBUG] {weekday_name} (요일명 키) 업무 {len(weekday_tasks_converted[weekday_name])}개 변환 완료")
+            else:
+                weekday_tasks_converted[weekday_name] = []
+                print(f"[WARNING] {weekday_name} ({date_str}) 업무 데이터 없음")
+            
+            current_date += timedelta(days=1)
     
     print(f"[DEBUG] 최종 weekday_tasks_converted: {list(weekday_tasks_converted.keys())}")
     
-    # 주간업무목표를 한 줄로 제한 (각 항목의 첫 줄만 사용)
-    weekly_goals_raw = weekly_data.get("weekly_goals", [])
-    weekly_goals = []
-    for goal in weekly_goals_raw:
-        if isinstance(goal, str):
-            # 첫 줄만 추출 (줄바꿈 제거)
-            first_line = goal.split('\n')[0].strip()
-            if first_line:
-                weekly_goals.append(first_line)
-        else:
-            weekly_goals.append(str(goal))
+    # weekly_goals는 새로운 구조에서 제거되었으므로 빈 리스트로 처리
+    weekly_goals = weekly_data.get("weekly_goals", [])
+    if not weekly_goals:
+        weekly_goals = []
     
-    # 메모 후처리: "메모:" 접두어 제거 및 줄바꿈 보존
-    notes_raw = weekly_data.get("notes", "")
-    if isinstance(notes_raw, str):
-        # "메모:" 접두어 제거 (대소문자 구분 없이)
-        notes_cleaned = notes_raw
-        if notes_cleaned.startswith("메모:"):
-            notes_cleaned = notes_cleaned[3:].lstrip()  # "메모:" 제거 후 앞 공백 제거
-        # 여러 줄바꿈을 하나로 정규화하지 않고 원본 보존
-        notes = notes_cleaned
-    else:
-        notes = str(notes_raw) if notes_raw else ""
+    # notes는 새로운 구조에서 제거되었으므로 빈 문자열로 처리
+    notes = weekly_data.get("notes", "")
+    if not notes:
+        notes = ""
     
     canonical_weekly = CanonicalWeekly(
         header=header,

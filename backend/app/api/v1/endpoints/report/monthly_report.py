@@ -96,12 +96,17 @@ async def generate_monthly(
         html_url = None
         html_filename = None
         try:
+            # KPI 데이터 계산
+            from app.domain.report.monthly.kpi_calculator import calculate_monthly_kpi
+            kpi_data = calculate_monthly_kpi(db=db, year=request.year, month=request.month)
+            
             # HTML 보고서에 표시할 이름 전달
             html_path = render_report_html(
                 report_type="monthly",
                 data=report.model_dump(mode="json"),
                 output_filename=f"monthly_report_{resolved_owner}_{report.period_start}.html",
-                display_name=resolved_owner  # HTML 보고서에 표시할 이름
+                display_name=resolved_owner,  # HTML 보고서에 표시할 이름
+                kpi_data=kpi_data  # KPI 데이터 전달
             )
 
             html_filename = html_path.name
