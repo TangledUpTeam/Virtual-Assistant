@@ -5,16 +5,32 @@
 
 import { sendMultiAgentMessage, initChatbotService } from "./chatbotService.js";
 
-// 세션 스토리지에서 토큰 가져와서 챗봇 서비스 초기화
-const accessToken = sessionStorage.getItem("access_token");
-console.log("🔍 세션 스토리지 확인:", {
-  accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : "null",
-  sessionStorageKeys: Object.keys(sessionStorage),
+/**
+ * 쿠키에서 값 가져오기
+ */
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return null;
+}
+
+// 쿠키에서 토큰 가져와서 챗봇 서비스 초기화 (BrowserWindow 간 공유됨)
+console.log('🍪 [DEBUG] 전체 쿠키:', document.cookie);
+console.log('🍪 [DEBUG] 쿠키 길이:', document.cookie.length);
+
+const accessToken = getCookie('access_token');
+console.log('🍪 쿠키에서 토큰 확인:', {
+  accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : 'null'
 });
+
+// 모든 쿠키 이름 출력
+const allCookies = document.cookie.split(';').map(c => c.trim().split('=')[0]);
+console.log('🍪 [DEBUG] 사용 가능한 쿠키 이름들:', allCookies);
 
 if (accessToken) {
   initChatbotService(accessToken);
-  console.log("✅ 세션 스토리지에서 액세스 토큰 로드 완료");
+  console.log('✅ 쿠키에서 액세스 토큰 로드 완료');
 } else {
   console.warn(
     "⚠️ 액세스 토큰이 없습니다. 일부 기능(메일 전송 등)은 로그인이 필요합니다."
@@ -39,13 +55,13 @@ export function initChatPanel() {
     return;
   }
 
-  console.log("💬 채팅 패널 초기화 중...");
+  console.log('💬 채팅 패널 초기화 중...');
 
-  chatPanel = document.getElementById("chat-panel");
-  messagesContainer = document.getElementById("messages");
-  chatInput = document.getElementById("chat-input");
-  sendBtn = document.getElementById("send-btn");
-  userDisplayEl = document.getElementById("user-display");
+  chatPanel = document.getElementById('chat-panel');
+  messagesContainer = document.getElementById('messages');
+  chatInput = document.getElementById('chat-input');
+  sendBtn = document.getElementById('send-btn');
+  userDisplayEl = document.getElementById('user-display');
 
   // 사용자 표시 숨기기 (보고서 기능에서만 사용자 이름 필요)
   if (userDisplayEl) {
@@ -257,17 +273,14 @@ async function handleSendMessage() {
     // 키워드 기반 하드코딩 제거: 백엔드 인텐트 분류에 맡김
     const result = await sendMultiAgentMessage(text);
 
-    // HR(RAG) 및 Insurance 에이전트인 경우 마크다운 렌더링 적용
-    const isMarkdown =
-      result.agent_used === "rag" ||
-      result.agent_used === "rag_tool" ||
-      result.agent_used === "insurance_tool" ||
-      result.agent_used === "insurance";  // backend에서 _tool 제거하고 반환
+    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown = (result.agent_used === 'rag' || result.agent_used === 'rag_tool');
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
       console.log(`🤖 사용된 에이전트: ${result.agent_used}`);
     }
+
 
     // Intent 기준 UI 분기 (백엔드 응답 기반)
     const intent = result.intent;
@@ -328,6 +341,7 @@ async function handleSendMessage() {
       return;
     }
 
+
     // 브레인스토밍 에이전트가 사용되었으면
     if (
       result.agent_used === "brainstorming" ||
@@ -354,6 +368,7 @@ async function handleSendMessage() {
       return;
     }
 
+
     // 그 외 일반 에이전트
     console.log(`📝 일반 에이전트 응답 - Markdown: ${isMarkdown}, Agent: ${agent}`);
     addMessage("assistant", result.answer, isMarkdown);
@@ -372,17 +387,17 @@ async function handleSendMessage() {
 async function loadAndDisplayTaskCardsInChat() {
   try {
     // taskUI.js의 함수들을 동적으로 import
-    const { addTaskRecommendations } = await import("../report/taskUI.js");
-    const { getTodayPlan } = await import("../report/taskService.js");
+    const { addTaskRecommendations } = await import('../report/taskUI.js');
+    const { getTodayPlan } = await import('../report/taskService.js');
 
     const planResult = await getTodayPlan();
 
-    if (
-      planResult.type === "task_recommendations" &&
-      planResult.data.tasks &&
-      planResult.data.tasks.length > 0
-    ) {
-      addTaskRecommendations(planResult.data, addMessage, messagesContainer);
+    if (planResult.type === 'task_recommendations' && planResult.data.tasks && planResult.data.tasks.length > 0) {
+      addTaskRecommendations(
+        planResult.data,
+        addMessage,
+        messagesContainer
+      );
     } else {
       addMessage("assistant", "추천할 업무가 없습니다. 직접 작성해주세요! 😊");
     }
