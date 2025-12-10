@@ -261,7 +261,8 @@ async function handleSendMessage() {
     const isMarkdown =
       result.agent_used === "rag" ||
       result.agent_used === "rag_tool" ||
-      result.agent_used === "insurance_tool";
+      result.agent_used === "insurance_tool" ||
+      result.agent_used === "insurance";  // backend에서 _tool 제거하고 반환
 
     // 사용된 에이전트 로그
     if (result.agent_used) {
@@ -295,8 +296,9 @@ async function handleSendMessage() {
       // 마커가 없으면 보고서 도구 버튼 표시 (아래 조건문에서 처리)
     }
 
-    // 1. RAG(intent === 'lookup' 또는 'rag')면 → LLM 응답만 보여주고 종료
-    if (intent === "lookup" || intent === "rag") {
+    // 1. RAG(intent === 'lookup' 또는 'rag') 또는 insurance이면 → LLM 응답만 보여주고 종료
+    if (intent === "lookup" || intent === "rag" || agent === "insurance_tool" || agent === "insurance") {
+      console.log(`📝 Markdown 렌더링: ${isMarkdown}, Agent: ${agent}, Intent: ${intent}`);
       addMessage("assistant", answer, isMarkdown);
       return;
     }
@@ -353,6 +355,7 @@ async function handleSendMessage() {
     }
 
     // 그 외 일반 에이전트
+    console.log(`📝 일반 에이전트 응답 - Markdown: ${isMarkdown}, Agent: ${agent}`);
     addMessage("assistant", result.answer, isMarkdown);
   } catch (error) {
     console.error("❌ 채팅 오류:", error);
