@@ -145,7 +145,7 @@ def generate_monthly_report(
     # display_name 결정 (HTML 보고서용)
     actual_display_name = display_name or owner
     header = {
-        "월": f"{target_date.year}년 {target_date.month}월",
+        "월": month_str,  # YYYY-MM 형식 (예: "2025-11")
         "작성일자": last_day.isoformat(),
         "성명": actual_display_name  # HTML 보고서에 표시할 이름
     }
