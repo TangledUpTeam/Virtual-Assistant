@@ -97,6 +97,16 @@ A와 B는 적용 대상과 집행 방식이 다릅니다.
                 system_prompt=self.system_prompt
             )
             
+            # 디버깅: 마크다운 형식 확인
+            print(f"\n[INSURANCE GENERATOR] ===== 답변 생성 완료 =====")
+            print(f"[INSURANCE GENERATOR] 답변 길이: {len(answer)} 문자")
+            print(f"[INSURANCE GENERATOR] 답변 샘플 (첫 500자):\n{answer[:500]}")
+            print(f"[INSURANCE GENERATOR] 마크다운 요소 포함 여부:")
+            print(f"  - 번호 목록(1. 2. 3.): {'✅' if any(f'{i}.' in answer for i in range(1, 10)) else '❌'}")
+            print(f"  - 불릿(-): {'✅' if '- ' in answer else '❌'}")
+            print(f"  - 굵은 글씨(**): {'✅' if '**' in answer else '❌'}")
+            print(f"[INSURANCE GENERATOR] =====================================\n")
+            
             generation_time = (time.time() - start_time) * 1000  # ms
             
             # 신뢰도 점수 계산 (간단한 휴리스틱)
