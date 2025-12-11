@@ -201,6 +201,16 @@ async def report_page():
         return {"error": "Report page not found"}
 
 
+@app.get("/brainstorming-popup")
+async def brainstorming_popup_page():
+    """브레인스토밍 팝업 페이지 (일렉트론용)"""
+    brainstorming_page = BASE_DIR / "brainstorming-popup.html"
+    if brainstorming_page.exists():
+        return FileResponse(brainstorming_page)
+    else:
+        return {"error": "Brainstorming page not found"}
+
+
 if __name__ == "__main__":
     import uvicorn
     

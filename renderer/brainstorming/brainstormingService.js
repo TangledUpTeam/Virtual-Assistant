@@ -43,7 +43,7 @@ let isBsPanelVisible = false;
 let currentSessionId = null;
 
 // 현재 단계
-let currentStep = 'initial'; // initial, q1, q2, q3, ideas, complete
+let currentStep = 'initial'; // initial, q1, q2, q3, ideas, delete_confirm (save_confirm 제거 - 버튼으로 대체)
 
 // Q3 누적 키워드 저장
 let accumulatedKeywords = [];
@@ -53,6 +53,9 @@ let dynamicMessageElement = null;
 
 // Q3 생성 버튼 요소
 let generateButtonElement = null;
+
+// 생성된 아이디어 저장 (DB 저장용)
+let generatedIdeas = [];
 
 // DOM 요소 참조
 let bsPanel = null;
@@ -65,6 +68,22 @@ let bsSubmitBtn = null;
  */
 export function initBrainstormingPanel() {
   console.log('💡 브레인스토밍 패널 초기화 중...');
+  
+  // 🍪 쿠키 디버깅
+  console.log('🍪 [Brainstorming] 쿠키 확인 시작');
+  console.log('   전체 쿠키:', document.cookie);
+  console.log('   쿠키 길이:', document.cookie.length);
+  
+  const accessToken = getCookie('access_token');
+  const refreshToken = getCookie('refresh_token');
+  const user = getCookie('user');
+  const loggedIn = getCookie('logged_in');
+  
+  console.log('   access_token:', accessToken ? `${accessToken.substring(0, 20)}... (길이: ${accessToken.length})` : 'null');
+  console.log('   refresh_token:', refreshToken ? `${refreshToken.substring(0, 20)}...` : 'null');
+  console.log('   user:', user ? `${user.substring(0, 30)}...` : 'null');
+  console.log('   logged_in:', loggedIn);
+  console.log('🍪 [Brainstorming] 쿠키 확인 완료');
   
   bsPanel = document.getElementById('brainstorming-panel');
   bsContent = document.getElementById('bs-content');
@@ -111,8 +130,22 @@ function setupBsEventListeners() {
     }
   });
   
-  // 🔥 팝업 창에서는 Cmd+Shift+B 토글 비활성화 (메인 창에서만 사용)
-  // 팝업은 항상 보이는 상태이므로 토글 불필요
+  // 💾 저장된 아이디어 버튼
+  const toggleBtn = document.getElementById('toggle-saved-ideas-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleSavedIdeas);
+    
+    // 호버 효과
+    toggleBtn.addEventListener('mouseenter', () => {
+      toggleBtn.style.transform = 'scale(1.05)';
+      toggleBtn.style.background = '#5A7A6A';
+    });
+    
+    toggleBtn.addEventListener('mouseleave', () => {
+      toggleBtn.style.transform = 'scale(1)';
+      toggleBtn.style.background = '#6B9080';
+    });
+  }
 }
 
 /**
@@ -230,7 +263,7 @@ async function handleBsQ1(text) {
       addBsMessage('warmup', q);
     });
     
-    // 🔥 안내 메시지를 하나의 예쁜 박스로 표시
+    // 🔥 안내 메시지 + 시작 버튼을 하나의 예쁜 박스로 표시
     const instructionBox = document.createElement('div');
     instructionBox.style.cssText = `
       background: rgba(156, 175, 136, 0.08);
@@ -253,11 +286,62 @@ async function handleBsQ1(text) {
         예시) 단어, 단어, 문장 ⏎<br>
         예시) 단어 ⏎
       </div>
-      <div style="font-weight: 500; margin-top: 15px; color: #7A8C6F;">
-        아래 입력창에 아무거나 입력하면 시작됩니다.
-      </div>
     `;
     
+    // 🚀 시작하기 버튼 생성
+    const startButton = document.createElement('button');
+    startButton.textContent = '🚀 시작하기';
+    startButton.style.cssText = `
+      background: linear-gradient(135deg, #9CAF88 0%, #7A8C6F 100%);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(156, 175, 136, 0.3);
+    `;
+    
+    // 호버 효과
+    startButton.addEventListener('mouseenter', () => {
+      startButton.style.transform = 'translateY(-2px)';
+      startButton.style.boxShadow = '0 6px 20px rgba(156, 175, 136, 0.4)';
+    });
+    
+    startButton.addEventListener('mouseleave', () => {
+      startButton.style.transform = 'translateY(0)';
+      startButton.style.boxShadow = '0 4px 15px rgba(156, 175, 136, 0.3)';
+    });
+    
+    // 클릭 시 Q3로 진행
+    startButton.addEventListener('click', async () => {
+      startButton.disabled = true;
+      startButton.textContent = '⏳ 시작 중...';
+      
+      // Q3로 진행
+      const response = await fetch(`${API_BASE}/confirm/${currentSessionId}`, { method: 'POST' });
+      const data = await response.json();
+      
+      // 🔥 화면 클리어 후 Q3 표시
+      setTimeout(() => {
+        bsContent.innerHTML = '';
+        
+        // 🔥 동적 메시지 표시 영역 생성 (고정 타이틀 + 동적 메시지)
+        createDynamicMessageArea();
+        
+        // 초기 메시지 표시
+        updateDynamicMessage();
+      }, 500);
+      
+      // Q3 누적 키워드 초기화
+      accumulatedKeywords = [];
+      currentStep = 'q3';
+    });
+    
+    instructionBox.appendChild(startButton);
     bsContent.appendChild(instructionBox);
   }, 1000); // 1초 후 클리어
   
@@ -265,27 +349,11 @@ async function handleBsQ1(text) {
 }
 
 /**
- * Q2 처리 (아무 키나 누르면 Q3로)
+ * Q2 처리 (시작 버튼으로 대체됨 - 더 이상 사용 안 함)
  */
 async function handleBsQ2(text) {
-  // 아무 키나 입력되면 Q3로 진행
-  const response = await fetch(`${API_BASE}/confirm/${currentSessionId}`, { method: 'POST' });
-  const data = await response.json();
-  
-  // 🔥 화면 클리어 후 Q3 표시
-  setTimeout(() => {
-    bsContent.innerHTML = '';
-    
-    // 🔥 동적 메시지 표시 영역 생성 (고정 타이틀 + 동적 메시지)
-    createDynamicMessageArea();
-    
-    // 초기 메시지 표시
-    updateDynamicMessage();
-  }, 1000); // 1초 후 클리어
-  
-  // Q3 누적 키워드 초기화
-  accumulatedKeywords = [];
-  currentStep = 'q3';
+  // 시작 버튼이 Q3로 직접 진행하므로 이 함수는 호출되지 않음
+  console.log('⚠️ handleBsQ2는 더 이상 사용되지 않습니다.');
 }
 
 /**
@@ -588,6 +656,9 @@ async function generateIdeas() {
     const ideasData = await ideasResponse.json();
     console.log('🔍 받은 데이터:', ideasData);
     
+    // 🔥 생성된 아이디어 저장
+    generatedIdeas = ideasData.ideas || [];
+    
     // 🔥 로딩 스피너 제거 후 결과 표시
     bsContent.innerHTML = '';
     
@@ -612,15 +683,214 @@ async function generateIdeas() {
       addBsMessage('system', '⚠️ 아이디어 형식 오류. 콘솔을 확인하세요.');
     }
     
-    addBsMessage('system', '\n✅ 브레인스토밍이 완료되었습니다!');
-    addBsMessage('system', '종료하려면 아무 키나 누르세요. (세션이 자동으로 삭제됩니다)');
+    addBsMessage('system', '\n💾 이 아이디어를 저장하시겠습니까?');
+    
+    // 🔥 저장 버튼 2개 생성 (네/아니오)
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin: 20px 0;
+    `;
+    
+    // ✅ 네, 저장할게요 버튼
+    const saveYesBtn = document.createElement('button');
+    saveYesBtn.textContent = '✅ 네, 저장할게요';
+    saveYesBtn.style.cssText = `
+      background: linear-gradient(135deg, #9CAF88 0%, #7A8C6F 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(156, 175, 136, 0.3);
+    `;
+    
+    saveYesBtn.addEventListener('mouseenter', () => {
+      saveYesBtn.style.transform = 'translateY(-2px)';
+      saveYesBtn.style.boxShadow = '0 6px 20px rgba(156, 175, 136, 0.4)';
+    });
+    
+    saveYesBtn.addEventListener('mouseleave', () => {
+      saveYesBtn.style.transform = 'translateY(0)';
+      saveYesBtn.style.boxShadow = '0 4px 15px rgba(156, 175, 136, 0.3)';
+    });
+    
+    saveYesBtn.addEventListener('click', async () => {
+      saveYesBtn.disabled = true;
+      saveNoBtn.disabled = true;
+      saveYesBtn.textContent = '💾 저장 중...';
+      
+      // 저장 로직 실행
+      await handleSaveIdeas();
+    });
+    
+    // ❌ 아니요 버튼
+    const saveNoBtn = document.createElement('button');
+    saveNoBtn.textContent = '❌ 아니요, 저장 안 할게요';
+    saveNoBtn.style.cssText = `
+      background: linear-gradient(135deg, #e0e0e0 0%, #c0c0c0 100%);
+      color: #555;
+      border: none;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    `;
+    
+    saveNoBtn.addEventListener('mouseenter', () => {
+      saveNoBtn.style.transform = 'translateY(-2px)';
+      saveNoBtn.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.15)';
+    });
+    
+    saveNoBtn.addEventListener('mouseleave', () => {
+      saveNoBtn.style.transform = 'translateY(0)';
+      saveNoBtn.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1)';
+    });
+    
+    saveNoBtn.addEventListener('click', async () => {
+      saveYesBtn.disabled = true;
+      saveNoBtn.disabled = true;
+      saveNoBtn.textContent = '⏳ 종료 중...';
+      
+      // 저장하지 않고 종료
+      addBsMessage('system', '저장하지 않고 종료합니다.');
+      await deleteSessionAndClose();
+    });
+    
+    buttonContainer.appendChild(saveYesBtn);
+    buttonContainer.appendChild(saveNoBtn);
+    bsContent.appendChild(buttonContainer);
+    
+    // currentStep은 'save_confirm'으로 설정하지 않음 (버튼으로 처리)
+    
   } catch (error) {
     console.error('❌ 아이디어 생성 중 오류:', error);
     addBsMessage('system', `❌ 오류 발생: ${error.message}`);
     return;
   }
+}
+
+/**
+ * 💾 아이디어 저장 로직
+ */
+async function handleSaveIdeas() {
+  addBsMessage('system', '💾 아이디어를 저장하는 중...');
   
-  currentStep = 'delete_confirm';
+  try {
+    // 저장할 데이터 준비
+    if (!generatedIdeas || generatedIdeas.length === 0) {
+      addBsMessage('system', '❌ 저장할 아이디어가 없습니다.');
+      await deleteSessionAndClose();
+      return;
+    }
+    
+    // 모든 아이디어를 하나의 문서로 합치기
+    const ideaData = {
+      title: `브레인스토밍 결과 - ${new Date().toLocaleDateString()}`,
+      description: JSON.stringify({
+        ideas: generatedIdeas,
+        created_at: new Date().toISOString()
+      })
+    };
+    
+    // Authorization 헤더 없이 요청
+    // 백엔드가 쿠키에서 access_token을 자동으로 읽음
+    const response = await fetch('http://localhost:8000/api/v1/brainstorming/ideas', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',  // 쿠키 자동 전송
+      body: JSON.stringify(ideaData)
+    });
+    
+    if (response.status === 401) {
+      addBsMessage('system', '❌ 로그인이 필요합니다.');
+      await deleteSessionAndClose();
+      return;
+    }
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || '저장 실패');
+    }
+    
+    const savedData = await response.json();
+    addBsMessage('system', `✅ 아이디어가 저장되었습니다! (ID: ${savedData.id})`);
+    
+    // 🔄 저장된 아이디어 캐시 갱신
+    refreshSavedIdeasCache();
+    
+  } catch (error) {
+    console.error('❌ 저장 실패:', error);
+    addBsMessage('system', `❌ 저장 실패: ${error.message}`);
+  }
+  
+  // 저장 완료 후 세션 삭제 + 창 닫기
+  await deleteSessionAndClose();
+}
+
+/**
+ * 저장 확인 처리 (버튼으로 대체됨 - 더 이상 사용 안 함)
+ */
+async function handleBsSaveConfirm(text) {
+  // 저장 버튼이 직접 처리하므로 이 함수는 호출되지 않음
+  console.log('⚠️ handleBsSaveConfirm는 더 이상 사용되지 않습니다.');
+}
+
+/**
+ * 세션 삭제 후 창 닫기 (공통 함수)
+ */
+async function deleteSessionAndClose() {
+  addBsMessage('system', '🗑️ 세션을 삭제하는 중...');
+  
+  try {
+    const response = await fetch(`${API_BASE}/session/${currentSessionId}`, { 
+      method: 'DELETE' 
+    });
+    const data = await response.json();
+    
+    addBsMessage('system', `✅ ${data.message}`);
+    console.log('✅ 세션 삭제 완료:', currentSessionId);
+    
+    currentSessionId = null;
+    
+    // 1초 후 창 닫기
+    addBsMessage('system', '👋 잠시 후 창이 닫힙니다...');
+    
+    setTimeout(() => {
+      // Electron IPC로 창 닫기 요청
+      if (window.require) {
+        const { ipcRenderer } = window.require('electron');
+        ipcRenderer.send('close-brainstorming-window');
+      } else {
+        // 일반 브라우저에서는 알림만
+        alert('브레인스토밍이 완료되었습니다. 창을 닫아주세요.');
+      }
+    }, 1000);
+    
+  } catch (error) {
+    console.error('❌ 세션 삭제 실패:', error);
+    addBsMessage('system', '❌ 세션 삭제에 실패했습니다. 창을 직접 닫아주세요.');
+  }
+}
+
+/**
+ * 쿠키 가져오기 헬퍼 함수
+ */
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return null;
 }
 
 /**
@@ -687,4 +957,202 @@ function toggleBsPanel() {
     }, 300);
     console.log('🙈 브레인스토밍 패널 숨김');
   }
+}
+
+/**
+ * 💾 저장된 아이디어 토글
+ */
+let isSavedIdeasOpen = false;
+let savedIdeasCache = null; // 캐시
+
+async function toggleSavedIdeas() {
+  const listContainer = document.getElementById('saved-ideas-list');
+  const toggleBtn = document.getElementById('toggle-saved-ideas-btn');
+  
+  if (!listContainer || !toggleBtn) {
+    console.error('❌ 저장된 아이디어 요소를 찾을 수 없습니다.');
+    return;
+  }
+  
+  // 이미 열려 있으면 닫기
+  if (isSavedIdeasOpen) {
+    listContainer.style.display = 'none';
+    toggleBtn.textContent = '💾 저장된 아이디어 보기';
+    isSavedIdeasOpen = false;
+    return;
+  }
+  
+  // 닫혀 있으면 열기
+  toggleBtn.textContent = '⏳ 로딩 중...';
+  toggleBtn.disabled = true;
+  
+  try {
+    // 캐시가 없으면 API 호출
+    if (!savedIdeasCache) {
+      const response = await fetch('http://localhost:8000/api/v1/brainstorming/ideas', {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (response.status === 401) {
+        alert('❌ 로그인이 필요합니다.');
+        toggleBtn.textContent = '💾 저장된 아이디어 보기';
+        toggleBtn.disabled = false;
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error('아이디어 목록을 가져올 수 없습니다.');
+      }
+      
+      const data = await response.json();
+      savedIdeasCache = data.ideas || [];
+    }
+    
+    // 아이디어가 없으면
+    if (savedIdeasCache.length === 0) {
+      listContainer.innerHTML = `
+        <div style="padding: 30px; text-align: center; color: #999;">
+          저장된 아이디어가 없습니다.
+        </div>
+      `;
+    } else {
+      // 아이디어 목록 렌더링
+      renderSavedIdeas(savedIdeasCache);
+    }
+    
+    // 목록 표시
+    listContainer.style.display = 'block';
+    toggleBtn.textContent = '💾 저장된 아이디어 닫기';
+    isSavedIdeasOpen = true;
+    
+  } catch (error) {
+    console.error('❌ 저장된 아이디어 로드 실패:', error);
+    alert(`❌ 오류: ${error.message}`);
+    toggleBtn.textContent = '💾 저장된 아이디어 보기';
+  } finally {
+    toggleBtn.disabled = false;
+  }
+}
+
+/**
+ * 저장된 아이디어 목록 렌더링
+ */
+function renderSavedIdeas(ideas) {
+  const listContainer = document.getElementById('saved-ideas-list');
+  listContainer.innerHTML = '';
+  
+  ideas.forEach((idea, index) => {
+    // 아이디어 카드
+    const ideaCard = document.createElement('div');
+    ideaCard.style.cssText = `
+      padding: 15px 20px;
+      border-bottom: 1px solid #e0e0e0;
+      cursor: pointer;
+      transition: background 0.2s;
+    `;
+    
+    ideaCard.addEventListener('mouseenter', () => {
+      ideaCard.style.background = '#f8f9fa';
+    });
+    
+    ideaCard.addEventListener('mouseleave', () => {
+      ideaCard.style.background = 'white';
+    });
+    
+    // 제목
+    const title = document.createElement('div');
+    title.textContent = `📌 ${idea.title}`;
+    title.style.cssText = `
+      font-weight: 600;
+      font-size: 15px;
+      color: #2c3e50;
+      margin-bottom: 5px;
+    `;
+    
+    // 날짜
+    const date = document.createElement('div');
+    date.textContent = new Date(idea.created_at).toLocaleDateString('ko-KR');
+    date.style.cssText = `
+      font-size: 12px;
+      color: #999;
+    `;
+    
+    // 상세 내용 (접힘)
+    const detailDiv = document.createElement('div');
+    detailDiv.id = `idea-detail-${index}`;
+    detailDiv.style.cssText = `
+      display: none;
+      margin-top: 15px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      max-height: 400px;
+      overflow-y: auto;
+    `;
+    
+    // 내용 파싱
+    try {
+      const descData = JSON.parse(idea.description);
+      
+      if (descData.ideas && Array.isArray(descData.ideas)) {
+        descData.ideas.forEach((ideaItem, i) => {
+          const ideaBlock = document.createElement('div');
+          ideaBlock.style.cssText = 'margin-bottom: 20px;';
+          
+          const ideaTitle = document.createElement('h4');
+          ideaTitle.textContent = `💡 ${i + 1}. ${ideaItem.title || '제목 없음'}`;
+          ideaTitle.style.cssText = 'color: #9CAF88; margin-bottom: 10px; font-size: 14px;';
+          
+          const ideaDesc = document.createElement('p');
+          ideaDesc.textContent = ideaItem.description || '';
+          ideaDesc.style.cssText = 'margin-bottom: 10px; font-size: 13px; line-height: 1.6;';
+          
+          const ideaAnalysis = document.createElement('pre');
+          ideaAnalysis.textContent = ideaItem.analysis || '';
+          ideaAnalysis.style.cssText = `
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            font-family: inherit;
+            font-size: 12px;
+            line-height: 1.5;
+          `;
+          
+          ideaBlock.appendChild(ideaTitle);
+          ideaBlock.appendChild(ideaDesc);
+          if (ideaItem.analysis) {
+            ideaBlock.appendChild(ideaAnalysis);
+          }
+          detailDiv.appendChild(ideaBlock);
+        });
+      } else {
+        detailDiv.textContent = idea.description;
+      }
+    } catch {
+      detailDiv.textContent = idea.description;
+      detailDiv.style.whiteSpace = 'pre-wrap';
+      detailDiv.style.fontSize = '13px';
+    }
+    
+    // 클릭 시 토글
+    ideaCard.addEventListener('click', () => {
+      const isOpen = detailDiv.style.display === 'block';
+      detailDiv.style.display = isOpen ? 'none' : 'block';
+    });
+    
+    ideaCard.appendChild(title);
+    ideaCard.appendChild(date);
+    ideaCard.appendChild(detailDiv);
+    listContainer.appendChild(ideaCard);
+  });
+}
+
+/**
+ * 저장 후 캐시 갱신
+ */
+export function refreshSavedIdeasCache() {
+  savedIdeasCache = null;
+  console.log('🔄 저장된 아이디어 캐시 갱신');
 }
