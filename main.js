@@ -343,7 +343,7 @@ ipcMain.on('va:request-quit', () => {
 // 브레인스토밍 팝업 열기
 let brainstormingWin = null;
 
-function openBrainstormingPopup() {
+async function openBrainstormingPopup() {
   console.log('🧠 브레인스토밍 팝업 생성');
 
   // 이미 팝업이 열려있으면 포커스만
@@ -362,7 +362,8 @@ function openBrainstormingPopup() {
     backgroundColor: '#f5f5f5',
     webPreferences: {
       contextIsolation: false,
-      nodeIntegration: true
+      nodeIntegration: true,
+      partition: 'persist:main' // 세션 공유
     },
     parent: characterWin, // 부모 창 설정
     modal: false,
@@ -371,16 +372,29 @@ function openBrainstormingPopup() {
     trafficLightPosition: { x: -100, y: -100 } // 버튼을 화면 밖으로
   });
 
-  // 브레인스토밍 전용 페이지 로드
-  brainstormingWin.loadFile('brainstorming-popup.html');
+  // 🍪 쿠키 복사 제거 - HTTP 프로토콜로 같은 도메인이므로 자동 공유
+  // partition: 'persist:main'으로 세션 공유되므로 쿠키 복사 불필요
+  
+  // 브레인스토밍 전용 페이지 로드 (HTTP 프로토콜)
+  brainstormingWin.loadURL('http://localhost:8000/brainstorming-popup');
 
   // 개발자 도구 (F12)
   brainstormingWin.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
+    // F12 또는 Cmd+Option+I (macOS) 또는 Ctrl+Shift+I
+    const isDevToolsShortcut = 
+      (input.type === 'keyDown' && input.key === 'F12') ||
+      (input.type === 'keyDown' && input.meta && input.alt && input.key.toLowerCase() === 'i') ||
+      (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'i');
+    
+    if (isDevToolsShortcut) {
+      event.preventDefault();
+      
       if (brainstormingWin.webContents.isDevToolsOpened()) {
         brainstormingWin.webContents.closeDevTools();
+        console.log('🛠️ 브레인스토밍 개발자 도구 닫힘');
       } else {
         brainstormingWin.webContents.openDevTools({ mode: 'detach' });
+        console.log('🛠️ 브레인스토밍 개발자 도구 열림');
       }
     }
   });
@@ -537,9 +551,112 @@ async function openReportPopup() {
 }
 
 // IPC: 챗봇에서 브레인스토밍 팝업 열기
-ipcMain.on('open-brainstorming-popup', (event) => {
+ipcMain.on('open-brainstorming-popup', async (event) => {
   console.log('🧠 브레인스토밍 팝업 생성 요청 (챗봇)');
-  openBrainstormingPopup();
+  
+  // 이미 팝업이 열려있으면 포커스만
+  if (brainstormingWin && !brainstormingWin.isDestroyed()) {
+    brainstormingWin.focus();
+    return;
+  }
+
+  // 브레인스토밍 팝업 창 생성
+  brainstormingWin = new BrowserWindow({
+    width: 700,
+    height: 732,
+    center: true,
+    resizable: true,
+    frame: false,
+    backgroundColor: '#f5f5f5',
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: true,
+      partition: 'persist:main' // 세션 공유
+    },
+    parent: characterWin,
+    modal: false,
+    alwaysOnTop: true,
+    titleBarStyle: 'customButtonsOnHover',
+    trafficLightPosition: { x: -100, y: -100 }
+  });
+
+  // 🍪 쿠키 복사 제거 - HTTP 프로토콜로 같은 도메인이므로 자동 공유
+  // partition: 'persist:main'으로 세션 공유되므로 쿠키 복사 불필요
+
+  // 쿠키 복사 후 페이지 로드 (HTTP 프로토콜)
+  brainstormingWin.loadURL('http://localhost:8000/brainstorming-popup');
+
+  // 페이지 로드 완료
+  brainstormingWin.webContents.on('did-finish-load', () => {
+    console.log('🧠 브레인스토밍 팝업 로드 완료');
+  });
+
+  // 개발자 도구 (F12)
+  brainstormingWin.webContents.on('before-input-event', (event, input) => {
+    // F12 또는 Cmd+Option+I (macOS) 또는 Ctrl+Shift+I
+    const isDevToolsShortcut = 
+      (input.type === 'keyDown' && input.key === 'F12') ||
+      (input.type === 'keyDown' && input.meta && input.alt && input.key.toLowerCase() === 'i') ||
+      (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'i');
+    
+    if (isDevToolsShortcut) {
+      event.preventDefault();
+      
+      if (brainstormingWin.webContents.isDevToolsOpened()) {
+        brainstormingWin.webContents.closeDevTools();
+        console.log('🛠️ 브레인스토밍 개발자 도구 닫힘');
+      } else {
+        brainstormingWin.webContents.openDevTools({ mode: 'detach' });
+        console.log('🛠️ 브레인스토밍 개발자 도구 열림');
+      }
+    }
+  });
+
+  // 팝업 종료 시 세션 자동 삭제 및 챗봇에 알림
+  brainstormingWin.on('close', async (e) => {
+    console.log('🧠 브레인스토밍 팝업 닫기 시작');
+
+    // 렌더러에서 세션 ID 가져오기
+    try {
+      const sessionId = await brainstormingWin.webContents.executeJavaScript('getCurrentSessionId()');
+
+      if (sessionId) {
+        console.log('🗑️ 세션 자동 삭제 시작:', sessionId);
+
+        // 세션 삭제 API 호출
+        const http = require('http');
+        const options = {
+          hostname: 'localhost',
+          port: 8000,
+          path: `/api/v1/brainstorming/session/${sessionId}`,
+          method: 'DELETE'
+        };
+
+        const req = http.request(options, (res) => {
+          console.log('✅ 세션 삭제 완료:', sessionId);
+        });
+
+        req.on('error', (error) => {
+          console.error('❌ 세션 삭제 실패:', error);
+        });
+
+        req.end();
+      }
+    } catch (error) {
+      console.error('❌ 세션 ID 가져오기 실패:', error);
+    }
+  });
+
+  brainstormingWin.on('closed', () => {
+    console.log('🧠 브레인스토밍 팝업 닫힘');
+
+    // 챗봇에 종료 이벤트 전송
+    if (characterWin && !characterWin.isDestroyed()) {
+      characterWin.webContents.send('brainstorming-closed', {});
+    }
+
+    brainstormingWin = null;
+  });
 });
 
 // 브레인스토밍 창 최대화 토글
@@ -549,6 +666,19 @@ ipcMain.on('toggle-brainstorming-maximize', () => {
       brainstormingWin.unmaximize();
     } else {
       brainstormingWin.maximize();
+    }
+  }
+});
+
+// 브레인스토밍 창 개발자 도구 토글
+ipcMain.on('toggle-brainstorming-devtools', () => {
+  if (brainstormingWin && !brainstormingWin.isDestroyed()) {
+    if (brainstormingWin.webContents.isDevToolsOpened()) {
+      brainstormingWin.webContents.closeDevTools();
+      console.log('🛠️ 브레인스토밍 개발자 도구 닫힘');
+    } else {
+      brainstormingWin.webContents.openDevTools({ mode: 'detach' });
+      console.log('🛠️ 브레인스토밍 개발자 도구 열림');
     }
   }
 });
@@ -601,6 +731,14 @@ ipcMain.on('close-brainstorming-window', () => {
   console.log('🧠 브레인스토밍 창 닫기 요청 (세션 삭제 완료)');
   if (brainstormingWin && !brainstormingWin.isDestroyed()) {
     brainstormingWin.close();
+  }
+});
+
+// 캐릭터 창 alwaysOnTop 제어 (모달 열릴 때)
+ipcMain.on('set-character-always-on-top', (event, isOnTop) => {
+  if (characterWin && !characterWin.isDestroyed()) {
+    characterWin.setAlwaysOnTop(isOnTop);
+    console.log(`🎭 캐릭터 창 alwaysOnTop: ${isOnTop}`);
   }
 });
 

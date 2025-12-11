@@ -353,17 +353,11 @@ async function handleSendMessage() {
       if (result.answer.includes("SUGGESTION:")) {
         const cleanMessage = result.answer.replace("SUGGESTION:", "").trim();
         // 메시지는 이미 addMessage로 출력되었으므로 버튼만 추가
-        addConfirmationButton("브레인스토밍 시작하기", () => {
-          openBrainstormingPopup();
-          addMessage("assistant", "브레인스토밍을 시작합니다! 🚀");
-        });
+        addBrainstormingButtons();
       }
       // 2. 그 외 (RAG 답변 등) - 자동 실행하지 않고 버튼 표시
       else {
-        addConfirmationButton("브레인스토밍 도구 열기", () => {
-          openBrainstormingPopup();
-          addMessage("assistant", "브레인스토밍을 시작합니다! 🚀");
-        });
+        addBrainstormingButtons();
       }
       return;
     }
@@ -514,6 +508,55 @@ function addConfirmationButton(text, onClick) {
 
   buttonDiv.appendChild(button);
   messagesContainer.appendChild(buttonDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+/**
+ * 브레인스토밍 버튼 추가 (시작하기만)
+ */
+function addBrainstormingButtons() {
+  const buttonContainer = document.createElement("div");
+  buttonContainer.className = "message assistant";
+  buttonContainer.style.cssText = `
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+  `;
+
+  // 브레인스토밍 시작 버튼
+  const startBtn = document.createElement("button");
+  startBtn.textContent = "🚀 브레인스토밍 시작";
+  startBtn.style.cssText = `
+    background: #9CAF88;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+  `;
+
+  startBtn.addEventListener("mouseover", () => {
+    startBtn.style.transform = "scale(1.05)";
+    startBtn.style.background = "#7A8C6F";
+  });
+
+  startBtn.addEventListener("mouseout", () => {
+    startBtn.style.transform = "scale(1)";
+    startBtn.style.background = "#9CAF88";
+  });
+
+  startBtn.addEventListener("click", () => {
+    openBrainstormingPopup();
+    addMessage("assistant", "브레인스토밍을 시작합니다! 🚀");
+    startBtn.disabled = true;
+    startBtn.style.opacity = "0.7";
+  });
+
+  buttonContainer.appendChild(startBtn);
+  messagesContainer.appendChild(buttonContainer);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
