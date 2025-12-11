@@ -5,6 +5,8 @@ from app.api.v1.endpoints.report.reports import router as reports_router
 from app.api.v1.endpoints.report.plan import router as plan_router
 from app.api.v1.endpoints.report.daily import router as daily_router
 from app.api.v1.endpoints.report.daily_report import router as daily_report_router
+from app.api.v1.endpoints.report.daily_input import router as daily_input_router
+from app.api.v1.endpoints.report.pdf_export import router as pdf_export_router
 from app.api.v1.endpoints.report.weekly_report import router as weekly_report_router
 from app.api.v1.endpoints.report.monthly_report import router as monthly_report_router
 from app.api.v1.endpoints.rag import router as rag_router
@@ -56,6 +58,18 @@ api_router.include_router(
 api_router.include_router(
     daily_report_router,
     tags=["Daily Report"]
+)
+
+# Daily Input (태그 기반 입력) 엔드포인트
+api_router.include_router(
+    daily_input_router,
+    tags=["Daily Input"]
+)
+
+# PDF Export (WeasyPrint) 엔드포인트
+api_router.include_router(
+    pdf_export_router,
+    tags=["PDF Export"]
 )
 
 # Weekly Report (주간 보고서) 엔드포인트

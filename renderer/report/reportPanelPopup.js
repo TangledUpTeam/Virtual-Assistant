@@ -6,6 +6,9 @@
 import { addTaskRecommendations, showCustomTaskInput } from './taskUI.js';
 import { buildRequestContext } from './taskService.js';
 
+// 전역 폰트 설정 (모든 동적 생성 요소에 적용)
+const DEFAULT_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
 const API_BASE = 'http://localhost:8000/api/v1';
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const MULTI_AGENT_SESSION_KEY = 'multi_agent_session_id';
@@ -16,6 +19,7 @@ let messagesContainer = null;
 let reportInput = null;
 let sendBtn = null;
 let isInitialized = false;
+let isProcessingCommand = false; // 명령 실행 중 플래그 (중복 실행 방지)
 
 // FSM 상태
 let chatMode = 'normal'; // 'normal' 또는 'daily_fsm'
@@ -25,6 +29,11 @@ let dailyOwnerId = null;
 // 업무 플래닝 선택 상태
 let selectedTasks = new Set();
 let currentRecommendation = null;
+
+// 특이사항 입력 모드
+let isNotesInputMode = false;
+let currentNotesReportId = null;
+let currentNotesReportDate = null;
 
 // 날짜 설정
 let dateSettingsPanel = null;
@@ -59,8 +68,8 @@ export async function initReportPanel() {
     return;
   }
   
-  // 초기 화면: 빠른 실행 버튼만 표시 (설명 메시지 없음)
-  addQuickActionButtons();
+  // 초기 화면: 빠른 실행 버튼을 상단에 고정
+  addQuickActionButtonsFixed();
   
   // 이벤트 리스너
   sendBtn.addEventListener('click', handleSendMessage);
@@ -79,36 +88,43 @@ export async function initReportPanel() {
   console.log('✅ 보고서 패널 초기화 완료');
 }
 
+// addFixedHeaderMenu 함수 제거됨 (배너 제거 요청)
+// 이 함수는 더 이상 사용되지 않습니다.
+
 /**
- * 빠른 실행 버튼 추가 (초기 화면에만 표시)
+ * 빠른 실행 버튼을 상단에 고정 (한 번만 생성)
  */
-function addQuickActionButtons() {
-  // 이미 사용자 메시지가 있으면 버튼을 표시하지 않음
-  const hasUserMessages = messages.some(msg => msg.role === 'user');
-  if (hasUserMessages) {
-    return;
+function addQuickActionButtonsFixed() {
+  // 기존 고정 버튼이 있으면 제거하지 않고 유지 (한 번만 생성)
+  const existingFixed = document.getElementById('report-quick-actions-fixed');
+  if (existingFixed) {
+    return; // 이미 있으면 재생성하지 않음
   }
+  
+  // 컨테이너 생성 (배경 투명, 테두리 제거 - 버튼들만 보이게)
+  const fixedContainer = document.createElement('div');
+  fixedContainer.id = 'report-quick-actions-fixed';
+  fixedContainer.className = 'report-quick-actions-fixed';
+  fixedContainer.style.cssText = `
+    position: relative;
+    z-index: 100;
+    background: transparent;
+    padding: 16px;
+    margin-bottom: 24px;
+    border: none;
+    box-shadow: none;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
   
   // 메인 컨테이너 생성
   const mainContainer = document.createElement('div');
   mainContainer.className = 'report-main-container';
   mainContainer.style.cssText = `
     max-width: 760px;
-    margin: 32px auto;
-    padding: 0 24px;
+    margin: 0 auto;
+    padding: 0;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
-  
-  // 제목 추가
-  const title = document.createElement('div');
-  title.className = 'report-main-title';
-  title.textContent = '보고서 & 업무 관리';
-  title.style.cssText = `
-    font-size: 18px;
-    font-weight: 600;
-    color: #333333;
-    margin-bottom: 16px;
-  `;
-  mainContainer.appendChild(title);
   
   // 2x2 그리드 컨테이너
   const gridContainer = document.createElement('div');
@@ -116,13 +132,13 @@ function addQuickActionButtons() {
   gridContainer.style.cssText = `
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    gap: 12px;
   `;
   
   // 4개 버튼 정의
   const quickActions = [
     { key: 'today_plan', label: '오늘 업무 플래닝', command: '오늘 업무 추천해줘', icon: '📋', needsDate: false },
-    { key: 'daily', label: '일일 보고서 작성', command: '일일보고서 작성할래', icon: '📝', needsDate: false },
+    { key: 'daily', label: '일일 보고서 작성', icon: '📝', needsDate: false, isDailyInput: true },
     { key: 'weekly', label: '주간 보고서 생성', icon: '📊', needsDate: true, dateMode: 'weekly' },
     { key: 'monthly', label: '월간 보고서 생성', icon: '📈', needsDate: true, dateMode: 'monthly' }
   ];
@@ -131,6 +147,7 @@ function addQuickActionButtons() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'report-quick-button';
+    button.style.fontFamily = DEFAULT_FONT_FAMILY;
     button.innerHTML = `
       <span class="report-quick-button-icon">${action.icon}</span>
       <span class="report-quick-button-label">${action.label}</span>
@@ -138,7 +155,10 @@ function addQuickActionButtons() {
     
     // 클릭 이벤트
     button.addEventListener('click', () => {
-      if (action.needsDate) {
+      if (action.isDailyInput) {
+        // 일일보고서 입력 UI 표시
+        showDailyInputUI();
+      } else if (action.needsDate) {
         // 날짜 선택 모달 표시
         showDatePickerModal(action.dateMode);
       } else {
@@ -151,10 +171,23 @@ function addQuickActionButtons() {
   });
   
   mainContainer.appendChild(gridContainer);
+  fixedContainer.appendChild(mainContainer);
   
-  // 메시지 컨테이너에 추가
-  messagesContainer.appendChild(mainContainer);
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  // messagesContainer의 첫 번째 자식으로 추가 (상단 고정)
+  if (messagesContainer.firstChild) {
+    messagesContainer.insertBefore(fixedContainer, messagesContainer.firstChild);
+  } else {
+    messagesContainer.appendChild(fixedContainer);
+  }
+}
+
+/**
+ * 빠른 실행 버튼 추가 (하위 호환성 - 사용하지 않음)
+ * @deprecated 상단 고정 버튼 사용
+ */
+function addQuickActionButtons() {
+  // 더 이상 사용하지 않음 (상단 고정 버튼으로 대체)
+  // 이 함수는 호출되어도 아무것도 하지 않음
 }
 
 /**
@@ -162,6 +195,14 @@ function addQuickActionButtons() {
  * 기존 handleSendMessage와 동일한 로직 사용
  */
 async function triggerAgentCommand(command) {
+  // 중복 실행 방지
+  if (isProcessingCommand) {
+    console.log('⚠️ [ReportPopup] 명령이 이미 실행 중입니다. 중복 실행을 방지합니다.');
+    return;
+  }
+  
+  isProcessingCommand = true;
+  
   // 사용자 메시지로 추가
   addMessage('user', command);
   
@@ -181,6 +222,7 @@ async function triggerAgentCommand(command) {
   } finally {
     sendBtn.disabled = false;
     sendBtn.textContent = '전송';
+    isProcessingCommand = false;
   }
 }
 
@@ -190,6 +232,7 @@ async function triggerAgentCommand(command) {
 function addMessage(role, content, isMarkdown = false) {
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${role}`;
+  messageDiv.style.fontFamily = DEFAULT_FONT_FAMILY;
   
   // 구조화된 메시지 처리 (보고서 링크)
   if (typeof content === 'object' && content.type) {
@@ -199,6 +242,7 @@ function addMessage(role, content, isMarkdown = false) {
     // 일반 텍스트 메시지는 bubble 래퍼 추가
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
+    bubble.style.fontFamily = DEFAULT_FONT_FAMILY;
     
     if (isMarkdown) {
       // 마크다운 렌더링 (간단한 처리)
@@ -222,6 +266,9 @@ function addMessage(role, content, isMarkdown = false) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
   
   messages.push({ role, content });
+  
+  // assistant 메시지 추가 시 빠른 실행 버튼 자동 추가 제거
+  // 사용자가 상단 고정 버튼을 직접 사용하도록 변경
 }
 
 /**
@@ -230,11 +277,11 @@ function addMessage(role, content, isMarkdown = false) {
 function formatStructuredMessage(data) {
   const { type, message, period, report_data } = data;
   
-  let html = `<div class="report-message">`;
-  html += `<div class="report-text">${message}</div>`;
+  let html = `<div class="report-message" style="font-family: ${DEFAULT_FONT_FAMILY}">`;
+  html += `<div class="report-text" style="font-family: ${DEFAULT_FONT_FAMILY}">${message}</div>`;
   
   if (period) {
-    html += `<div class="report-period">📅 ${period.start || ''} ~ ${period.end || ''}</div>`;
+    html += `<div class="report-period" style="font-family: ${DEFAULT_FONT_FAMILY}">📅 ${period.start || ''} ~ ${period.end || ''}</div>`;
   }
   
   // report_data.url 또는 report_data.html_url 지원
@@ -242,10 +289,10 @@ function formatStructuredMessage(data) {
   const fileName = report_data?.file_name || '보고서 보기';
   
   if (reportUrl) {
-    html += `<div class="report-link">`;
+    html += `<div class="report-link" style="font-family: ${DEFAULT_FONT_FAMILY}">`;
     // Electron 환경에서 링크 열기
     const fullUrl = reportUrl.startsWith('http') ? reportUrl : `http://localhost:8000${reportUrl}`;
-    html += `<a href="#" onclick="openReportLink('${fullUrl}'); return false;" class="report-btn">`;
+    html += `<a href="#" onclick="openReportLink('${fullUrl}'); return false;" class="report-btn" style="font-family: ${DEFAULT_FONT_FAMILY}">`;
     html += `📄 ${fileName}`;
     html += `</a>`;
     html += `</div>`;
@@ -291,6 +338,12 @@ function handleInputKeydown(e) {
 async function handleSendMessage() {
   const text = reportInput.value.trim();
   if (!text || sendBtn.disabled) return;
+  
+  // 특이사항 입력 모드인지 확인
+  if (isNotesInputMode && currentNotesReportId) {
+    await handleNotesInput(text, currentNotesReportId);
+    return;
+  }
   
   addMessage('user', text);
   reportInput.value = '';
@@ -400,13 +453,10 @@ async function handleReportIntent(text) {
     return;
   }
   
-  // 일일 보고서 시작은 직접 처리 (FSM 모드)
-  // "일일보고서 작성" 또는 "일일보고서 시작"만 FSM 모드
-  // "일일보고서 만들어줘"는 아래에서 처리 (자동 생성)
+  // 일일 보고서 작성 요청 → 태그 입력 UI 표시
   if (lower.includes('일일') && lower.includes('보고서') && 
-      (lower.includes('작성') || lower.includes('시작')) && 
-      !lower.includes('만들')) {
-    await startDailyReport();
+      (lower.includes('작성') || lower.includes('시작') || lower.includes('입력'))) {
+    showDailyInputUI();
     return;
   }
   
@@ -546,6 +596,7 @@ async function loadAndDisplayTaskCards() {
         cursor: pointer;
         font-size: 14px;
         font-weight: 600;
+        font-family: ${DEFAULT_FONT_FAMILY};
       `;
       modifyButton.addEventListener('click', async () => {
         // 저장된 업무를 업무 카드 형식으로 표시 (수정 모드)
@@ -575,6 +626,7 @@ async function loadAndDisplayTaskCards() {
         cursor: pointer;
         font-size: 14px;
         font-weight: 600;
+        font-family: ${DEFAULT_FONT_FAMILY};
       `;
       newRecommendButton.addEventListener('click', async () => {
         // 새로 추천받기
@@ -686,6 +738,7 @@ async function loadNewTaskRecommendations(ownerId, targetDate, headers) {
         font-size: 14px;
         font-weight: 600;
         margin-top: 10px;
+        font-family: ${DEFAULT_FONT_FAMILY};
       `;
       
       button.addEventListener('click', () => {
@@ -1601,6 +1654,7 @@ function showDatePickerModal(dateMode) {
     width: 100%;
     max-width: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   
   // 제목
@@ -1610,6 +1664,7 @@ function showDatePickerModal(dateMode) {
     font-weight: 600;
     color: #333;
     margin-bottom: 8px;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   title.textContent = dateMode === 'weekly' 
     ? '주간보고서 기준 날짜 선택' 
@@ -1622,6 +1677,7 @@ function showDatePickerModal(dateMode) {
     font-size: 14px;
     color: #666;
     margin-bottom: 20px;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   description.textContent = dateMode === 'weekly'
     ? '기준 날짜가 포함된 주간 보고서를 생성합니다.'
@@ -1640,6 +1696,7 @@ function showDatePickerModal(dateMode) {
     font-size: 14px;
     margin-bottom: 20px;
     box-sizing: border-box;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   modalContent.appendChild(dateInput);
   
@@ -1664,6 +1721,7 @@ function showDatePickerModal(dateMode) {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   cancelBtn.addEventListener('click', () => {
     modal.remove();
@@ -1692,6 +1750,7 @@ function showDatePickerModal(dateMode) {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   confirmBtn.addEventListener('click', () => {
     const selectedDate = dateInput.value;
@@ -1740,6 +1799,567 @@ function showDatePickerModal(dateMode) {
   
   // body에 추가
   document.body.appendChild(modal);
+}
+
+/**
+ * 일일보고서 입력 UI 표시
+ */
+async function showDailyInputUI() {
+  // 기존 메시지 컨테이너 초기화 (빠른 실행 버튼은 보존)
+  const quickActionsFixed = document.getElementById('report-quick-actions-fixed');
+  messagesContainer.innerHTML = '';
+  messages = [];
+  
+  // 빠른 실행 버튼 다시 추가 (보존)
+  if (quickActionsFixed) {
+    messagesContainer.appendChild(quickActionsFixed);
+  } else {
+    // 없으면 새로 생성
+    addQuickActionButtonsFixed();
+  }
+  
+  // 저장된 오늘 업무 플래닝 가져오기
+  try {
+    const { headers, owner_id } = await buildRequestContext();
+    const targetDate = new Date().toISOString().split('T')[0];
+    const { getMainTasks } = await import('./taskService.js');
+    const savedTasksResult = await getMainTasks(owner_id, targetDate);
+    
+    // 저장된 업무가 있으면 상단에 표시 (가운데 정렬, 주황색 테마)
+    if (savedTasksResult.success && savedTasksResult.count > 0) {
+      const planMessage = document.createElement('div');
+      planMessage.style.cssText = `
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: center;
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      
+      const planBubble = document.createElement('div');
+      planBubble.style.cssText = `
+        background: #fff4e6;
+        border: 2px solid #fdbc66;
+        border-radius: 12px;
+        padding: 20px;
+        max-width: 600px;
+        box-shadow: 0 2px 8px rgba(253, 188, 102, 0.15);
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      
+      const planTitle = document.createElement('div');
+      planTitle.textContent = '📋 금일 당신이 계획한 업무입니다!';
+      planTitle.style.cssText = `
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: #d4a574;
+        font-size: 16px;
+        text-align: center;
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      planBubble.appendChild(planTitle);
+      
+      const planList = document.createElement('ol');
+      planList.style.cssText = `
+        margin: 0;
+        padding-left: 24px;
+        color: #555;
+        font-size: 14px;
+        line-height: 1.8;
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      
+      savedTasksResult.main_tasks.forEach((task, index) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = task.title || task.task || '제목 없음';
+        listItem.style.fontFamily = DEFAULT_FONT_FAMILY;
+        planList.appendChild(listItem);
+      });
+      
+      planBubble.appendChild(planList);
+      planMessage.appendChild(planBubble);
+      messagesContainer.appendChild(planMessage);
+    }
+  } catch (error) {
+    console.error('[DailyInput] 저장된 업무 조회 실패:', error);
+    // 실패해도 계속 진행
+  }
+  
+  // 일일보고서 입력 컨테이너 생성
+  const inputContainer = document.createElement('div');
+  inputContainer.id = 'daily-input-container';
+  inputContainer.className = 'daily-input-container';
+  inputContainer.style.cssText = `
+    max-width: 760px;
+    margin: 32px auto;
+    padding: 24px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  
+  // 제목
+  const title = document.createElement('div');
+  title.className = 'daily-input-title';
+  title.textContent = '📝 일일 보고서 작성';
+  title.style.cssText = `
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 20px;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  inputContainer.appendChild(title);
+  
+  // 입력 영역
+  const inputArea = document.createElement('div');
+  inputArea.className = 'daily-input-area';
+  inputArea.style.cssText = `
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  `;
+  
+  const taskInput = document.createElement('input');
+  taskInput.type = 'text';
+  taskInput.id = 'daily-task-input';
+  taskInput.placeholder = '업무를 입력하세요...';
+  taskInput.style.cssText = `
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  taskInput.addEventListener('focus', () => {
+    taskInput.style.borderColor = '#fdbc66';
+  });
+  taskInput.addEventListener('blur', () => {
+    taskInput.style.borderColor = '#e0e0e0';
+  });
+  taskInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      addTaskTag();
+    }
+  });
+  
+  const addBtn = document.createElement('button');
+  addBtn.textContent = '추가';
+  addBtn.className = 'daily-input-add-btn';
+  addBtn.style.cssText = `
+    padding: 12px 24px;
+    background: #fdbc66;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  addBtn.addEventListener('click', addTaskTag);
+  addBtn.addEventListener('mouseenter', () => {
+    addBtn.style.background = '#f0a850';
+  });
+  addBtn.addEventListener('mouseleave', () => {
+    addBtn.style.background = '#fdbc66';
+  });
+  
+  inputArea.appendChild(taskInput);
+  inputArea.appendChild(addBtn);
+  inputContainer.appendChild(inputArea);
+  
+  // 태그 컨테이너
+  const tagsContainer = document.createElement('div');
+  tagsContainer.id = 'daily-tags-container';
+  tagsContainer.className = 'daily-tags-container';
+  tagsContainer.style.cssText = `
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    min-height: 40px;
+  `;
+  inputContainer.appendChild(tagsContainer);
+  
+  // 완료 버튼
+  const completeBtn = document.createElement('button');
+  completeBtn.textContent = '완료';
+  completeBtn.id = 'daily-complete-btn';
+  completeBtn.className = 'daily-complete-btn';
+  completeBtn.style.cssText = `
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #fdbc66 0%, #f8d8ae 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 8px rgba(253, 188, 102, 0.3);
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  completeBtn.addEventListener('click', handleDailyInputComplete);
+  completeBtn.addEventListener('mouseenter', () => {
+    completeBtn.style.transform = 'translateY(-2px)';
+    completeBtn.style.boxShadow = '0 4px 12px rgba(253, 188, 102, 0.4)';
+  });
+  completeBtn.addEventListener('mouseleave', () => {
+    completeBtn.style.transform = 'translateY(0)';
+    completeBtn.style.boxShadow = '0 2px 8px rgba(253, 188, 102, 0.3)';
+  });
+  inputContainer.appendChild(completeBtn);
+  
+  messagesContainer.appendChild(inputContainer);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  
+  // 입력창에 포커스
+  setTimeout(() => {
+    taskInput.focus();
+  }, 100);
+}
+
+// 태그 목록 저장
+let dailyTaskTags = [];
+
+/**
+ * 태그 추가
+ */
+function addTaskTag() {
+  const taskInput = document.getElementById('daily-task-input');
+  const tagsContainer = document.getElementById('daily-tags-container');
+  
+  if (!taskInput || !tagsContainer) return;
+  
+  const taskText = taskInput.value.trim();
+  if (!taskText) return;
+  
+  // 중복 체크
+  if (dailyTaskTags.includes(taskText)) {
+    taskInput.value = '';
+    return;
+  }
+  
+  // 태그 추가
+  dailyTaskTags.push(taskText);
+  
+  // 태그 UI 생성
+  const tag = document.createElement('div');
+  tag.className = 'daily-task-tag';
+  tag.dataset.task = taskText;
+  tag.style.cssText = `
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #ffe3b8;
+    color: #333;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  
+  const tagText = document.createElement('span');
+  tagText.textContent = taskText;
+  tagText.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  tag.appendChild(tagText);
+  
+  const removeBtn = document.createElement('button');
+  removeBtn.textContent = '×';
+  removeBtn.style.cssText = `
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  removeBtn.addEventListener('click', () => {
+    dailyTaskTags = dailyTaskTags.filter(t => t !== taskText);
+    tag.remove();
+  });
+  removeBtn.addEventListener('mouseenter', () => {
+    removeBtn.style.background = 'rgba(0,0,0,0.1)';
+  });
+  removeBtn.addEventListener('mouseleave', () => {
+    removeBtn.style.background = 'none';
+  });
+  
+  tag.appendChild(removeBtn);
+  tagsContainer.appendChild(tag);
+  
+  // 입력창 초기화
+  taskInput.value = '';
+  taskInput.focus();
+}
+
+/**
+ * 일일보고서 입력 완료 처리
+ */
+async function handleDailyInputComplete() {
+  const completeBtn = document.getElementById('daily-complete-btn');
+  
+  if (dailyTaskTags.length === 0) {
+    alert('업무를 최소 1개 이상 입력해주세요.');
+    return;
+  }
+  
+  // 버튼 비활성화
+  if (completeBtn) {
+    completeBtn.disabled = true;
+    completeBtn.textContent = '저장 중...';
+  }
+  
+  try {
+    const { headers, owner_id } = await buildRequestContext();
+    const targetDate = new Date().toISOString().split('T')[0];
+    
+    const requestBody = {
+      date: targetDate,
+      owner_id: owner_id || 0,
+      tasks: dailyTaskTags
+    };
+    
+    console.log('[DailyInput] 저장 요청:', requestBody);
+    
+    const response = await fetch(`${API_BASE}/reports/daily/input`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('[DailyInput] 저장 완료:', data);
+    
+    // 성공 메시지 표시 (빠른 실행 버튼은 보존)
+    const quickActionsFixed = document.getElementById('report-quick-actions-fixed');
+    messagesContainer.innerHTML = '';
+    messages = [];
+    
+    // 빠른 실행 버튼 다시 추가 (보존)
+    if (quickActionsFixed) {
+      messagesContainer.appendChild(quickActionsFixed);
+    } else {
+      addQuickActionButtonsFixed();
+    }
+    
+    // 상세 업무 리스트 생성
+    const taskListText = dailyTaskTags.map((task, index) => `${index + 1}. ${task}`).join('\n');
+    
+    addMessage('assistant', `✅ 일일 상세 업무가 저장되었습니다!\n\n상세 업무 ${dailyTaskTags.length}개\n${taskListText}`);
+    
+    // 태그 목록 초기화
+    dailyTaskTags = [];
+    
+    // 특이사항 입력 여부 확인 (보고서 보기 버튼은 특이사항 입력 완료 후 표시)
+    // report_id가 없으면 빈 문자열이므로 확인
+    const reportId = data.report_id && data.report_id.trim() !== '' ? data.report_id : null;
+    console.log('[DailyInput] report_id 확인:', reportId);
+    askForNotes(reportId, targetDate);
+    
+  } catch (error) {
+    console.error('[DailyInput] 저장 실패:', error);
+    alert(`저장 중 오류가 발생했습니다.\n${error.message || ''}`);
+    
+    // 버튼 다시 활성화
+    if (completeBtn) {
+      completeBtn.disabled = false;
+      completeBtn.textContent = '완료';
+    }
+  }
+}
+
+/**
+ * 특이사항 입력 여부 확인
+ */
+function askForNotes(reportId, reportDate) {
+  setTimeout(() => {
+    addMessage('assistant', '특이사항이 있으신가요? (있으면 입력해주세요, 없으면 "없음" 또는 "없어"라고 답해주세요)');
+    
+    // 특이사항 입력 모드 활성화
+    isNotesInputMode = true;
+    currentNotesReportId = reportId;
+    currentNotesReportDate = reportDate; // 보고서 보기 버튼을 위해 날짜 저장
+    
+    console.log('[Notes] 특이사항 입력 모드 활성화:', { reportId, reportDate });
+  }, 1000);
+}
+
+/**
+ * 특이사항 입력 처리
+ */
+async function handleNotesInput(inputText, reportId) {
+  // "없음" 또는 "없어"로 답하면 스킵
+  const skipKeywords = ['없음', '없어', '없습니다', '없다', 'no', 'none'];
+  const shouldSkip = skipKeywords.some(keyword => 
+    inputText.toLowerCase().includes(keyword.toLowerCase())
+  );
+  
+  addMessage('user', inputText);
+  reportInput.value = '';
+  
+  if (shouldSkip) {
+    addMessage('assistant', '알겠습니다. 특이사항 없음으로 저장하겠습니다.');
+    
+    // 특이사항 입력 모드 비활성화
+    isNotesInputMode = false;
+    const savedReportId = currentNotesReportId;
+    const savedReportDate = currentNotesReportDate;
+    currentNotesReportId = null;
+    currentNotesReportDate = null;
+    
+    // 보고서 보기 버튼 표시
+    showReportViewButton(savedReportDate);
+    
+    // 빠른 실행 버튼 다시 표시
+    setTimeout(() => {
+      // 상단 고정 버튼 사용으로 자동 추가 제거
+    }, 500);
+    return;
+  }
+  
+  // 특이사항이 있으면 업데이트
+  try {
+    addMessage('assistant', '특이사항을 저장하는 중...');
+    
+    // 보고서 업데이트 API 호출
+    const { headers } = await buildRequestContext();
+    const apiUrl = `${API_BASE}/reports/daily/${reportId}/notes`;
+    console.log('[Notes] 저장 요청:', { reportId, url: apiUrl, notes: inputText });
+    
+    const updateResponse = await fetch(apiUrl, {
+      method: 'PATCH',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ notes: inputText })
+    });
+    
+    if (updateResponse.ok) {
+      const updateData = await updateResponse.json();
+      addMessage('assistant', '✅ 특이사항이 저장되었습니다!');
+      
+      // 특이사항 입력 모드 비활성화
+      isNotesInputMode = false;
+      const savedReportDate = currentNotesReportDate;
+      currentNotesReportId = null;
+      currentNotesReportDate = null;
+      
+      // 보고서 보기 버튼 표시 (말풍선 밑에 따로)
+      showReportViewButton(savedReportDate);
+    } else {
+      const errorText = await updateResponse.text();
+      console.error('[Notes] 저장 실패:', {
+        status: updateResponse.status,
+        statusText: updateResponse.statusText,
+        errorText: errorText,
+        url: apiUrl,
+        reportId: reportId
+      });
+      addMessage('assistant', `⚠️ 특이사항 저장에 실패했습니다: ${updateResponse.status} ${updateResponse.statusText}`);
+      
+      // 특이사항 입력 모드 비활성화
+      isNotesInputMode = false;
+      const savedReportDate = currentNotesReportDate;
+      currentNotesReportId = null;
+      currentNotesReportDate = null;
+      
+      // 실패해도 보고서 보기 버튼은 표시
+      showReportViewButton(savedReportDate);
+    }
+  } catch (error) {
+    console.error('[Notes] 저장 실패:', error);
+    addMessage('assistant', `⚠️ 특이사항 저장 중 오류가 발생했습니다: ${error.message}`);
+    
+    // 특이사항 입력 모드 비활성화
+    isNotesInputMode = false;
+    const savedReportDate = currentNotesReportDate;
+    currentNotesReportId = null;
+    currentNotesReportDate = null;
+    
+    // 에러가 발생해도 보고서 보기 버튼은 표시
+    showReportViewButton(savedReportDate);
+  }
+  
+  // 빠른 실행 버튼 다시 표시 (이미 보존되어 있으므로 불필요)
+}
+
+/**
+ * 보고서 보기 버튼 표시 (말풍선 밑에 따로 표시)
+ */
+function showReportViewButton(reportDate) {
+  if (!reportDate) return;
+  
+  const reportUrl = `http://localhost:8000/static/reports/daily/일일보고서_default_workspace_${reportDate}.html`;
+  
+  // 새로운 메시지로 버튼 표시
+  const buttonMessage = document.createElement('div');
+  buttonMessage.className = 'message assistant';
+  buttonMessage.style.cssText = `
+    margin-top: 8px;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  
+  const linkButton = document.createElement('button');
+  linkButton.textContent = '📄 보고서 보기';
+  linkButton.style.cssText = `
+    padding: 10px 20px;
+    background: #fdbc66;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
+  `;
+  linkButton.addEventListener('click', () => {
+    // 주간보고서처럼 웹사이트에서 열기
+    if (window.require) {
+      try {
+        const { shell } = window.require('electron');
+        shell.openExternal(reportUrl);
+      } catch (e) {
+        console.error('보고서 링크 열기 실패:', e);
+        window.open(reportUrl, '_blank');
+      }
+    } else {
+      window.open(reportUrl, '_blank');
+    }
+  });
+  linkButton.addEventListener('mouseenter', () => {
+    linkButton.style.background = '#f0a850';
+  });
+  linkButton.addEventListener('mouseleave', () => {
+    linkButton.style.background = '#fdbc66';
+  });
+  
+  buttonMessage.appendChild(linkButton);
+  messagesContainer.appendChild(buttonMessage);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 /**

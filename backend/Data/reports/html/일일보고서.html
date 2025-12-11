@@ -1,223 +1,336 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<title>일일 업무 보고서</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>일일 업무 보고서</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-<style>
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
 
-  body {
-    background: #f5f5f5;
-    font-family: 'Malgun Gothic', sans-serif;
-  }
+        .container {
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+        }
 
-  /* PDF 출력용 A4 Wrapper */
-  #pdf-wrapper {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 20px auto;
-    background: white;
-    padding: 15mm;
-    border: 1px solid #ddd;
-  }
+        .report-title {
+            color: #4a90e2;
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #4a90e2;
+            padding-bottom: 10px;
+        }
 
-  .title {
-    font-size: 22px;
-    font-weight: bold;
-    color: #357abd;
-    border-bottom: 2px solid #357abd;
-    padding-bottom: 8px;
-    margin-bottom: 18px;
-  }
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+        }
 
-  table {
-    width: 100%;
-    border-spacing: 0;
-    border: 1px solid #ddd;
-    margin-bottom: 18px;
-  }
+        .header-table td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+        }
 
-  table th {
-    background: #e8f4ff;
-    padding: 10px;
-    border: 1px solid #ddd;
-    font-size: 14px;
-  }
+        .header-table .label {
+            background-color: #e8f4ff;
+            font-weight: bold;
+            width: 100px;
+            text-align: center;
+        }
 
-  table td {
-    padding: 10px;
-    border: 1px solid #ddd;
-    font-size: 14px;
-    vertical-align: top;
-  }
+        .header-table input {
+            width: 100%;
+            border: none;
+            padding: 5px;
+            font-size: 14px;
+        }
 
-  input,
-  textarea {
-    width: 100%;
-    border: none;
-    resize: none;
-    font-family: inherit;
-    font-size: 14px;
-    line-height: 1.6;
-    background: transparent;
-  }
+        .section {
+            margin-bottom: 25px;
+        }
 
-  textarea:focus,
-  input:focus {
-    outline: none;
-    background: #f9fbff;
-  }
+        .section-title {
+            background-color: #e8f4ff;
+            padding: 12px 15px;
+            font-weight: bold;
+            margin-bottom: 0;
+            border: 1px solid #dbdbdb;
+            border-bottom: none;
+        }
 
-  ol {
-    padding-left: 20px;
-  }
+        .section-content {
+            border: 1px solid #ddd;
+            padding: 15px;
+            min-height: 80px;
+            background-color: white;
+        }
 
-  .section-title {
-    background: #e8f4ff;
-    font-weight: bold;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-bottom: none;
-  }
+        .work-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #ddd;
+        }
 
-  .section-box {
-    min-height: 80px;
-    border: 1px solid #ddd;
-    border-top: none;
-    padding: 12px;
-    margin-bottom: 18px;
-  }
+        .work-table th {
+            background-color: #e8f4ff;
+            padding: 12px;
+            border: 1px solid #ddd;
+            font-weight: bold;
+            text-align: center;
+        }
 
-  /* PDF 버튼 */
-  #pdf-btn {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 22px;
-    background: #357abd;
-    color: white;
-    border: none;
-    font-size: 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    z-index: 999;
-  }
+        .work-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
 
-  #pdf-btn:hover {
-    background: #1f5f9e;
-  }
+        .work-table .task-name-cell {
+            width: 25%;
+        }
 
-  @media print {
-    #pdf-btn {
-      display: none;
-    }
-    body {
-      background: white;
-    }
-    #pdf-wrapper {
-      margin: 0;
-      padding: 0;
-      border: none;
-      width: 100%;
-    }
-  }
-</style>
+        .work-table .detail-cell {
+            width: 60%;
+        }
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+        .work-table .note-cell {
+            width: 15%;
+            text-align: center;
+        }
 
+        .work-table input,
+        .work-table textarea {
+            width: 100%;
+            border: none;
+            padding: 5px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+        }
+
+        .work-table textarea {
+            min-height: 50px;
+            line-height: 1.6;
+        }
+
+        .work-table input:focus,
+        .work-table textarea:focus {
+            background-color: #f8f9fa;
+            outline: none;
+        }
+
+        .text-area {
+            width: 100%;
+            min-height: 100px;
+            padding: 15px;
+            border: none;
+            resize: vertical;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .text-area:focus {
+            outline: none;
+            background-color: #f8f9fa;
+        }
+
+        .add-row-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .add-row-btn:hover {
+            background-color: #357abd;
+        }
+
+        .pdf-save-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+            font-family: 'Malgun Gothic', sans-serif;
+        }
+
+        .pdf-save-button:hover {
+            background-color: #357abd;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                max-width: 100%;
+                padding: 20px;
+            }
+
+            .pdf-save-button,
+            .add-row-btn {
+                display: none !important;
+            }
+        }
+    </style>
 </head>
 <body>
+    <button class="pdf-save-button" id="downloadPdfBtn">PDF 저장하기</button>
+    
+    <div class="container" id="report-container">
+        <div class="report-title">일일 업무 보고서</div>
 
-<button id="pdf-btn" onclick="generatePDF()">PDF로 저장</button>
+        <table class="header-table">
+            <tr>
+                <td class="label">일자</td>
+                <td><input type="date" id="date" value="{{ header.작성일자 }}"></td>
+                <td class="label">요일</td>
+                <td><input type="text" id="dayOfWeek" readonly style="background-color: #f8f9fa;"></td>
+                <td class="label">작성자</td>
+                <td><input type="text" id="author" value="{{ header.성명 }}" class="author-input"></td>
+            </tr>
+        </table>
 
-<div id="pdf-wrapper">
-  <div class="title">일일 업무 보고서</div>
+        <div class="section">
+            <div class="section-title">업무 내용</div>
+            <table class="work-table">
+                <thead>
+                    <tr>
+                        <th>업무명</th>
+                        <th>상세내용</th>
+                    </tr>
+                </thead>
+                <tbody id="work-tbody">
+                    {% for task in detail_tasks %}
+                    <tr>
+                        <td class="task-name-cell">
+                            <input type="text" value="{{ task.category }}" class="task-category-input">
+                        </td>
+                        <td class="detail-cell">
+                            <textarea class="task-detail-input">{{ task.text }}</textarea>
+                        </td>
+                        <td class="note-cell" style="display: none;">
+                            <input type="hidden" value="{{ task.note }}" class="task-note-input">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if detail_tasks|length == 0 %}
+                    <tr>
+                        <td class="task-name-cell">
+                            <input type="text" placeholder="업무명 입력" readonly>
+                        </td>
+                        <td class="detail-cell">
+                            <textarea placeholder="상세내용 입력" readonly></textarea>
+                        </td>
+                        <td class="note-cell">
+                            <input type="text" placeholder="비고" readonly>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
 
-  <!-- Header -->
-  <table>
-    <tr>
-      <th>작성일자</th>
-      <td><input type="date" value="{{ header.작성일자 }}" /></td>
-      <th>성명</th>
-      <td><input type="text" value="{{ header.성명 }}" /></td>
-    </tr>
-  </table>
+        <div class="section">
+            <div class="section-title">특이사항</div>
+            <div class="section-content">
+                <textarea class="text-area notes-input">{{ notes }}</textarea>
+            </div>
+        </div>
+    </div>
 
-  <!-- 금일 업무 -->
-  <div class="section-title">금일 진행 업무</div>
-  <div class="section-box">
-    <ol>
-      {% for task in summary_tasks %}
-      <li>{{ task }}</li>
-      {% endfor %}
-    </ol>
-  </div>
+    <script>
+        // 날짜 변경 시 요일 자동 계산
+        document.getElementById('date').addEventListener('change', function() {
+            const date = new Date(this.value);
+            const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+            document.getElementById('dayOfWeek').value = days[date.getDay()];
+        });
 
-  <!-- 세부 업무 -->
-  <div class="section-title">세부 업무 내용</div>
-  <table>
-    <tr>
-      <th>시간</th>
-      <th>업무 내용</th>
-      <th>비고</th>
-    </tr>
+        // 초기 요일 설정
+        const dateInput = document.getElementById('date');
+        if (dateInput.value) {
+            dateInput.dispatchEvent(new Event('change'));
+        }
 
-    {% for task in detail_tasks %}
-    <tr>
-      <td>{{ task.time_range }}</td>
-      <td><textarea>{{ task.text }}</textarea></td>
-      <td>{{ task.note }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-
-  <!-- 미종결 -->
-  <div class="section-title">미종결 업무사항</div>
-  <div class="section-box">
-    <textarea>{{ pending }}</textarea>
-  </div>
-
-  <!-- 익일 계획 -->
-  <div class="section-title">익일 업무 계획</div>
-  <div class="section-box">
-    <textarea>{{ plans }}</textarea>
-  </div>
-
-  <!-- 특이사항 -->
-  <div class="section-title">특이사항</div>
-  <div class="section-box">
-    <textarea>{{ notes }}</textarea>
-  </div>
-</div>
-
-<script>
-function generatePDF() {
-  window.scrollTo(0, 0);
-  const element = document.getElementById("pdf-wrapper");
-  const opt = {
-    margin: 0,
-    filename: "daily-report.pdf",
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      letterRendering: true
-    },
-    jsPDF: {
-      unit: "mm",
-      format: "a4",
-      orientation: "portrait"
-    }
-  };
-
-  html2pdf().set(opt).from(element).save();
-}
-</script>
-
+        // PDF 다운로드
+        document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
+            const button = document.getElementById('downloadPdfBtn');
+            const originalText = button.textContent;
+            
+            button.disabled = true;
+            button.textContent = 'PDF 생성 중...';
+            
+            try {
+                const reportId = "{{ report_id }}" || null;
+                const dateInput = document.getElementById('date');
+                const reportDate = dateInput ? dateInput.value : null;
+                
+                // report_id가 없거나 유효하지 않으면 날짜 사용
+                let url = 'http://localhost:8000/api/v1/reports/daily/pdf?';
+                if (reportId && reportId !== 'null' && reportId !== '' && reportId.trim() !== '') {
+                    url += `report_id=${encodeURIComponent(reportId)}`;
+                } else if (reportDate) {
+                    url += `report_date=${encodeURIComponent(reportDate)}`;
+                } else {
+                    throw new Error('보고서 ID 또는 날짜가 필요합니다.');
+                }
+                
+                console.log('[PDF] 요청 URL:', url);
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`PDF 생성 실패: ${response.status} ${response.statusText}`);
+                }
+                
+                const blob = await response.blob();
+                const url_obj = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url_obj;
+                a.download = `일일업무보고서_${reportDate || 'unknown'}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url_obj);
+                
+                button.disabled = false;
+                button.textContent = originalText;
+            } catch (error) {
+                console.error('PDF 다운로드 실패:', error);
+                alert('PDF 다운로드 중 오류가 발생했습니다: ' + error.message);
+                button.disabled = false;
+                button.textContent = originalText;
+            }
+        });
+    </script>
 </body>
 </html>

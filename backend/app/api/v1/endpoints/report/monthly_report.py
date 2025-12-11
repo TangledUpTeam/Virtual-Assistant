@@ -96,12 +96,25 @@ async def generate_monthly(
         html_url = None
         html_filename = None
         try:
+            # KPI 데이터는 이미 report 객체에 저장되어 있음 (chain.py에서 계산됨)
+            # report 객체에서 kpi_data 추출
+            kpi_data = getattr(report, '_kpi_data', None)
+            
+            # kpi_data가 없으면 직접 계산 (fallback)
+            if not kpi_data:
+                from app.domain.report.monthly.kpi_calculator import calculate_monthly_kpi
+                kpi_data = calculate_monthly_kpi(db=db, year=request.year, month=request.month)
+                print(f"[WARN] report 객체에 kpi_data가 없어서 직접 계산: new_contracts={kpi_data.get('new_contracts', 0)}, renewals={kpi_data.get('renewals', 0)}, consultations={kpi_data.get('consultations', 0)}")
+            else:
+                print(f"[INFO] report 객체에서 KPI 데이터 사용: new_contracts={kpi_data.get('new_contracts', 0)}, renewals={kpi_data.get('renewals', 0)}, consultations={kpi_data.get('consultations', 0)}")
+            
             # HTML 보고서에 표시할 이름 전달
             html_path = render_report_html(
                 report_type="monthly",
                 data=report.model_dump(mode="json"),
                 output_filename=f"monthly_report_{resolved_owner}_{report.period_start}.html",
-                display_name=resolved_owner  # HTML 보고서에 표시할 이름
+                display_name=resolved_owner,  # HTML 보고서에 표시할 이름
+                kpi_data=kpi_data  # 카테고리 기반으로 계산된 KPI 데이터 전달
             )
 
             html_filename = html_path.name
