@@ -309,8 +309,23 @@ function formatStructuredMessage(data) {
 window.openReportLink = function(url) {
   try {
     if (window.require) {
-      const { shell } = window.require('electron');
-      shell.openExternal(url);
+      const { ipcRenderer } = window.require('electron');
+      
+      // URL에서 보고서 타입 추출
+      let title = '보고서';
+      if (url.includes('/daily/')) {
+        title = '일일보고서';
+      } else if (url.includes('/weekly/')) {
+        title = '주간보고서';
+      } else if (url.includes('/monthly/')) {
+        title = '월간보고서';
+      }
+      
+      // Electron 앱 내부에서 새 창으로 열기
+      ipcRenderer.send('open-report-window', {
+        url: url,
+        title: title
+      });
     } else {
       window.open(url, '_blank');
     }
@@ -538,8 +553,8 @@ async function handleReportIntent(text) {
       return;
     }
     
-    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
-    const isMarkdown = (result.agent_used === 'rag' || result.intent === 'rag');
+    // HR(RAG), Insurance 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown = (result.agent_used === 'rag' || result.intent === 'rag' || result.agent_used === 'insurance' || result.agent_used === 'insurance_tool');
     
     // 일반 응답 표시
     addMessage('assistant', result.answer, isMarkdown);
@@ -2337,13 +2352,16 @@ function showReportViewButton(reportDate) {
     font-family: ${DEFAULT_FONT_FAMILY};
   `;
   linkButton.addEventListener('click', () => {
-    // 주간보고서처럼 웹사이트에서 열기
+    // Electron 앱 내부에서 보고서 창 열기
     if (window.require) {
       try {
-        const { shell } = window.require('electron');
-        shell.openExternal(reportUrl);
+        const { ipcRenderer } = window.require('electron');
+        ipcRenderer.send('open-report-window', {
+          url: reportUrl,
+          title: `일일보고서 - ${reportDate}`
+        });
       } catch (e) {
-        console.error('보고서 링크 열기 실패:', e);
+        console.error('보고서 창 열기 실패:', e);
         window.open(reportUrl, '_blank');
       }
     } else {
