@@ -538,8 +538,8 @@ async function handleReportIntent(text) {
       return;
     }
     
-    // HR(RAG) 에이전트인 경우 마크다운 렌더링 적용
-    const isMarkdown = (result.agent_used === 'rag' || result.intent === 'rag');
+    // HR(RAG), Insurance 에이전트인 경우 마크다운 렌더링 적용
+    const isMarkdown = (result.agent_used === 'rag' || result.intent === 'rag' || result.agent_used === 'insurance' || result.agent_used === 'insurance_tool');
     
     // 일반 응답 표시
     addMessage('assistant', result.answer, isMarkdown);
