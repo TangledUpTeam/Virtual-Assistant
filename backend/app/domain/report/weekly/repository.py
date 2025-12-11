@@ -15,6 +15,25 @@ class WeeklyReportRepository:
     """주간보고서 Repository"""
     
     @staticmethod
+    def get_by_id(
+        db: Session,
+        report_id
+    ) -> Optional[WeeklyReport]:
+        """
+        ID로 보고서 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            report_id: 보고서 UUID
+            
+        Returns:
+            WeeklyReport 또는 None
+        """
+        return db.query(WeeklyReport).filter(
+            WeeklyReport.id == report_id
+        ).first()
+    
+    @staticmethod
     def get_by_owner_and_period(
         db: Session,
         owner: str,

@@ -10,7 +10,7 @@
         "page_number": 1,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:54.170428",
+        "processed_at": "2025-12-11 12:12:55.443368",
         "file_size": null
       },
       "table_data": null,
@@ -24,7 +24,7 @@
         "page_number": 2,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:54.523150",
+        "processed_at": "2025-12-11 12:12:55.704040",
         "file_size": null
       },
       "table_data": {
@@ -108,7 +108,7 @@
         "page_number": 2,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:54.531166",
+        "processed_at": "2025-12-11 12:12:55.704040",
         "file_size": null
       },
       "table_data": null,
@@ -122,13 +122,13 @@
         "page_number": 3,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:54.647462",
+        "processed_at": "2025-12-11 12:12:55.793492",
         "file_size": null
       },
       "table_data": null,
       "translated_text": null
     }
   ],
-  "processed_at": "2025-12-11 16:54:54.648303",
-  "file_path": "C:\\dev\\himedia\\Virtual-Assistant\\backend\\internal_docs\\uploads\\연말정산가이드.pdf"
+  "processed_at": "2025-12-11 12:12:55.793492",
+  "file_path": "C:\\Users\\301\\Documents\\GitHub\\Virtual-Assistant\\backend\\internal_docs\\uploads\\연말정산가이드.pdf"
 }

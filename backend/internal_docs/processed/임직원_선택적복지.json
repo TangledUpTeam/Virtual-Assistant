@@ -10,7 +10,7 @@
         "page_number": 1,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:20.020064",
+        "processed_at": "2025-12-11 12:14:38.579880",
         "file_size": null
       },
       "table_data": {
@@ -84,7 +84,7 @@
         "page_number": 1,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:20.021061",
+        "processed_at": "2025-12-11 12:14:38.579880",
         "file_size": null
       },
       "table_data": {
@@ -108,7 +108,7 @@
         "page_number": 1,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:20.021061",
+        "processed_at": "2025-12-11 12:14:38.579880",
         "file_size": null
       },
       "table_data": {
@@ -144,7 +144,7 @@
         "page_number": 1,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:20.040554",
+        "processed_at": "2025-12-11 12:14:38.594328",
         "file_size": null
       },
       "table_data": null,
@@ -158,7 +158,7 @@
         "page_number": 2,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:20.317296",
+        "processed_at": "2025-12-11 12:14:38.782506",
         "file_size": null
       },
       "table_data": {
@@ -218,13 +218,13 @@
         "page_number": 2,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:20.322243",
+        "processed_at": "2025-12-11 12:14:38.782506",
         "file_size": null
       },
       "table_data": null,
       "translated_text": null
     }
   ],
-  "processed_at": "2025-12-11 16:56:20.323090",
-  "file_path": "C:\\dev\\himedia\\Virtual-Assistant\\backend\\internal_docs\\uploads\\임직원_선택적복지.pdf"
+  "processed_at": "2025-12-11 12:14:38.782506",
+  "file_path": "C:\\Users\\301\\Documents\\GitHub\\Virtual-Assistant\\backend\\internal_docs\\uploads\\임직원_선택적복지.pdf"
 }

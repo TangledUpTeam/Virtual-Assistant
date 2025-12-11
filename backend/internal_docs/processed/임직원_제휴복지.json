@@ -10,7 +10,7 @@
         "page_number": 1,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:42.670129",
+        "processed_at": "2025-12-11 12:15:00.112618",
         "file_size": null
       },
       "table_data": {
@@ -210,7 +210,7 @@
         "page_number": 1,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:42.689585",
+        "processed_at": "2025-12-11 12:15:00.126515",
         "file_size": null
       },
       "table_data": null,
@@ -224,13 +224,13 @@
         "page_number": 2,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:56:42.854744",
+        "processed_at": "2025-12-11 12:15:00.206483",
         "file_size": null
       },
       "table_data": null,
       "translated_text": null
     }
   ],
-  "processed_at": "2025-12-11 16:56:42.855742",
-  "file_path": "C:\\dev\\himedia\\Virtual-Assistant\\backend\\internal_docs\\uploads\\임직원_제휴복지.pdf"
+  "processed_at": "2025-12-11 12:15:00.206483",
+  "file_path": "C:\\Users\\301\\Documents\\GitHub\\Virtual-Assistant\\backend\\internal_docs\\uploads\\임직원_제휴복지.pdf"
 }

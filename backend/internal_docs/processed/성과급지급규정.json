@@ -10,7 +10,7 @@
         "page_number": 1,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:11.817852",
+        "processed_at": "2025-12-11 12:12:09.343969",
         "file_size": null
       },
       "table_data": null,
@@ -24,7 +24,7 @@
         "page_number": 2,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:12.274691",
+        "processed_at": "2025-12-11 12:12:09.576415",
         "file_size": null
       },
       "table_data": {
@@ -91,7 +91,7 @@
         "page_number": 2,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:12.282933",
+        "processed_at": "2025-12-11 12:12:09.576415",
         "file_size": null
       },
       "table_data": null,
@@ -105,13 +105,13 @@
         "page_number": 3,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 16:54:12.385514",
+        "processed_at": "2025-12-11 12:12:09.655559",
         "file_size": null
       },
       "table_data": null,
       "translated_text": null
     }
   ],
-  "processed_at": "2025-12-11 16:54:12.385514",
-  "file_path": "C:\\dev\\himedia\\Virtual-Assistant\\backend\\internal_docs\\uploads\\성과급지급규정.pdf"
+  "processed_at": "2025-12-11 12:12:09.656563",
+  "file_path": "C:\\Users\\301\\Documents\\GitHub\\Virtual-Assistant\\backend\\internal_docs\\uploads\\성과급지급규정.pdf"
 }

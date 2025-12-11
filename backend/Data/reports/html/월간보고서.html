@@ -47,8 +47,13 @@
         .header-table .label {
             background-color: #e8f4ff;
             font-weight: bold;
+            width: 120px;
             text-align: center;
-            width: 100px;
+        }
+
+        .header-table .month-label {
+            width: 80px;
+            font-size: 16px;
         }
 
         .header-table input {
@@ -92,17 +97,15 @@
         .kpi-table .category-cell {
             background-color: #e8f4ff;
             font-weight: bold;
-            width: 120px;
+            width: 30%;
         }
 
-        .kpi-table .sub-label {
-            background-color: #f8f9fa;
-            font-weight: 500;
-            width: 100px;
+        .kpi-table .value-cell {
+            width: 55%;
         }
 
         .kpi-table .note-cell {
-            width: 120px;
+            width: 15%;
         }
 
         .kpi-table input {
@@ -113,97 +116,69 @@
             text-align: center;
         }
 
+        .kpi-table input:focus {
+            background-color: #f8f9fa;
+            outline: none;
+        }
+
         .weekly-table {
             width: 100%;
             border-collapse: collapse;
             border: 1px solid #ddd;
         }
 
-        .weekly-table th,
-        .weekly-table td {
-            border: 1px solid #ddd;
-            padding: 12px 15px;
-        }
-
         .weekly-table th {
             background-color: #e8f4ff;
+            padding: 12px;
+            border: 1px solid #ddd;
             font-weight: bold;
             text-align: center;
         }
 
-        .weekly-table .category-cell {
-            background-color: #e8f4ff;
-            font-weight: bold;
-            text-align: center;
-            width: 120px;
+        .weekly-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
         }
 
         .weekly-table .week-cell {
             background-color: #f8f9fa;
             font-weight: 500;
             text-align: center;
-            width: 80px;
+            width: 15%;
+        }
+
+        .weekly-table .content-cell {
+            width: 70%;
         }
 
         .weekly-table .note-cell {
-            width: 120px;
+            width: 15%;
+            text-align: center;
         }
 
+        .weekly-table input,
         .weekly-table textarea {
             width: 100%;
             border: none;
             padding: 5px;
             font-size: 14px;
             font-family: inherit;
-            resize: vertical;
+            resize: none;
+        }
+
+        .weekly-table textarea {
             min-height: 60px;
             line-height: 1.6;
+            overflow: hidden;
+            resize: none;
         }
 
+        .weekly-table input:focus,
         .weekly-table textarea:focus {
             background-color: #f8f9fa;
-        }
-
-        .section-content {
-            border: 1px solid #ddd;
-            padding: 15px;
-            min-height: 100px;
-            background-color: white;
-        }
-
-        .text-area {
-            width: 100%;
-            min-height: 120px;
-            padding: 15px;
-            border: none;
-            resize: vertical;
-            font-family: inherit;
-            font-size: 14px;
-            line-height: 1.8;
-        }
-
-        .text-area:focus {
             outline: none;
-            background-color: #f8f9fa;
         }
 
-        @media print {
-            body {
-                background: white;
-                padding: 0;
-            }
-
-            .container {
-                max-width: 100%;
-                padding: 20px;
-            }
-
-            .pdf-save-button {
-                display: none !important;
-            }
-        }
-
-        /* PDF 저장 버튼 스타일 */
         .pdf-save-button {
             position: fixed;
             top: 20px;
@@ -226,28 +201,44 @@
             background-color: #357abd;
         }
 
-        .pdf-save-button:active {
-            background-color: #2a5f8f;
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                max-width: 100%;
+                padding: 20px;
+            }
+
+            .pdf-save-button {
+                display: none !important;
+            }
         }
     </style>
-    <!-- html2pdf.js 라이브러리 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
-    <!-- PDF 저장 버튼 -->
-    <button class="pdf-save-button" id="pdf-save-btn" onclick="saveAsPDF()">PDF로 저장</button>
+    <button class="pdf-save-button" id="downloadPdfBtn">PDF 저장하기</button>
     
     <div class="container" id="report-container">
         <div class="report-title">월간 업무 보고서</div>
 
         <table class="header-table">
             <tr>
-                <td class="label">월</td>
-                <td><input type="month" id="월" value="{{ 상단정보.월 }}"></td>
+                <td class="label month-label">
+                    {% if '년 ' in 상단정보.월 %}
+                        {{ 상단정보.월.split('년 ')[-1] }}
+                    {% elif '-' in 상단정보.월 %}
+                        {{ 상단정보.월.split('-')[-1] }} 월
+                    {% else %}
+                        {{ 상단정보.월 }}
+                    {% endif %}
+                </td>
                 <td class="label">작성일자</td>
-                <td><input type="date" id="작성일자" value="{{ 상단정보.작성일자 }}"></td>
+                <td><input type="date" id="date" value="{{ 상단정보.작성일자 }}"></td>
                 <td class="label">성명</td>
-                <td><input type="text" id="성명" value="{{ 상단정보.성명 }}"></td>
+                <td><input type="text" id="author" value="{{ 상단정보.성명 }}"></td>
             </tr>
         </table>
 
@@ -257,25 +248,25 @@
                 <thead>
                     <tr>
                         <th>분류</th>
-                        <th colspan="3">건수</th>
+                        <th>건수</th>
                         <th>비고</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td class="category-cell">신규 계약 건수</td>
-                        <td colspan="3"><input type="text" id="신규_계약_건수" value="{{ 월간_핵심_지표.신규_계약_건수.건수 }}"></td>
-                        <td class="note-cell"><input type="text" id="신규_계약_비고" value="{{ 월간_핵심_지표.신규_계약_건수.비고 }}"></td>
+                        <td class="value-cell"><input type="text" value="{{ key_metrics.new_contracts }}건" readonly></td>
+                        <td class="note-cell"><input type="text" placeholder="비고" readonly></td>
                     </tr>
                     <tr>
                         <td class="category-cell">유지 계약 건수</td>
-                        <td colspan="3"><input type="text" id="유지_계약_건수" value=""></td>
-                        <td class="note-cell"><input type="text" id="유지_계약_비고" value="{{ 월간_핵심_지표.유지_계약_건수.비고 }}"></td>
+                        <td class="value-cell"><input type="text" value="{{ key_metrics.renewals }}건" readonly></td>
+                        <td class="note-cell"><input type="text" placeholder="비고" readonly></td>
                     </tr>
                     <tr>
                         <td class="category-cell">상담 진행 건수</td>
-                        <td colspan="3"><input type="text" id="상담_진행_건수" value=""></td>
-                        <td class="note-cell"><input type="text" id="상담_진행_비고" value="{{ 월간_핵심_지표.상담_진행_건수.비고 }}"></td>
+                        <td class="value-cell"><input type="text" value="{{ key_metrics.consultations }}건" readonly></td>
+                        <td class="note-cell"><input type="text" placeholder="비고" readonly></td>
                     </tr>
                 </tbody>
             </table>
@@ -286,81 +277,90 @@
             <table class="weekly-table">
                 <thead>
                     <tr>
-                        <th>분류</th>
-                        <th></th>
+                        <th>주차</th>
                         <th>업무내용</th>
                         <th>비고</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for week_data in 주차별_세부_업무_list %}
-                    {% if loop.index == 1 %}
+                    {% for week_item in 주차별_세부_업무_list %}
                     <tr>
-                        <td class="category-cell" rowspan="5">요일별 세부 업무</td>
-                        <td class="week-cell">{{ week_data.주차 }}</td>
-                        <td><textarea id="week{{ loop.index }}_content" placeholder="{{ week_data.주차 }}차 업무 내용을 입력하세요">{{ week_data.업무내용 }}</textarea></td>
-                        <td class="note-cell"><textarea id="week{{ loop.index }}_note">{{ week_data.비고 }}</textarea></td>
+                        <td class="week-cell">{{ week_item.주차 }}</td>
+                        <td class="content-cell">
+                            <textarea readonly>{{ week_item.업무내용 }}</textarea>
+                        </td>
+                        <td class="note-cell">
+                            <input type="text" value="{{ week_item.비고 }}" readonly>
+                        </td>
                     </tr>
-                    {% else %}
-                    <tr>
-                        <td class="week-cell">{{ week_data.주차 }}</td>
-                        <td><textarea id="week{{ loop.index }}_content" placeholder="{{ week_data.주차 }}차 업무 내용을 입력하세요">{{ week_data.업무내용 }}</textarea></td>
-                        <td class="note-cell"><textarea id="week{{ loop.index }}_note">{{ week_data.비고 }}</textarea></td>
-                    </tr>
-                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-
-        <div class="section">
-            <div class="section-title">익월 계획</div>
-            <div class="section-content">
-                <textarea class="text-area" id="익월_계획" placeholder="익월 계획을 입력하세요">{{ 익월_계획 }}</textarea>
-            </div>
-        </div>
     </div>
 
     <script>
-        function saveAsPDF() {
-            const button = document.getElementById('pdf-save-btn');
+        // textarea 높이 자동 조정 함수
+        function autoResizeTextarea(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+        
+        // 페이지 로드 시 모든 textarea 높이 조정
+        document.addEventListener('DOMContentLoaded', function() {
+            const textareas = document.querySelectorAll('.weekly-table textarea');
+            textareas.forEach(textarea => {
+                autoResizeTextarea(textarea);
+            });
+        });
+        
+        // PDF 다운로드
+        document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
+            const button = document.getElementById('downloadPdfBtn');
             const originalText = button.textContent;
             
-            // 버튼 비활성화 및 텍스트 변경
             button.disabled = true;
             button.textContent = 'PDF 생성 중...';
             
-            // PDF 생성 옵션
-            const element = document.getElementById('report-container');
-            const opt = {
-                margin: [10, 10, 10, 10],
-                filename: 'report.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { 
-                    scale: 2,
-                    useCORS: true,
-                    letterRendering: true
-                },
-                jsPDF: { 
-                    unit: 'mm', 
-                    format: 'a4', 
-                    orientation: 'portrait',
-                    compress: true
+            try {
+                const reportId = "{{ report_id }}" || null;
+                const monthValue = document.getElementById('month').value;
+                
+                let url = '/api/v1/reports/monthly/pdf?';
+                if (reportId) {
+                    url += `report_id=${reportId}`;
+                } else if (monthValue) {
+                    const [year, month] = monthValue.split('-');
+                    url += `year=${year}&month=${month}`;
+                } else {
+                    throw new Error('보고서 ID 또는 년월이 필요합니다.');
                 }
-            };
-            
-            // PDF 생성
-            html2pdf().set(opt).from(element).save().then(() => {
-                // 완료 후 버튼 복원
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`PDF 생성 실패: ${response.status} ${response.statusText}`);
+                }
+                
+                const blob = await response.blob();
+                const url_obj = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url_obj;
+                a.download = `월간업무보고서_${monthValue || 'unknown'}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url_obj);
+                
                 button.disabled = false;
                 button.textContent = originalText;
-            }).catch((error) => {
-                console.error('PDF 생성 실패:', error);
-                alert('PDF 생성 중 오류가 발생했습니다.');
+            } catch (error) {
+                console.error('PDF 다운로드 실패:', error);
+                alert('PDF 다운로드 중 오류가 발생했습니다: ' + error.message);
                 button.disabled = false;
                 button.textContent = originalText;
-            });
-        }
+            }
+        });
     </script>
 </body>
 </html>
