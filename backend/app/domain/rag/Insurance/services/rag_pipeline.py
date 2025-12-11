@@ -11,6 +11,7 @@ from .exceptions import InsuranceRAGException
 from .providers import SimpleVectorStore, SimpleEmbeddingProvider, SimpleLLMProvider
 
 from .retriever import Retriever
+from .hybrid_retriever import HybridRetriever
 from .generator import Generator
 
 
@@ -42,9 +43,11 @@ class RAGPipeline:
         self.llm_provider = llm_provider or self._create_default_llm_provider()
         
         # Service 레이어 초기화
-        self.retriever = retriever or Retriever(
+        self.retriever = retriever or HybridRetriever(
             vector_store=self.vector_store,
-            embedding_provider=self.embedding_provider
+            embedding_provider=self.embedding_provider,
+            dense_weight=0.7,  # Dense (벡터) 검색 70%
+            sparse_weight=0.3  # Sparse (BM25) 검색 30%
         )
         self.generator = generator or Generator(
             llm_provider=self.llm_provider
