@@ -313,50 +313,11 @@ PostgreSQL에서 조회한 월간 KPI 원시 데이터입니다.
 - 예: "포트폴리오 진단 고객(김라해) 리포트 작성" → "포트폴리오 진단 고객 리포트 작성"
 - 예: "신규 리드 상담(노지유)" → "신규 리드 상담"
 
-### 1. 월간 핵심 지표 (key_metrics)
-### [매우 중요] 월간 KPI 자동 집계 규칙
-
-**KPI 값은 반드시 다음 데이터 소스에서 키워드 발생 횟수를 엄격하게 카운트하여 계산해야 합니다:**
-(1) 해당하는 달의 모든 주간보고서 필드 (weekly_goals, weekday_tasks, weekly_highlights, notes)
-(2) 해당하는 달의 모든 일일보고서 청크 (summary, detail, pending, plan)
-
-**모델이 반드시 수행해야 할 사항:**
-- 키워드 발생 횟수를 정확히 카운트
-- 각 KPI에 대해 정수를 반환
-- KPI 필드를 절대 비워두지 않음
-- 숫자를 추측하지 않음
-
-**키워드 규칙:**
-
-1) 신규 계약 건수(new_contracts)
-- 다음 키워드가 나타날 때마다 +1 카운트:
-  키워드: ["신규 리드", "신규 계약", "신규", "신규고객", "신규 리드 생성"]
-- 고객 이름 포함 여부와 무관하게 키워드만으로 카운트
-
-2) 유지 계약 건수(renewals)
-- 다음 키워드가 나타날 때마다 +1 카운트:
-  카운트: ["유지 계약", "유지", "갱신", "리텐션"]
-- 제외: ["유지보수", "유지 관리"]
-
-3) 상담 진행 건수(consultations)
-- 다음 키워드가 나타날 때마다 +1 카운트:
-  카운트: ["상담", "상담진행", "상담 진행", "상담 예약"]
-- 제외: ["문의", "콜백 요청"]
-
-**KPI 출력 규칙:**
-- 데이터가 없으면 0으로 계산
-- 계산 근거는 보고서 청크의 실제 텍스트만 사용
-- 모든 KPI 필드는 반드시 정수 값을 포함해야 함 (빈 값 금지)
-
-출력 형식:
-{
-  "key_metrics": {
-    "new_contracts": <정수>,
-    "renewals": <정수>,
-    "consultations": <정수>,
-    "analysis": "핵심 지표 요약 분석"
-  }
-}
+### 1. 월간 핵심 지표 (key_metrics) - 제거됨
+**중요: 월간 핵심 지표(KPI)는 시스템에서 자동으로 계산되어 HTML에 직접 표시됩니다.**
+- KPI 숫자는 일일보고서의 카테고리 필드를 기반으로 자동 집계됩니다.
+- **당신은 key_metrics를 출력하지 마세요. 이 섹션은 완전히 무시하세요.**
+- KPI는 별도로 처리되므로 월간보고서 JSON에 포함하지 않습니다.
 
 ### 2. 주차별 업무 요약 (weekly_summaries)
 **주차 개수 규칙 (매우 중요):**
@@ -413,13 +374,9 @@ PostgreSQL에서 조회한 월간 KPI 원시 데이터입니다.
 ## 출력 형식
 아래 JSON 형식으로만 출력하세요. 불필요한 텍스트는 넣지 마세요.
 
+**중요: key_metrics는 출력하지 마세요. 시스템에서 자동으로 처리됩니다.**
+
 {
-  "key_metrics": {
-    "new_contracts": <정수>,
-    "renewals": <정수>,
-    "consultations": <정수>,
-    "analysis": "핵심 지표 요약 분석"
-  },
   "weekly_summaries": {
     "1주차": ["요약1", "요약2", "요약3"],
     "2주차": ["요약1", "요약2", "요약3"],
@@ -431,7 +388,7 @@ PostgreSQL에서 조회한 월간 KPI 원시 데이터입니다.
 ## 중요 규칙
 1. 제공된 데이터만을 근거로 작성하세요. 추측은 금지합니다.
 2. JSON만 출력하세요. 다른 텍스트는 금지합니다.
-3. KPI 값은 반드시 키워드 발생 횟수를 정확히 카운트하여 계산하세요. 빈 값이나 추측 값은 금지합니다.
+3. **key_metrics는 출력하지 마세요. KPI는 시스템에서 자동으로 계산되어 HTML에 표시됩니다.**
 4. 주간보고서 중심으로 작성하고, 일일 청크는 보강 자료로만 사용하세요.
 5. 배열/문자열 필드는 비어 있어도 반드시 포함하세요.
 6. 주차별 요약의 개수는 입력 주간보고서 개수와 정확히 일치해야 합니다. 환상하거나 건너뛰지 마세요.
@@ -550,12 +507,22 @@ daily / weekly / monthly
         except:
             num_weekly_reports = 0
         
+        # KPI 데이터 파싱하여 명확하게 표시
+        try:
+            kpi_dict = json.loads(kpi_json) if isinstance(kpi_json, str) else kpi_json
+            kpi_summary = f"신규 계약: {kpi_dict.get('new_contracts', 0)}건, 유지 계약: {kpi_dict.get('renewals', 0)}건, 상담: {kpi_dict.get('consultations', 0)}건"
+        except:
+            kpi_summary = "KPI 데이터 파싱 실패"
+        
         return (
             f"다음은 해당 월({month_str})의 데이터입니다:\n\n"
             f"### 주간보고서 JSON ({num_weekly_reports}개):\n{weekly_reports_json}\n\n"
             f"**중요: 주간보고서가 {num_weekly_reports}개이므로, weekly_summaries는 반드시 1주차~{num_weekly_reports}주차로 출력하세요.**\n\n"
             f"### 일일보고서 청크:\n{daily_chunks_json}\n\n"
-            f"### 월간 KPI 원시 JSON:\n{kpi_json}\n\n"
+            f"### 월간 KPI (이미 계산된 숫자 - 그대로 사용하세요):\n"
+            f"**{kpi_summary}**\n"
+            f"전체 KPI 데이터:\n{kpi_json}\n\n"
+            f"**중요: 위 KPI 숫자들을 그대로 사용하고, analysis 필드에만 분석 문장을 작성하세요.**\n\n"
             "위 데이터를 기반으로 월간보고서를 JSON으로 작성하세요."
         )
 

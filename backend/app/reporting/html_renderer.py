@@ -9,6 +9,7 @@ from datetime import date
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from app.domain.report.core.schemas import CanonicalReport
+from app.core.config import settings
 
 
 class HTMLReportRenderer:
@@ -150,7 +151,8 @@ class HTMLReportRenderer:
         }
         
         # 주간 세부 업무 (새 템플릿 형식: 분류/업무내용/비고)
-        # weekday_tasks는 { "월요일": ["업무1", "업무2"], ... } 또는 { "월": { "tasks": [...], "notes": "..." }, ... } 형식
+        # weekday_tasks는 { "월요일": ["업무1", "업무2"], ... } 형식
+        # 요일별로 그룹화하여 한 행에 모든 업무를 표시
         weekday_tasks_list = []
         day_name_map = {
             "월요일": "월",
@@ -174,12 +176,16 @@ class HTMLReportRenderer:
             
             day_short = day_name_map.get(weekday_name, weekday_name)
             
-            # 각 업무를 리스트에 추가
-            for task in tasks:
+            # 요일별로 모든 업무를 하나의 문자열로 합치기 (줄바꿈으로 구분)
+            # textarea는 HTML을 렌더링하지 않으므로 \n을 사용
+            tasks_text = "\n".join(task for task in tasks if task.strip())
+            
+            # 업무가 있으면 한 행으로 추가
+            if tasks_text:
                 weekday_tasks_list.append({
                     "category": day_short,  # 분류: 요일명 (월, 화, 수, 목, 금)
-                    "content": task,  # 업무내용
-                    "note": ""  # 비고 (새 구조에서는 각 요일별 notes가 있지만, 여기서는 빈 문자열)
+                    "content": tasks_text,  # 업무내용: 모든 업무를 줄바꿈으로 구분
+                    "note": ""  # 비고
                 })
         
         # 빈 행 추가 (최소 1개)
@@ -224,7 +230,13 @@ class HTMLReportRenderer:
         
         # 성명 결정: display_name 우선, 없으면 monthly.header의 성명 사용
         # report.owner는 더 이상 사용하지 않음 (상수이므로)
-        성명 = display_name or monthly.header.get("성명", "")
+        # fallback 체인: display_name -> monthly.header.성명
+        성명 = display_name
+        if not 성명 or (isinstance(성명, str) and 성명.strip() == ""):
+            성명 = monthly.header.get("성명", "")
+        # 최종 fallback: 빈 문자열이면 "사용자" (템플릿에서 빈 값 방지)
+        if not 성명 or (isinstance(성명, str) and 성명.strip() == ""):
+            성명 = "사용자"
         
         # 헤더 정보
         상단정보 = {
@@ -268,15 +280,19 @@ class HTMLReportRenderer:
                 "비고": 주차별_세부_업무[주차]["비고"]
             })
         
-        # KPI 데이터 처리
+        # KPI 데이터 처리 (숫자만 표시, analysis 없음)
         key_metrics = {
             "new_contracts": 0,
             "renewals": 0,
             "consultations": 0,
-            "analysis": ""
+            "analysis": ""  # 비고 필드에 표시하지 않음
         }
         if kpi_data:
-            key_metrics.update(kpi_data)
+            # kpi_data에서 숫자만 추출 (analysis는 사용하지 않음)
+            key_metrics["new_contracts"] = kpi_data.get("new_contracts", 0)
+            key_metrics["renewals"] = kpi_data.get("renewals", 0)
+            key_metrics["consultations"] = kpi_data.get("consultations", 0)
+            # analysis는 빈 문자열로 유지 (비고 필드에 표시하지 않음)
         
         return {
             "상단정보": 상단정보,

@@ -51,6 +51,11 @@
             text-align: center;
         }
 
+        .header-table .month-label {
+            width: 80px;
+            font-size: 16px;
+        }
+
         .header-table input {
             width: 100%;
             border: none;
@@ -164,6 +169,8 @@
         .weekly-table textarea {
             min-height: 60px;
             line-height: 1.6;
+            overflow: hidden;
+            resize: none;
         }
 
         .weekly-table input:focus,
@@ -219,8 +226,15 @@
 
         <table class="header-table">
             <tr>
-                <td class="label">월</td>
-                <td><input type="month" id="month" value="{{ 상단정보.월 }}"></td>
+                <td class="label month-label">
+                    {% if '년 ' in 상단정보.월 %}
+                        {{ 상단정보.월.split('년 ')[-1] }}
+                    {% elif '-' in 상단정보.월 %}
+                        {{ 상단정보.월.split('-')[-1] }} 월
+                    {% else %}
+                        {{ 상단정보.월 }}
+                    {% endif %}
+                </td>
                 <td class="label">작성일자</td>
                 <td><input type="date" id="date" value="{{ 상단정보.작성일자 }}"></td>
                 <td class="label">성명</td>
@@ -241,17 +255,17 @@
                 <tbody>
                     <tr>
                         <td class="category-cell">신규 계약 건수</td>
-                        <td class="value-cell"><input type="text" value="{{ key_metrics.new_contracts }}" readonly></td>
-                        <td class="note-cell"><input type="text" value="{{ key_metrics.analysis }}" readonly></td>
+                        <td class="value-cell"><input type="text" value="{{ key_metrics.new_contracts }}건" readonly></td>
+                        <td class="note-cell"><input type="text" placeholder="비고" readonly></td>
                     </tr>
                     <tr>
                         <td class="category-cell">유지 계약 건수</td>
-                        <td class="value-cell"><input type="text" value="{{ key_metrics.renewals }}" readonly></td>
+                        <td class="value-cell"><input type="text" value="{{ key_metrics.renewals }}건" readonly></td>
                         <td class="note-cell"><input type="text" placeholder="비고" readonly></td>
                     </tr>
                     <tr>
                         <td class="category-cell">상담 진행 건수</td>
-                        <td class="value-cell"><input type="text" value="{{ key_metrics.consultations }}" readonly></td>
+                        <td class="value-cell"><input type="text" value="{{ key_metrics.consultations }}건" readonly></td>
                         <td class="note-cell"><input type="text" placeholder="비고" readonly></td>
                     </tr>
                 </tbody>
@@ -286,6 +300,20 @@
     </div>
 
     <script>
+        // textarea 높이 자동 조정 함수
+        function autoResizeTextarea(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+        
+        // 페이지 로드 시 모든 textarea 높이 조정
+        document.addEventListener('DOMContentLoaded', function() {
+            const textareas = document.querySelectorAll('.weekly-table textarea');
+            textareas.forEach(textarea => {
+                autoResizeTextarea(textarea);
+            });
+        });
+        
         // PDF 다운로드
         document.getElementById('downloadPdfBtn').addEventListener('click', async () => {
             const button = document.getElementById('downloadPdfBtn');

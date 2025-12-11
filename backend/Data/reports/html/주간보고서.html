@@ -134,23 +134,30 @@
             text-align: center;
         }
 
-        .work-table input,
-        .work-table textarea {
+        .work-table input {
             width: 100%;
             border: none;
             padding: 5px;
             font-size: 14px;
             font-family: inherit;
-            resize: none;
         }
 
-        .work-table textarea {
-            min-height: 50px;
+        .work-table .content-cell {
+            vertical-align: top;
+        }
+
+        .work-table .content-display {
+            width: 100%;
+            padding: 5px;
+            font-size: 14px;
+            font-family: inherit;
             line-height: 1.6;
+            white-space: pre-line;
+            min-height: 30px;
+            word-wrap: break-word;
         }
 
-        .work-table input:focus,
-        .work-table textarea:focus {
+        .work-table input:focus {
             background-color: #f8f9fa;
             outline: none;
         }
@@ -257,7 +264,7 @@
                             <input type="text" value="{{ task_item.category }}" readonly>
                         </td>
                         <td class="content-cell">
-                            <textarea readonly>{{ task_item.content }}</textarea>
+                            <div class="content-display">{{ task_item.content }}</div>
                         </td>
                         <td class="note-cell">
                             <input type="text" value="{{ task_item.note }}" readonly>

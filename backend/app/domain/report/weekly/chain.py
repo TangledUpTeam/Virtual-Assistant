@@ -137,6 +137,9 @@ def generate_weekly_report(
         if first_key in weekday_short_names:
             is_new_structure = True
     
+    # weekday_notes 딕셔너리 초기화 (KPI 집계용)
+    weekday_notes = {}
+    
     if is_new_structure:
         # 새로운 구조: { "월": { "tasks": [...], "notes": "..." }, ... }
         print(f"[DEBUG] 새로운 구조 감지: 요일명 키 사용")
@@ -145,10 +148,11 @@ def generate_weekly_report(
             if short_name in weekday_tasks_raw:
                 day_data = weekday_tasks_raw[short_name]
                 if isinstance(day_data, dict):
-                    # tasks와 notes 추출
+                    # tasks와 notes 추출 - notes는 별도 딕셔너리에 저장
                     tasks = day_data.get("tasks", [])
                     notes = day_data.get("notes", "")
                     weekday_tasks_converted[weekday_name] = tasks
+                    weekday_notes[weekday_name] = notes  # notes 정보 보존
                     print(f"[DEBUG] {weekday_name} ({short_name}) 업무 {len(tasks)}개, notes: {notes}")
                 else:
                     # dict가 아니면 리스트로 처리 (하위 호환)
@@ -196,6 +200,7 @@ def generate_weekly_report(
         header=header,
         weekly_goals=weekly_goals,
         weekday_tasks=weekday_tasks_converted,
+        weekday_notes=weekday_notes,  # 요일별 notes 정보 추가
         weekly_highlights=weekly_data.get("weekly_highlights", []),
         notes=notes
     )

@@ -453,14 +453,16 @@ async function openReportPopup() {
   }
 
   // 보고서 팝업 창 생성 (하지만 아직 URL 로드하지 않음)
-  reportWin = new BrowserWindow({
+  // 보고서 팝업 창 생성
+  // Windows 11에서 둥근 모서리 방지: frame: false + transparent: false 조합 사용
+  const reportWinOptions = {
     width: 700,
     height: 732, // 700 + 32 (타이틀바)
     center: true,
     resizable: true,
     frame: false, // 툴바 제거
     backgroundColor: '#f5f5f5', // HTML 배경색과 일치
-    transparent: false, // 투명도 비활성화 (둥근 모서리와 충돌 방지)
+    transparent: false, // 투명도 비활성화 (둥근 모서리 방지)
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
@@ -469,10 +471,15 @@ async function openReportPopup() {
     parent: characterWin, // 부모 창 설정
     modal: false,
     alwaysOnTop: true, // 항상 위에 표시
-    titleBarStyle: 'customButtonsOnHover', // macOS 버튼 완전 숨김
-    trafficLightPosition: { x: -100, y: -100 } // 버튼을 화면 밖으로
-  });
-
+  };
+  
+  // Windows 11 둥근 모서리 완전 제거 (DWM 레벨)
+  if (process.platform === 'win32') {
+    reportWinOptions.roundedCorners = false;
+  }
+  
+  reportWin = new BrowserWindow(reportWinOptions);
+  
   // 🍪 쿠키 복사: characterWin → reportWin (URL 로드 전에 실행!)
   if (characterWin && !characterWin.isDestroyed() && reportWin && !reportWin.isDestroyed()) {
     try {
@@ -510,6 +517,42 @@ async function openReportPopup() {
   // 페이지 로드 완료
   reportWin.webContents.on('did-finish-load', () => {
     console.log('📝 보고서 팝업 로드 완료');
+    
+    if (process.platform === 'win32') {
+      console.log('📝 Windows 보고서 팝업: CSS에서 border-radius 제거 시도');
+      
+      // Windows 11 DWM 둥근 모서리 강제 제거 (타이틀바와 큰 창만)
+      reportWin.webContents.executeJavaScript(`
+        const style = document.createElement('style');
+        style.textContent = \`
+          html, body {
+            overflow: hidden !important;
+            border-radius: 0 !important;
+          }
+          .titlebar {
+            border-radius: 0 !important;
+            border-top-left-radius: 0 !important;
+            border-top-right-radius: 0 !important;
+          }
+          .titlebar-btn {
+            border-radius: 50% !important;
+          }
+          #report-panel,
+          #report-messages {
+            border-radius: 0 !important;
+          }
+          .report-quick-actions-fixed {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+        \`;
+        document.head.appendChild(style);
+        console.log('✅ Windows 둥근 모서리 제거 스타일 주입 완료 (타이틀바 및 큰 창만)');
+      `).catch(err => {
+        console.error('❌ 스타일 주입 실패:', err);
+      });
+    }
   });
 
   // 개발자 도구 (F12)

@@ -12,6 +12,8 @@ from typing import List
 from datetime import date
 from sqlalchemy.orm import Session
 import uuid
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
 
 from app.domain.report.daily.repository import DailyReportRepository
 from app.domain.report.core.canonical_models import (
@@ -74,6 +76,69 @@ def classify_task(text: str) -> str:
     return "기타"
 
 
+def expand_task_description(task_text: str, category: str) -> str:
+    """
+    LLM을 사용해 간단한 업무 텍스트를 보고서에 적합한 문장으로 확장
+    
+    Args:
+        task_text: 사용자가 입력한 간단한 업무 텍스트
+        category: 업무 카테고리
+        
+    Returns:
+        확장된 업무 설명 (1-2문장)
+    """
+    try:
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.3,
+            api_key=settings.OPENAI_API_KEY
+        )
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """당신은 보험설계사의 일일 업무 보고서를 작성하는 어시스턴트입니다.
+사용자가 간단하게 입력한 업무 내용을 보고서에 적합한 1-2문장의 명확한 문장으로 확장해주세요.
+
+규칙:
+1. 업무 카테고리를 참고하여 맥락에 맞게 작성
+2. 1-2문장으로 간결하게 작성 (너무 길지 않게)
+3. 존댓말 사용하지 않고 보고서 어투로 작성 ("~함", "~함." 등)
+4. 구체적인 정보가 없으면 일반적인 업무 내용으로 작성
+5. 입력 텍스트의 핵심 의미를 유지하되, 보고서답게 표현
+
+예시:
+입력: "연말 상담 일정 정리"
+출력: "연말을 대비해 고객 상담 일정을 정리함."
+
+입력: "신규 고객 미팅"
+출력: "신규 고객과 보험 상품 안내를 위한 미팅을 진행함."
+
+입력: "보장분석"
+출력: "기존 고객의 보험 보장 내용을 분석하고 추가 보장이 필요한 부분을 파악함."
+"""),
+            ("user", "업무 카테고리: {category}\n입력: {task_text}\n출력:")
+        ])
+        
+        chain = prompt | llm
+        response = chain.invoke({
+            "category": category,
+            "task_text": task_text
+        })
+        
+        expanded = response.content.strip()
+        
+        # 응답이 너무 길면 첫 2문장만 사용
+        sentences = expanded.split('.')
+        if len(sentences) > 2:
+            expanded = '.'.join(sentences[:2]) + '.'
+        
+        return expanded if expanded else task_text
+        
+    except Exception as e:
+        print(f"⚠️  업무 내용 확장 실패: {str(e)}")
+        # LLM 호출 실패 시 원본 반환
+        return task_text
+
+
 class DailyInputRequest(BaseModel):
     """일일보고서 입력 요청"""
     model_config = {"populate_by_name": True}
@@ -115,17 +180,20 @@ async def submit_daily_input(
                 detail="업무 목록이 비어있습니다."
             )
         
-        # 카테고리 분류 및 DetailTask 생성
+        # 카테고리 분류 및 DetailTask 생성 (LLM으로 상세내용 확장)
         detail_tasks = []
         for task in request.tasks:
             if not task.strip():
                 continue
             
             category = classify_task(task)
+            # LLM으로 상세내용 확장
+            expanded_text = expand_task_description(task.strip(), category)
+            
             detail_tasks.append(DetailTask(
                 time_start=None,
                 time_end=None,
-                text=task.strip(),
+                text=expanded_text,
                 note=f"카테고리: {category}"
             ))
         

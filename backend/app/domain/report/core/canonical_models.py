@@ -45,6 +45,7 @@ class CanonicalWeekly(BaseModel):
     header: Dict[str, str] = Field(default_factory=dict)
     weekly_goals: List[str] = Field(default_factory=list)
     weekday_tasks: Dict[str, List[str]] = Field(default_factory=dict)
+    weekday_notes: Dict[str, str] = Field(default_factory=dict)  # 각 요일별 notes 정보 (KPI 집계용)
     weekly_highlights: List[str] = Field(default_factory=list)
     notes: str = Field(default="")
 

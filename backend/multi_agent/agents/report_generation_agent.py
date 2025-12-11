@@ -368,15 +368,17 @@ class ReportGenerationAgent(ReportBaseAgent):
         
         target_date = date(year, month, 1)
         
-        # KPI 계산 (카테고리 기반)
+        # KPI 계산 (카테고리 기반) - 일일보고서의 카테고리 필드에서 직접 집계
         from app.domain.report.monthly.kpi_calculator import calculate_monthly_kpi
         kpi_data = calculate_monthly_kpi(db=db, year=year, month=month)
+        
+        print(f"[INFO] 월간 KPI 계산 완료: new_contracts={kpi_data.get('new_contracts', 0)}, renewals={kpi_data.get('renewals', 0)}, consultations={kpi_data.get('consultations', 0)}")
         
         report = generate_monthly_report(
             db=db,
             owner=owner,
             target_date=target_date,
-            kpi_data=kpi_data,  # KPI 데이터 전달
+            kpi_data=kpi_data,  # 카테고리 기반으로 계산된 KPI 데이터 전달 (LLM은 analysis만 작성)
             display_name=display_name,
             prompt_registry=self.prompt_registry
         )

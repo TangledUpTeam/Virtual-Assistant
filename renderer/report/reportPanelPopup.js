@@ -6,6 +6,9 @@
 import { addTaskRecommendations, showCustomTaskInput } from './taskUI.js';
 import { buildRequestContext } from './taskService.js';
 
+// 전역 폰트 설정 (모든 동적 생성 요소에 적용)
+const DEFAULT_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
 const API_BASE = 'http://localhost:8000/api/v1';
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 const MULTI_AGENT_SESSION_KEY = 'multi_agent_session_id';
@@ -16,6 +19,7 @@ let messagesContainer = null;
 let reportInput = null;
 let sendBtn = null;
 let isInitialized = false;
+let isProcessingCommand = false; // 명령 실행 중 플래그 (중복 실행 방지)
 
 // FSM 상태
 let chatMode = 'normal'; // 'normal' 또는 'daily_fsm'
@@ -97,18 +101,19 @@ function addQuickActionButtonsFixed() {
     return; // 이미 있으면 재생성하지 않음
   }
   
-  // 고정 컨테이너 생성
+  // 컨테이너 생성 (배경 투명, 테두리 제거 - 버튼들만 보이게)
   const fixedContainer = document.createElement('div');
   fixedContainer.id = 'report-quick-actions-fixed';
   fixedContainer.className = 'report-quick-actions-fixed';
   fixedContainer.style.cssText = `
-    position: sticky;
-    top: 0;
+    position: relative;
     z-index: 100;
-    background: white;
+    background: transparent;
     padding: 16px;
-    border-bottom: 2px solid #f0f0f0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 24px;
+    border: none;
+    box-shadow: none;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   
   // 메인 컨테이너 생성
@@ -118,6 +123,7 @@ function addQuickActionButtonsFixed() {
     max-width: 760px;
     margin: 0 auto;
     padding: 0;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   
   // 2x2 그리드 컨테이너
@@ -141,6 +147,7 @@ function addQuickActionButtonsFixed() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'report-quick-button';
+    button.style.fontFamily = DEFAULT_FONT_FAMILY;
     button.innerHTML = `
       <span class="report-quick-button-icon">${action.icon}</span>
       <span class="report-quick-button-label">${action.label}</span>
@@ -188,6 +195,14 @@ function addQuickActionButtons() {
  * 기존 handleSendMessage와 동일한 로직 사용
  */
 async function triggerAgentCommand(command) {
+  // 중복 실행 방지
+  if (isProcessingCommand) {
+    console.log('⚠️ [ReportPopup] 명령이 이미 실행 중입니다. 중복 실행을 방지합니다.');
+    return;
+  }
+  
+  isProcessingCommand = true;
+  
   // 사용자 메시지로 추가
   addMessage('user', command);
   
@@ -207,6 +222,7 @@ async function triggerAgentCommand(command) {
   } finally {
     sendBtn.disabled = false;
     sendBtn.textContent = '전송';
+    isProcessingCommand = false;
   }
 }
 
@@ -216,6 +232,7 @@ async function triggerAgentCommand(command) {
 function addMessage(role, content, isMarkdown = false) {
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${role}`;
+  messageDiv.style.fontFamily = DEFAULT_FONT_FAMILY;
   
   // 구조화된 메시지 처리 (보고서 링크)
   if (typeof content === 'object' && content.type) {
@@ -225,6 +242,7 @@ function addMessage(role, content, isMarkdown = false) {
     // 일반 텍스트 메시지는 bubble 래퍼 추가
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
+    bubble.style.fontFamily = DEFAULT_FONT_FAMILY;
     
     if (isMarkdown) {
       // 마크다운 렌더링 (간단한 처리)
@@ -259,11 +277,11 @@ function addMessage(role, content, isMarkdown = false) {
 function formatStructuredMessage(data) {
   const { type, message, period, report_data } = data;
   
-  let html = `<div class="report-message">`;
-  html += `<div class="report-text">${message}</div>`;
+  let html = `<div class="report-message" style="font-family: ${DEFAULT_FONT_FAMILY}">`;
+  html += `<div class="report-text" style="font-family: ${DEFAULT_FONT_FAMILY}">${message}</div>`;
   
   if (period) {
-    html += `<div class="report-period">📅 ${period.start || ''} ~ ${period.end || ''}</div>`;
+    html += `<div class="report-period" style="font-family: ${DEFAULT_FONT_FAMILY}">📅 ${period.start || ''} ~ ${period.end || ''}</div>`;
   }
   
   // report_data.url 또는 report_data.html_url 지원
@@ -271,10 +289,10 @@ function formatStructuredMessage(data) {
   const fileName = report_data?.file_name || '보고서 보기';
   
   if (reportUrl) {
-    html += `<div class="report-link">`;
+    html += `<div class="report-link" style="font-family: ${DEFAULT_FONT_FAMILY}">`;
     // Electron 환경에서 링크 열기
     const fullUrl = reportUrl.startsWith('http') ? reportUrl : `http://localhost:8000${reportUrl}`;
-    html += `<a href="#" onclick="openReportLink('${fullUrl}'); return false;" class="report-btn">`;
+    html += `<a href="#" onclick="openReportLink('${fullUrl}'); return false;" class="report-btn" style="font-family: ${DEFAULT_FONT_FAMILY}">`;
     html += `📄 ${fileName}`;
     html += `</a>`;
     html += `</div>`;
@@ -578,6 +596,7 @@ async function loadAndDisplayTaskCards() {
         cursor: pointer;
         font-size: 14px;
         font-weight: 600;
+        font-family: ${DEFAULT_FONT_FAMILY};
       `;
       modifyButton.addEventListener('click', async () => {
         // 저장된 업무를 업무 카드 형식으로 표시 (수정 모드)
@@ -607,6 +626,7 @@ async function loadAndDisplayTaskCards() {
         cursor: pointer;
         font-size: 14px;
         font-weight: 600;
+        font-family: ${DEFAULT_FONT_FAMILY};
       `;
       newRecommendButton.addEventListener('click', async () => {
         // 새로 추천받기
@@ -718,6 +738,7 @@ async function loadNewTaskRecommendations(ownerId, targetDate, headers) {
         font-size: 14px;
         font-weight: 600;
         margin-top: 10px;
+        font-family: ${DEFAULT_FONT_FAMILY};
       `;
       
       button.addEventListener('click', () => {
@@ -1633,6 +1654,7 @@ function showDatePickerModal(dateMode) {
     width: 100%;
     max-width: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   
   // 제목
@@ -1642,6 +1664,7 @@ function showDatePickerModal(dateMode) {
     font-weight: 600;
     color: #333;
     margin-bottom: 8px;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   title.textContent = dateMode === 'weekly' 
     ? '주간보고서 기준 날짜 선택' 
@@ -1654,6 +1677,7 @@ function showDatePickerModal(dateMode) {
     font-size: 14px;
     color: #666;
     margin-bottom: 20px;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   description.textContent = dateMode === 'weekly'
     ? '기준 날짜가 포함된 주간 보고서를 생성합니다.'
@@ -1672,6 +1696,7 @@ function showDatePickerModal(dateMode) {
     font-size: 14px;
     margin-bottom: 20px;
     box-sizing: border-box;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   modalContent.appendChild(dateInput);
   
@@ -1696,6 +1721,7 @@ function showDatePickerModal(dateMode) {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   cancelBtn.addEventListener('click', () => {
     modal.remove();
@@ -1724,6 +1750,7 @@ function showDatePickerModal(dateMode) {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   confirmBtn.addEventListener('click', () => {
     const selectedDate = dateInput.value;
@@ -1777,10 +1804,85 @@ function showDatePickerModal(dateMode) {
 /**
  * 일일보고서 입력 UI 표시
  */
-function showDailyInputUI() {
-  // 기존 메시지 컨테이너 초기화
+async function showDailyInputUI() {
+  // 기존 메시지 컨테이너 초기화 (빠른 실행 버튼은 보존)
+  const quickActionsFixed = document.getElementById('report-quick-actions-fixed');
   messagesContainer.innerHTML = '';
   messages = [];
+  
+  // 빠른 실행 버튼 다시 추가 (보존)
+  if (quickActionsFixed) {
+    messagesContainer.appendChild(quickActionsFixed);
+  } else {
+    // 없으면 새로 생성
+    addQuickActionButtonsFixed();
+  }
+  
+  // 저장된 오늘 업무 플래닝 가져오기
+  try {
+    const { headers, owner_id } = await buildRequestContext();
+    const targetDate = new Date().toISOString().split('T')[0];
+    const { getMainTasks } = await import('./taskService.js');
+    const savedTasksResult = await getMainTasks(owner_id, targetDate);
+    
+    // 저장된 업무가 있으면 상단에 표시 (가운데 정렬, 주황색 테마)
+    if (savedTasksResult.success && savedTasksResult.count > 0) {
+      const planMessage = document.createElement('div');
+      planMessage.style.cssText = `
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: center;
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      
+      const planBubble = document.createElement('div');
+      planBubble.style.cssText = `
+        background: #fff4e6;
+        border: 2px solid #fdbc66;
+        border-radius: 12px;
+        padding: 20px;
+        max-width: 600px;
+        box-shadow: 0 2px 8px rgba(253, 188, 102, 0.15);
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      
+      const planTitle = document.createElement('div');
+      planTitle.textContent = '📋 금일 당신이 계획한 업무입니다!';
+      planTitle.style.cssText = `
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: #d4a574;
+        font-size: 16px;
+        text-align: center;
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      planBubble.appendChild(planTitle);
+      
+      const planList = document.createElement('ol');
+      planList.style.cssText = `
+        margin: 0;
+        padding-left: 24px;
+        color: #555;
+        font-size: 14px;
+        line-height: 1.8;
+        font-family: ${DEFAULT_FONT_FAMILY};
+      `;
+      
+      savedTasksResult.main_tasks.forEach((task, index) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = task.title || task.task || '제목 없음';
+        listItem.style.fontFamily = DEFAULT_FONT_FAMILY;
+        planList.appendChild(listItem);
+      });
+      
+      planBubble.appendChild(planList);
+      planMessage.appendChild(planBubble);
+      messagesContainer.appendChild(planMessage);
+    }
+  } catch (error) {
+    console.error('[DailyInput] 저장된 업무 조회 실패:', error);
+    // 실패해도 계속 진행
+  }
   
   // 일일보고서 입력 컨테이너 생성
   const inputContainer = document.createElement('div');
@@ -1793,6 +1895,7 @@ function showDailyInputUI() {
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   
   // 제목
@@ -1804,6 +1907,7 @@ function showDailyInputUI() {
     font-weight: 600;
     color: #333;
     margin-bottom: 20px;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   inputContainer.appendChild(title);
   
@@ -1828,6 +1932,7 @@ function showDailyInputUI() {
     font-size: 14px;
     outline: none;
     transition: border-color 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   taskInput.addEventListener('focus', () => {
     taskInput.style.borderColor = '#fdbc66';
@@ -1855,6 +1960,7 @@ function showDailyInputUI() {
     font-weight: 600;
     cursor: pointer;
     transition: background 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   addBtn.addEventListener('click', addTaskTag);
   addBtn.addEventListener('mouseenter', () => {
@@ -1898,6 +2004,7 @@ function showDailyInputUI() {
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
     box-shadow: 0 2px 8px rgba(253, 188, 102, 0.3);
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   completeBtn.addEventListener('click', handleDailyInputComplete);
   completeBtn.addEventListener('mouseenter', () => {
@@ -1957,10 +2064,12 @@ function addTaskTag() {
     border-radius: 20px;
     font-size: 13px;
     font-weight: 500;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   
   const tagText = document.createElement('span');
   tagText.textContent = taskText;
+  tagText.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
   tag.appendChild(tagText);
   
   const removeBtn = document.createElement('button');
@@ -1979,6 +2088,7 @@ function addTaskTag() {
     justify-content: center;
     border-radius: 50%;
     transition: background 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   removeBtn.addEventListener('click', () => {
     dailyTaskTags = dailyTaskTags.filter(t => t !== taskText);
@@ -2042,11 +2152,22 @@ async function handleDailyInputComplete() {
     const data = await response.json();
     console.log('[DailyInput] 저장 완료:', data);
     
-    // 성공 메시지 표시
+    // 성공 메시지 표시 (빠른 실행 버튼은 보존)
+    const quickActionsFixed = document.getElementById('report-quick-actions-fixed');
     messagesContainer.innerHTML = '';
     messages = [];
     
-    addMessage('assistant', `✅ 일일보고서가 저장되었습니다!\n\n저장된 업무: ${dailyTaskTags.length}개`);
+    // 빠른 실행 버튼 다시 추가 (보존)
+    if (quickActionsFixed) {
+      messagesContainer.appendChild(quickActionsFixed);
+    } else {
+      addQuickActionButtonsFixed();
+    }
+    
+    // 상세 업무 리스트 생성
+    const taskListText = dailyTaskTags.map((task, index) => `${index + 1}. ${task}`).join('\n');
+    
+    addMessage('assistant', `✅ 일일 상세 업무가 저장되었습니다!\n\n상세 업무 ${dailyTaskTags.length}개\n${taskListText}`);
     
     // 태그 목록 초기화
     dailyTaskTags = [];
@@ -2182,10 +2303,7 @@ async function handleNotesInput(inputText, reportId) {
     showReportViewButton(savedReportDate);
   }
   
-  // 빠른 실행 버튼 다시 표시
-  setTimeout(() => {
-    addQuickActionButtons();
-  }, 500);
+  // 빠른 실행 버튼 다시 표시 (이미 보존되어 있으므로 불필요)
 }
 
 /**
@@ -2201,6 +2319,7 @@ function showReportViewButton(reportDate) {
   buttonMessage.className = 'message assistant';
   buttonMessage.style.cssText = `
     margin-top: 8px;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   
   const linkButton = document.createElement('button');
@@ -2215,6 +2334,7 @@ function showReportViewButton(reportDate) {
     font-weight: 600;
     cursor: pointer;
     transition: background 0.2s;
+    font-family: ${DEFAULT_FONT_FAMILY};
   `;
   linkButton.addEventListener('click', () => {
     // 주간보고서처럼 웹사이트에서 열기
