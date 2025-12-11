@@ -140,8 +140,8 @@ function addMessage(role, text, agent = null) {
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
 
-  // RAG(HR) 에이전트인 경우 마크다운 렌더링
-  if (agent === 'rag' && typeof marked !== 'undefined') {
+  // RAG(HR), Insurance 에이전트인 경우 마크다운 렌더링
+  if ((agent === 'rag' || agent === 'insurance' || agent === 'insurance_tool') && typeof marked !== 'undefined') {
     // marked.js 버전 호환성 처리
     if (typeof marked.parse === 'function') {
       bubble.innerHTML = marked.parse(text);
