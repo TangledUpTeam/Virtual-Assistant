@@ -116,6 +116,43 @@
   <!-- 브레인스토밍 패널 (전체 화면) -->
   <div id="brainstorming-panel">
     <h2>💡 브레인스토밍</h2>
+    
+    <!-- 💾 저장된 아이디어 버튼 영역 -->
+    <div id="saved-ideas-header" style="
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    ">
+      <button id="toggle-saved-ideas-btn" style="
+        background: #6B9080;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s;
+        box-shadow: 0 2px 8px rgba(107, 144, 128, 0.3);
+      ">
+        💾 저장된 아이디어 보기
+      </button>
+    </div>
+    
+    <!-- 저장된 아이디어 목록 (접힘/펼침) -->
+    <div id="saved-ideas-list" style="
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+      background: white;
+      border-bottom: 2px solid #9CAF88;
+    ">
+      <!-- 여기에 아이디어 목록이 동적으로 추가됨 -->
+    </div>
+    
     <div id="bs-content"></div>
     <div id="bs-input-area">
       <input 
@@ -149,6 +186,25 @@
     
     // 전역으로 노출
     window.toggleMaximize = toggleMaximize;
+  </script>
+  
+  <!-- F12 단축키 처리 (별도 스크립트) -->
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // F12 키 이벤트 리스너
+    document.addEventListener('keydown', (e) => {
+      // F12 또는 Ctrl+Shift+I
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
+        e.preventDefault();
+        
+        // 메인 프로세스에 개발자 도구 토글 요청
+        ipcRenderer.send('toggle-brainstorming-devtools');
+        console.log('🛠️ 개발자 도구 토글 요청');
+      }
+    });
+    
+    console.log('✅ F12 키 리스너 등록 완료');
   </script>
 </body>
 </html>

@@ -34,10 +34,7 @@ export async function getOrCreateSession() {
         'Content-Type': 'application/json',
       };
 
-      // 토큰이 있으면 Authorization 헤더 추가
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
+      // Authorization 헤더 제거 - 쿠키만 사용
 
       const response = await fetch(`${API_BASE_URL}/chatbot/session`, {
         method: 'POST',
@@ -92,10 +89,7 @@ export async function sendChatMessage(userMessage) {
       'Content-Type': 'application/json',
     };
 
-    // 토큰이 있으면 Authorization 헤더 추가
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-    }
+    // Authorization 헤더 제거 - 쿠키만 사용
 
     const response = await fetch(`${API_BASE_URL}/chatbot/message`, {
       method: 'POST',
@@ -122,9 +116,7 @@ export async function sendChatMessage(userMessage) {
         'Content-Type': 'application/json',
       };
 
-      if (accessToken) {
-        retryHeaders['Authorization'] = `Bearer ${accessToken}`;
-      }
+      // Authorization 헤더 제거 - 쿠키만 사용
 
       const retryResponse = await fetch(`${API_BASE_URL}/chatbot/message`, {
         method: 'POST',
@@ -224,14 +216,12 @@ export async function getOrCreateMultiAgentSession() {
         'Content-Type': 'application/json',
       };
 
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
+      // Authorization 헤더 제거 - 쿠키만 사용
 
       const response = await fetch(`${API_BASE_URL}/multi-agent/session`, {
         method: 'POST',
         headers: headers,
-        credentials: 'include',
+        credentials: 'include',  // 쿠키 자동 전송
         body: JSON.stringify({})
       });
 
@@ -283,9 +273,8 @@ export async function sendMultiAgentMessage(userMessage) {
       'Content-Type': 'application/json',
     };
 
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-    }
+    // Authorization 헤더 제거 - 쿠키만 사용
+    // 백엔드가 쿠키에서 access_token을 자동으로 읽음
 
     // 쿠키에서 user ID 가져오기
     let userId = null;
@@ -315,7 +304,7 @@ export async function sendMultiAgentMessage(userMessage) {
     const response = await fetch(`${API_BASE_URL}/multi-agent/query`, {
       method: 'POST',
       headers: headers,
-      credentials: 'include',
+      credentials: 'include',  // 쿠키 자동 전송
       body: JSON.stringify(requestBody)
     });
 
@@ -346,14 +335,12 @@ export async function getAvailableAgents() {
       'Content-Type': 'application/json',
     };
 
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-    }
+    // Authorization 헤더 제거 - 쿠키만 사용
 
     const response = await fetch(`${API_BASE_URL}/multi-agent/agents`, {
       method: 'GET',
       headers: headers,
-      credentials: 'include'
+      credentials: 'include'  // 쿠키 자동 전송
     });
 
     if (!response.ok) {

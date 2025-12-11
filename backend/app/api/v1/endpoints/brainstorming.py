@@ -407,3 +407,149 @@ async def delete_session(session_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"세션 삭제 실패: {str(e)}")
+
+
+# ============================================================
+# 아이디어 저장/조회 API (새로 추가)
+# ============================================================
+
+from fastapi import Depends
+from sqlalchemy.orm import Session
+from app.infrastructure.database.session import get_db
+from app.domain.user.models import User
+from app.domain.auth.dependencies import get_current_user
+from app.domain.brainstorming.ideasave.service import IdeaSaveService
+from app.domain.brainstorming.ideasave.schemas import (
+    IdeaCreate, 
+    IdeaResponse as SavedIdeaResponse,  # DB용 스키마는 별칭 사용
+    IdeaListResponse
+)
+
+idea_save_service = IdeaSaveService()
+
+
+@router.post("/ideas", response_model=SavedIdeaResponse, status_code=201)
+async def save_idea(
+    idea: IdeaCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    브레인스토밍 아이디어 저장
+    
+    Args:
+        idea: 아이디어 데이터 (title, description)
+        current_user: 현재 로그인한 사용자
+        db: DB 세션
+        
+    Returns:
+        SavedIdeaResponse: 저장된 아이디어
+    """
+    try:
+        saved_idea = idea_save_service.save_idea(
+            db=db,
+            user_id=current_user.id,
+            idea_data=idea
+        )
+        return saved_idea
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"아이디어 저장 실패: {str(e)}")
+
+
+@router.get("/ideas", response_model=IdeaListResponse)
+async def get_my_ideas(
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    내 아이디어 목록 조회 (최신순)
+    
+    Args:
+        limit: 최대 개수 (기본값: 100)
+        offset: 시작 위치 (기본값: 0)
+        current_user: 현재 로그인한 사용자
+        db: DB 세션
+        
+    Returns:
+        IdeaListResponse: {"total": int, "ideas": List[IdeaResponse]}
+    """
+    try:
+        result = idea_save_service.get_user_ideas(
+            db=db,
+            user_id=current_user.id,
+            limit=limit,
+            offset=offset
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"아이디어 목록 조회 실패: {str(e)}")
+
+
+@router.get("/ideas/{idea_id}", response_model=SavedIdeaResponse)
+async def get_idea_detail(
+    idea_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    아이디어 상세 조회
+    
+    Args:
+        idea_id: 아이디어 ID
+        current_user: 현재 로그인한 사용자
+        db: DB 세션
+        
+    Returns:
+        SavedIdeaResponse: 아이디어 상세 정보
+    """
+    try:
+        idea = idea_save_service.get_idea_by_id(
+            db=db,
+            idea_id=idea_id,
+            user_id=current_user.id
+        )
+        
+        if not idea:
+            raise HTTPException(status_code=404, detail="아이디어를 찾을 수 없거나 권한이 없습니다.")
+        
+        return idea
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"아이디어 조회 실패: {str(e)}")
+
+
+@router.delete("/ideas/{idea_id}")
+async def delete_idea(
+    idea_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    아이디어 삭제
+    
+    Args:
+        idea_id: 아이디어 ID
+        current_user: 현재 로그인한 사용자
+        db: DB 세션
+        
+    Returns:
+        Dict: {"message": "삭제되었습니다."}
+    """
+    try:
+        success = idea_save_service.delete_idea(
+            db=db,
+            idea_id=idea_id,
+            user_id=current_user.id
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="아이디어를 찾을 수 없거나 권한이 없습니다.")
+        
+        return {"message": "아이디어가 삭제되었습니다."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"아이디어 삭제 실패: {str(e)}")

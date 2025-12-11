@@ -269,4 +269,3 @@ class BrainstormingService:
         techniques.sort(key=lambda x: x['chunk_id'])
         
         return techniques
-
