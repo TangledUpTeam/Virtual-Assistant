@@ -211,6 +211,7 @@ class SupervisorAgent:
 12. 리포트/실적 분석 → report_tool
 13. 메일 전송, 검색, 첨부 → email_tool
 14. 일반 대화/인사/잡담 → chatbot_tool
+15. Notion/노션 관련 → notion_tool
 
 **중요한 규칙:**
 - **사용자의 의도를 정확히 파악하는 것이 최우선입니다.**
