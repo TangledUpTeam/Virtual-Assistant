@@ -5,6 +5,7 @@ from .models import Query, InsuranceDocument, GenerationResult, RetrievalResult
 from .exceptions import InsuranceRAGException, RetrievalException, GenerationException
 from .providers import SimpleEmbeddingProvider, SimpleVectorStore, SimpleLLMProvider
 from .retriever import Retriever
+from .hybrid_retriever import HybridRetriever
 from .generator import Generator
 
 # DocumentProcessor는 폴더 이름 충돌로 인해 직접 import하지 않음
@@ -27,6 +28,7 @@ __all__ = [
     "SimpleVectorStore",
     "SimpleLLMProvider",
     "Retriever",
+    "HybridRetriever",
     "Generator",
     "RAGPipeline",
 ]
