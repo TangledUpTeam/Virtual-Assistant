@@ -15,4 +15,10 @@ try:
 except ImportError:
     pass
 
+# 브레인스토밍 아이디어 모델 import
+try:
+    from app.domain.brainstorming.ideasave.models import BrainstormingIdea
+except ImportError:
+    BrainstormingIdea = None
+
 __all__ = ["Base", "engine", "get_db", "SessionLocal"]
