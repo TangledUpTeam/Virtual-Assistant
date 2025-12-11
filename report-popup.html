@@ -207,6 +207,7 @@
     </div>
   </div>
 
+
   <!-- 보고서 & 업무 패널 (전체 화면) -->
   <div id="report-panel" style="pointer-events: auto !important;">
     <h2>📝 보고서 & 업무</h2>
@@ -280,12 +281,26 @@
     // 전역으로 노출
     window.toggleMaximize = toggleMaximize;
     
-    // 보고서 링크 열기 함수를 전역으로 노출
+    // 보고서 링크 열기 함수를 전역으로 노출 (Electron 앱 내부에서 열기)
     window.openReportLink = function(url) {
       try {
-        const { shell } = require('electron');
-        shell.openExternal(url);
+        const { ipcRenderer } = require('electron');
+        // URL에서 보고서 타입 추출 (daily/weekly/monthly)
+        let title = '보고서';
+        if (url.includes('/daily/')) {
+          title = '일일보고서';
+        } else if (url.includes('/weekly/')) {
+          title = '주간보고서';
+        } else if (url.includes('/monthly/')) {
+          title = '월간보고서';
+        }
+        
+        ipcRenderer.send('open-report-window', {
+          url: url,
+          title: title
+        });
       } catch (e) {
+        console.error('보고서 창 열기 실패:', e);
         // Electron이 아닌 환경에서는 일반 브라우저로 열기
         window.open(url, '_blank');
       }

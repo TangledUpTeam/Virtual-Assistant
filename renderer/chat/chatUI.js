@@ -311,7 +311,8 @@ async function handleSendMessage() {
 
     // 1. RAG(intent === 'lookup' 또는 'rag') 또는 insurance이면 → LLM 응답만 보여주고 종료
     if (intent === "lookup" || intent === "rag" || agent === "insurance_tool" || agent === "insurance") {
-      console.log(`📝 Markdown 렌더링: ${isMarkdown}, Agent: ${agent}, Intent: ${intent}`);
+      console.log(`📝 [Insurance/RAG 디버깅] Markdown: ${isMarkdown}, Agent: ${agent}, Intent: ${intent}`);
+      console.log(`📝 [Insurance/RAG 디버깅] Answer 샘플: ${answer ? answer.substring(0, 200) : 'null'}`);
       addMessage("assistant", answer, isMarkdown);
       return;
     }
@@ -446,16 +447,21 @@ function addMessage(role, text, isMarkdown = false) {
 
   // 마크다운 렌더링 (HR RAG 등)
   if (isMarkdown && role === "assistant" && typeof marked !== "undefined") {
+    console.log(`🎨 [마크다운 렌더링] isMarkdown=${isMarkdown}, marked 존재=${typeof marked !== "undefined"}`);
     // marked.js 버전 호환성 처리
     if (typeof marked.parse === "function") {
       bubble.innerHTML = marked.parse(text);
+      console.log(`✅ [마크다운] marked.parse() 사용`);
     } else if (typeof marked === "function") {
       bubble.innerHTML = marked(text);
+      console.log(`✅ [마크다운] marked() 사용`);
     } else {
       bubble.textContent = text;
+      console.log(`⚠️ [마크다운] marked 함수 없음 - 일반 텍스트`);
     }
   } else {
     bubble.textContent = text;
+    console.log(`📄 [일반 텍스트] isMarkdown=${isMarkdown}, role=${role}, marked=${typeof marked}`);
   }
 
   messageDiv.appendChild(bubble);

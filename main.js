@@ -2,6 +2,9 @@ const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 
+// 내보내기 핸들러 등록 (PDF, CSV)
+require('./exportHandlers.js');
+
 let loginWin = null;
 let characterWin = null;
 let backendProcess = null;
@@ -583,11 +586,15 @@ async function openReportPopup() {
   reportWin.on('closed', () => {
     console.log('📝 보고서 팝업 닫힘');
 
-    // 챗봇에 종료 이벤트 전송
+    // 챗봇에 종료 이벤트 전송 및 alwaysOnTop 복구
     if (characterWin && !characterWin.isDestroyed()) {
       characterWin.webContents.send('report-closed', {
         // 단순히 종료만 알림
       });
+      
+      // characterWin의 alwaysOnTop 복구
+      characterWin.setAlwaysOnTop(true);
+      console.log('✅ 캐릭터 창 alwaysOnTop 복구');
     }
 
     reportWin = null;
@@ -757,6 +764,62 @@ ipcMain.handle('get-main-cookies', async () => {
   }
 
   return {};
+});
+
+// 보고서 전용 창 열기 (Electron 앱 내부)
+let reportViewerWins = []; // 여러 보고서 창을 관리
+
+ipcMain.on('open-report-window', async (event, data) => {
+  const { url, title } = data;
+  console.log('📄 보고서 창 열기 요청:', { url, title });
+
+  try {
+    // 새 보고서 뷰어 창 생성
+    const reportViewerWin = new BrowserWindow({
+      width: 1200,
+      height: 900,
+      center: true,
+      resizable: true,
+      frame: true,
+      backgroundColor: '#f5f5f5',
+      title: title || '보고서',
+      webPreferences: {
+        contextIsolation: false,
+        nodeIntegration: true,
+        partition: 'persist:main' // 세션 공유
+      },
+      parent: null, // 독립적인 창으로 설정 (부모 없음)
+      modal: false, // 모달이 아님
+      alwaysOnTop: false // 항상 위에 표시하지 않음
+    });
+
+    // URL 로드
+    reportViewerWin.loadURL(url);
+
+    // 개발자 도구 (F12)
+    reportViewerWin.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12') {
+        if (reportViewerWin.webContents.isDevToolsOpened()) {
+          reportViewerWin.webContents.closeDevTools();
+        } else {
+          reportViewerWin.webContents.openDevTools({ mode: 'detach' });
+        }
+      }
+    });
+
+    // 창 닫힐 때 배열에서 제거
+    reportViewerWin.on('closed', () => {
+      console.log('📄 보고서 창 닫힘');
+      reportViewerWins = reportViewerWins.filter(win => win !== reportViewerWin);
+    });
+
+    // 배열에 추가
+    reportViewerWins.push(reportViewerWin);
+
+    console.log('✅ 보고서 창 열기 완료');
+  } catch (error) {
+    console.error('❌ 보고서 창 열기 실패:', error);
+  }
 });
 
 // 보고서 창 최대화 토글
