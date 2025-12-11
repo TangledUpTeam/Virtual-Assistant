@@ -12,6 +12,9 @@
 
 import { saveSelectedTasks } from './taskService.js';
 
+// 전역 폰트 설정 (모든 동적 생성 요소에 적용)
+const DEFAULT_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
 // 추천 업무 선택 상태
 let selectedTasks = new Set();
 let currentRecommendation = null;
@@ -317,6 +320,26 @@ async function handleSaveSelectedTasks(event, addMessage, messagesContainer) {
   
   cancelBtn.addEventListener('click', () => {
     confirmDiv.remove();
+    
+    // 취소 시 UI 초기화: 선택된 카드 스타일 제거 및 상태 초기화
+    const allCards = document.querySelectorAll('.task-card.selected');
+    allCards.forEach(card => {
+      card.classList.remove('selected');
+    });
+    
+    // 상태 초기화 (직접 작성하기 모드 정상 동작을 위해)
+    resetTaskState();
+    
+    // 선택 완료 버튼 비활성화 및 카운트 업데이트
+    const container = document.querySelector('.task-recommendations-container');
+    if (container) {
+      const saveButton = container.querySelector('.task-save-button');
+      if (saveButton) {
+        saveButton.disabled = true;
+      }
+      updateSelectionCount(container, 0);
+    }
+    
     addMessage('assistant', '업무 선택이 취소되었습니다. 다시 선택해주세요.');
   });
   
@@ -438,11 +461,11 @@ export function showCustomTaskInput(ownerId, targetDate, addMessage) {
   
   const title = document.createElement('h3');
   title.textContent = '✏️ 직접 업무 작성하기';
-  title.style.cssText = 'margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: 600;';
+  title.style.cssText = `margin: 0 0 20px 0; color: #333; font-size: 18px; font-weight: 600;`;
   
   const label = document.createElement('label');
   label.textContent = '업무 내용을 입력해주세요:';
-  label.style.cssText = 'display: block; margin-bottom: 8px; color: #555; font-size: 14px; font-weight: 500;';
+  label.style.cssText = `display: block; margin-bottom: 8px; color: #555; font-size: 14px; font-weight: 500;`;
   
   const textarea = document.createElement('textarea');
   textarea.className = 'custom-task-input';
@@ -455,7 +478,6 @@ export function showCustomTaskInput(ownerId, targetDate, addMessage) {
     border-radius: 8px;
     font-size: 14px;
     resize: vertical;
-    font-family: inherit;
     box-sizing: border-box;
     transition: border-color 0.2s;
   `;
@@ -526,6 +548,31 @@ export function showCustomTaskInput(ownerId, targetDate, addMessage) {
       return;
     }
     
+    // currentRecommendation이 없으면 (취소 후 직접 작성 모드) 직접 저장
+    if (!currentRecommendation) {
+      const customTask = {
+        title: text,
+        description: text,
+        priority: 'medium',
+        category: '기타',
+        expected_time: '30분'
+      };
+      
+      modal.remove();
+      
+      // 직접 저장 (단일 업무)
+      try {
+        await saveTasks(ownerId, targetDate, [customTask], addMessage);
+        // 상태 초기화
+        resetTaskState();
+      } catch (error) {
+        console.error('❌ [TaskUI] 직접 작성 업무 저장 오류:', error);
+        addMessage('assistant', '❌ 업무 저장 중 오류가 발생했습니다.');
+      }
+      return;
+    }
+    
+    // 추천 업무 컨테이너가 있는 경우 (기존 로직)
     // 최대 3개까지만 직접 작성 가능
     if (customTasks.length >= MAX_CUSTOM_TASKS) {
       alert(`직접 작성한 업무는 최대 ${MAX_CUSTOM_TASKS}개까지 가능합니다.`);

@@ -9,6 +9,7 @@ from datetime import date
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from app.domain.report.core.schemas import CanonicalReport
+from app.core.config import settings
 
 
 class HTMLReportRenderer:
@@ -76,23 +77,30 @@ class HTMLReportRenderer:
             "성명": 성명
         }
         
-        # 세부 업무 목록 (최대 9개)
+        # 세부 업무 목록 (새 템플릿 형식: 업무명, 상세내용, 비고)
         detail_tasks = []
-        for task in daily.detail_tasks[:9]:
+        for task in daily.detail_tasks:
+            # 카테고리 추출 (note에서 "카테고리: " 제거)
+            category = ""
+            if task.note:
+                # "카테고리: 유지 계약" 형식에서 "유지 계약"만 추출
+                if "카테고리:" in task.note:
+                    category = task.note.replace("카테고리:", "").strip()
+                elif "카테고리 :" in task.note:
+                    category = task.note.replace("카테고리 :", "").strip()
+                else:
+                    # 이미 카테고리만 있는 경우
+                    category = task.note.strip()
+            
             detail_tasks.append({
-                "time_start": task.time_start or "",
-                "time_end": task.time_end or "",
-                "time_range": f"{task.time_start or ''} - {task.time_end or ''}".strip(" -"),
-                "text": task.text or "",
-                "note": task.note or ""
+                "text": task.text or "",  # 상세내용에 사용
+                "category": category,  # 업무명에 카테고리만 표시
+                "note": task.note or ""  # 비고 (원본 유지)
             })
         
-        # 9개가 안 되면 빈 행으로 채우기
-        while len(detail_tasks) < 9:
+        # 빈 행 추가 (최소 1개)
+        if len(detail_tasks) == 0:
             detail_tasks.append({
-                "time_start": "",
-                "time_end": "",
-                "time_range": "",
                 "text": "",
                 "note": ""
             })
@@ -109,7 +117,8 @@ class HTMLReportRenderer:
             "detail_tasks": detail_tasks,
             "pending": pending_text,
             "plans": plans_text,
-            "notes": daily.notes or ""
+            "notes": daily.notes or "",
+            "report_id": report.report_id or ""  # report_id 추가
         }
     
     def _convert_weekly_to_context(self, report: CanonicalReport, display_name: Optional[str] = None) -> Dict[str, Any]:
@@ -141,31 +150,62 @@ class HTMLReportRenderer:
             "성명": 성명
         }
         
-        # 요일별 업무 (날짜 키를 요일명으로 변환)
-        # weekday_tasks는 { "YYYY-MM-DD": ["업무1", "업무2"], ... } 형식
-        weekday_tasks_map = {}
-        day_names = ["월", "화", "수", "목", "금"]
+        # 주간 세부 업무 (새 템플릿 형식: 분류/업무내용/비고)
+        # weekday_tasks는 { "월요일": ["업무1", "업무2"], ... } 형식
+        # 요일별로 그룹화하여 한 행에 모든 업무를 표시
+        weekday_tasks_list = []
+        day_name_map = {
+            "월요일": "월",
+            "화요일": "화",
+            "수요일": "수",
+            "목요일": "목",
+            "금요일": "금"
+        }
         
-        # 날짜를 정렬하여 요일명에 매핑
-        sorted_dates = sorted(weekly.weekday_tasks.keys())[:5]
-        for idx, date_str in enumerate(sorted_dates):
-            if idx < len(day_names):
-                weekday_tasks_map[day_names[idx]] = weekly.weekday_tasks[date_str]
+        # 요일 순서 정의
+        weekday_order = ["월요일", "화요일", "수요일", "목요일", "금요일"]
         
-        # 5개 요일 모두 채우기
-        for day_name in day_names:
-            if day_name not in weekday_tasks_map:
-                weekday_tasks_map[day_name] = []
+        # weekday_tasks를 요일 순서대로 처리
+        for weekday_name in weekday_order:
+            if weekday_name not in weekly.weekday_tasks:
+                continue
+            
+            tasks = weekly.weekday_tasks[weekday_name]
+            if not isinstance(tasks, list):
+                continue
+            
+            day_short = day_name_map.get(weekday_name, weekday_name)
+            
+            # 요일별로 모든 업무를 하나의 문자열로 합치기 (줄바꿈으로 구분)
+            # textarea는 HTML을 렌더링하지 않으므로 \n을 사용
+            tasks_text = "\n".join(task for task in tasks if task.strip())
+            
+            # 업무가 있으면 한 행으로 추가
+            if tasks_text:
+                weekday_tasks_list.append({
+                    "category": day_short,  # 분류: 요일명 (월, 화, 수, 목, 금)
+                    "content": tasks_text,  # 업무내용: 모든 업무를 줄바꿈으로 구분
+                    "note": ""  # 비고
+                })
+        
+        # 빈 행 추가 (최소 1개)
+        if len(weekday_tasks_list) == 0:
+            weekday_tasks_list.append({
+                "category": "",
+                "content": "",
+                "note": ""
+            })
         
         return {
             "header": header,
             "weekly_goals": weekly.weekly_goals or [],
-            "weekday_tasks": weekday_tasks_map,
+            "weekday_tasks": weekday_tasks_list,  # 리스트 형식으로 변경
             "weekly_highlights": weekly.weekly_highlights or [],
-            "notes": weekly.notes or ""
+            "notes": weekly.notes or "",
+            "report_id": report.report_id or ""  # report_id 추가
         }
     
-    def _convert_monthly_to_context(self, report: CanonicalReport, display_name: Optional[str] = None) -> Dict[str, Any]:
+    def _convert_monthly_to_context(self, report: CanonicalReport, display_name: Optional[str] = None, kpi_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         월간보고서 CanonicalReport → 템플릿 context 변환
         
@@ -190,7 +230,13 @@ class HTMLReportRenderer:
         
         # 성명 결정: display_name 우선, 없으면 monthly.header의 성명 사용
         # report.owner는 더 이상 사용하지 않음 (상수이므로)
-        성명 = display_name or monthly.header.get("성명", "")
+        # fallback 체인: display_name -> monthly.header.성명
+        성명 = display_name
+        if not 성명 or (isinstance(성명, str) and 성명.strip() == ""):
+            성명 = monthly.header.get("성명", "")
+        # 최종 fallback: 빈 문자열이면 "사용자" (템플릿에서 빈 값 방지)
+        if not 성명 or (isinstance(성명, str) and 성명.strip() == ""):
+            성명 = "사용자"
         
         # 헤더 정보
         상단정보 = {
@@ -234,36 +280,35 @@ class HTMLReportRenderer:
                 "비고": 주차별_세부_업무[주차]["비고"]
             })
         
+        # KPI 데이터 처리 (숫자만 표시, analysis 없음)
+        key_metrics = {
+            "new_contracts": 0,
+            "renewals": 0,
+            "consultations": 0,
+            "analysis": ""  # 비고 필드에 표시하지 않음
+        }
+        if kpi_data:
+            # kpi_data에서 숫자만 추출 (analysis는 사용하지 않음)
+            key_metrics["new_contracts"] = kpi_data.get("new_contracts", 0)
+            key_metrics["renewals"] = kpi_data.get("renewals", 0)
+            key_metrics["consultations"] = kpi_data.get("consultations", 0)
+            # analysis는 빈 문자열로 유지 (비고 필드에 표시하지 않음)
+        
         return {
             "상단정보": 상단정보,
-            "월간_핵심_지표": {
-                "신규_계약_건수": {
-                    "건수": "",
-                    "비고": ""
-                },
-                "유지_계약_건수": {
-                    "유지": "",
-                    "갱신": "",
-                    "미납_방지": "",
-                    "비고": ""
-                },
-                "상담_진행_건수": {
-                    "전화": "",
-                    "방문": "",
-                    "온라인": "",
-                    "비고": ""
-                }
-            },
+            "key_metrics": key_metrics,
             "주차별_세부_업무": 주차별_세부_업무,
             "주차별_세부_업무_list": 주차별_세부_업무_list,
-            "익월_계획": monthly.next_month_plan or ""
+            "익월_계획": monthly.next_month_plan or "",
+            "report_id": report.report_id or ""  # report_id 추가
         }
     
     def _convert_to_context(
         self,
         report_type: Literal["daily", "weekly", "monthly"],
         report: CanonicalReport,
-        display_name: Optional[str] = None
+        display_name: Optional[str] = None,
+        kpi_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         CanonicalReport를 템플릿 context로 변환
@@ -281,7 +326,7 @@ class HTMLReportRenderer:
         elif report_type == "weekly":
             return self._convert_weekly_to_context(report, display_name)
         elif report_type == "monthly":
-            return self._convert_monthly_to_context(report, display_name)
+            return self._convert_monthly_to_context(report, display_name, kpi_data)
         else:
             raise ValueError(f"Unknown report type: {report_type}")
     
@@ -290,7 +335,8 @@ class HTMLReportRenderer:
         report_type: Literal["daily", "weekly", "monthly"],
         data: Dict[str, Any],
         output_filename: Optional[str] = None,
-        display_name: Optional[str] = None
+        display_name: Optional[str] = None,
+        kpi_data: Optional[Dict[str, Any]] = None
     ) -> Path:
         """
         보고서를 HTML로 렌더링
@@ -328,24 +374,26 @@ class HTMLReportRenderer:
                 f"Template not found: {template_filename} in {self.TEMPLATE_DIR}"
             )
         
-        # CanonicalReport → context 변환 (display_name 전달)
-        context = self._convert_to_context(report_type, report, display_name)
+        # CanonicalReport → context 변환 (display_name, kpi_data 전달)
+        context = self._convert_to_context(report_type, report, display_name, kpi_data)
+        
+        # report_id를 context에 추가 (이미 _convert_*_to_context에서 추가되지만, 없을 경우를 대비)
+        if "report_id" not in context:
+            context["report_id"] = str(report.report_id) if report.report_id else ""
         
         # HTML 렌더링
         html_content = template.render(**context)
         
         # 출력 파일명 생성
         if output_filename is None:
-            from app.reporting.pdf_generator.utils import format_korean_date
-            
             if report_type == "daily":
-                date_str = format_korean_date(report.period_start) if report.period_start else ""
+                date_str = report.period_start.isoformat() if report.period_start else ""
                 output_filename = f"일일보고서_{report.owner}_{date_str}.html"
             elif report_type == "weekly":
-                date_str = format_korean_date(report.period_end) if report.period_end else ""
+                date_str = report.period_end.isoformat() if report.period_end else ""
                 output_filename = f"주간보고서_{report.owner}_{date_str}.html"
             elif report_type == "monthly":
-                month_str = f"{report.period_start.month}월" if report.period_start else ""
+                month_str = f"{report.period_start.year}-{report.period_start.month:02d}" if report.period_start else ""
                 output_filename = f"월간보고서_{report.owner}_{month_str}.html"
         
         # 파일명에서 특수문자 제거 (URL 안전하게)
@@ -389,7 +437,8 @@ def render_report_html(
     report_type: Literal["daily", "weekly", "monthly"],
     data: Dict[str, Any],
     output_filename: Optional[str] = None,
-    display_name: Optional[str] = None
+    display_name: Optional[str] = None,
+    kpi_data: Optional[Dict[str, Any]] = None
 ) -> Path:
     """
     보고서를 HTML로 렌더링 (편의 함수)
@@ -404,5 +453,5 @@ def render_report_html(
         생성된 HTML 파일 경로
     """
     renderer = get_html_renderer()
-    return renderer.render_report_html(report_type, data, output_filename, display_name)
+    return renderer.render_report_html(report_type, data, output_filename, display_name, kpi_data)
 
