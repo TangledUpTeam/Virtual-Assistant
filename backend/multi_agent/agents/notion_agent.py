@@ -18,7 +18,7 @@ from app.core.config import settings
 
 # LangChain 최신 버전 임포트
 from langchain_openai import ChatOpenAI
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent  # ✅ 최신 버전!
 from langchain.tools import tool
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -423,10 +423,11 @@ class NotionAgent(BaseAgent):
             tool_choice="any",
         )
 
-        agent = create_agent(
-            llm_with_tools,
+        # LangGraph의 create_react_agent 사용 (supervisor.py와 동일한 방식)
+        agent = create_react_agent(
+            model=llm_with_tools,
             tools=self.tools,
-            system_prompt=system_prompt,
+            prompt=system_prompt,  # system message
         )
 
         self.agent = agent
