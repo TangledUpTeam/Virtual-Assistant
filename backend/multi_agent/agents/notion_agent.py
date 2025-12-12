@@ -18,9 +18,9 @@ from app.core.config import settings
 
 # LangChain 최신 버전 임포트
 from langchain_openai import ChatOpenAI
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent  # ✅ 최신 버전!
 from langchain.tools import tool
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.config import RunnableConfig
 from pydantic import BaseModel, Field
@@ -411,6 +411,12 @@ class NotionAgent(BaseAgent):
      * title: 저장할 내용을 요약한 제목을 생성하세요. 사용자가 제목을 명시했다면 그대로 사용하세요.
      * content: 사용자가 언급한 내용을 마크다운 형식으로 작성하세요.
    - 사용자가 "이 대화", "방금 답변", "위 내용"," 이 내용" 등을 언급하면, 이는 이전 대화나 특정 내용을 참조하는 것입니다.
+
+3. **중요: 도구 실행 후 즉시 종료**:
+   - 도구를 한 번 실행한 후에는 반드시 최종 답변을 생성하고 종료하세요.
+   - 같은 도구를 여러 번 호출하지 마세요.
+   - 도구 실행 결과를 받으면 그 결과를 사용자에게 명확하게 전달하고 종료하세요.
+   - 불필요한 추가 작업이나 반복 호출을 하지 마세요.
 """
 
         print("=" * 80)
@@ -423,10 +429,11 @@ class NotionAgent(BaseAgent):
             tool_choice="any",
         )
 
-        agent = create_agent(
-            llm_with_tools,
+        # LangGraph의 create_react_agent 사용 (supervisor.py와 동일한 방식)
+        agent = create_react_agent(
+            model=llm_with_tools,
             tools=self.tools,
-            system_prompt=system_prompt,
+            prompt=system_prompt,  # system message
         )
 
         self.agent = agent
@@ -455,18 +462,28 @@ class NotionAgent(BaseAgent):
             print("=" * 80)
             
             final_answer = ""
+            tool_result_received = False  # ToolMessage 수신 여부 추적
+            should_stop = False  # 종료 플래그
             
             # 🔹 user_id를 configurable로 넘겨야 search_notion_tool에서 읽을 수 있음
+            # recursion_limit 설정 (최대 10회로 제한)
             async for event in self.agent.astream(
                 {"messages": [HumanMessage(content=query)]},
                 config={
                     "configurable": {
                         "user_id": str(user_id),
+                        "recursion_limit": 10,  # 최대 10회 반복 제한
                     }
                 },
             ):
+                if should_stop:
+                    break
+                    
                 # event는 노드 이름을 키로 하는 딕셔너리 (예: {'agent': {'messages': [...]}})
                 for node_name, node_output in event.items():
+                    if should_stop:
+                        break
+                        
                     # node_output에서 messages 추출
                     messages = []
                     if isinstance(node_output, dict):
@@ -475,26 +492,32 @@ class NotionAgent(BaseAgent):
                         messages = node_output
                     
                     for msg in messages:
-                        if hasattr(msg, "content") and msg.content:
-                            # AIMessage이고 tool_calls가 없는 경우(또는 일반 텍스트)를 누적
-                            # 여기서는 모든 텍스트 컨텐츠를 누적합니다.
-                            # 단순 텍스트 응답만 필요하다면 조건을 더 강화할 수 있음.
+                        if should_stop:
+                            break
                             
-                            # 툴 호출 메시지(ToolMessage)나 툴 호출을 포함한 AIMessage는 제외하고 
-                            # 순수 텍스트 응답만 원할 수도 있지만,
-                            # 요청사항에 "AIMessage chunk들에서 나오는 text를 모아서"라고 했으므로
-                            # AIMessage의 내용을 붙입니다.
-                            # 단, Tool call이 있는 AIMessage는 보통 content가 비어있거나 "생각"일 수 있음.
-                            
-                            if msg.type == "ai" and not msg.tool_calls:
-                                final_answer += msg.content
-                            elif msg.type == "ai" and msg.tool_calls:
-                                # 툴 호출 시점의 텍스트(Thought 등)도 포함할지 여부.
-                                # 보통 사용자에게 보여줄 답변이므로 포함하거나, 
-                                # 최종 답변(tool 실행 후)만 포함할 수 있음.
-                                # 여기서는 content가 있다면 추가.
-                                final_answer += msg.content
+                        # ToolMessage를 받으면 즉시 결과 추출하고 종료
+                        if isinstance(msg, ToolMessage):
+                            tool_result = msg.content
+                            print(f"📦 [NotionAgent] ToolMessage 받음 - 길이: {len(str(tool_result))}, 내용: {str(tool_result)[:200]}")
+                            final_answer = tool_result
+                            tool_result_received = True
+                            should_stop = True
+                            break
+                        
+                        # AIMessage에서 최종 답변 추출 (ToolMessage가 없는 경우)
+                        if isinstance(msg, AIMessage) and hasattr(msg, "content") and msg.content:
+                            # tool_calls가 없는 경우만 최종 답변으로 간주
+                            if not (hasattr(msg, "tool_calls") and msg.tool_calls):
+                                if not tool_result_received:  # ToolMessage를 받지 않은 경우에만
+                                    final_answer += msg.content
+                    
+                    if should_stop:
+                        break
+                
+                if should_stop:
+                    break
 
+            # ToolMessage를 받지 못했고 final_answer가 비어있는 경우
             if not final_answer:
                 final_answer = "응답을 생성할 수 없습니다."
             
