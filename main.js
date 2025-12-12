@@ -2,6 +2,9 @@ const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 
+// 내보내기 핸들러 등록 (PDF, CSV)
+require('./exportHandlers.js');
+
 let loginWin = null;
 let characterWin = null;
 let backendProcess = null;
@@ -467,14 +470,16 @@ async function openReportPopup() {
   }
 
   // 보고서 팝업 창 생성 (하지만 아직 URL 로드하지 않음)
-  reportWin = new BrowserWindow({
+  // 보고서 팝업 창 생성
+  // Windows 11에서 둥근 모서리 방지: frame: false + transparent: false 조합 사용
+  const reportWinOptions = {
     width: 700,
     height: 732, // 700 + 32 (타이틀바)
     center: true,
     resizable: true,
     frame: false, // 툴바 제거
     backgroundColor: '#f5f5f5', // HTML 배경색과 일치
-    transparent: false, // 투명도 비활성화 (둥근 모서리와 충돌 방지)
+    transparent: false, // 투명도 비활성화 (둥근 모서리 방지)
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
@@ -483,10 +488,15 @@ async function openReportPopup() {
     parent: characterWin, // 부모 창 설정
     modal: false,
     alwaysOnTop: true, // 항상 위에 표시
-    titleBarStyle: 'customButtonsOnHover', // macOS 버튼 완전 숨김
-    trafficLightPosition: { x: -100, y: -100 } // 버튼을 화면 밖으로
-  });
-
+  };
+  
+  // Windows 11 둥근 모서리 완전 제거 (DWM 레벨)
+  if (process.platform === 'win32') {
+    reportWinOptions.roundedCorners = false;
+  }
+  
+  reportWin = new BrowserWindow(reportWinOptions);
+  
   // 🍪 쿠키 복사: characterWin → reportWin (URL 로드 전에 실행!)
   if (characterWin && !characterWin.isDestroyed() && reportWin && !reportWin.isDestroyed()) {
     try {
@@ -524,6 +534,42 @@ async function openReportPopup() {
   // 페이지 로드 완료
   reportWin.webContents.on('did-finish-load', () => {
     console.log('📝 보고서 팝업 로드 완료');
+    
+    if (process.platform === 'win32') {
+      console.log('📝 Windows 보고서 팝업: CSS에서 border-radius 제거 시도');
+      
+      // Windows 11 DWM 둥근 모서리 강제 제거 (타이틀바와 큰 창만)
+      reportWin.webContents.executeJavaScript(`
+        const style = document.createElement('style');
+        style.textContent = \`
+          html, body {
+            overflow: hidden !important;
+            border-radius: 0 !important;
+          }
+          .titlebar {
+            border-radius: 0 !important;
+            border-top-left-radius: 0 !important;
+            border-top-right-radius: 0 !important;
+          }
+          .titlebar-btn {
+            border-radius: 50% !important;
+          }
+          #report-panel,
+          #report-messages {
+            border-radius: 0 !important;
+          }
+          .report-quick-actions-fixed {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+        \`;
+        document.head.appendChild(style);
+        console.log('✅ Windows 둥근 모서리 제거 스타일 주입 완료 (타이틀바 및 큰 창만)');
+      `).catch(err => {
+        console.error('❌ 스타일 주입 실패:', err);
+      });
+    }
   });
 
   // 개발자 도구 (F12)
@@ -540,11 +586,15 @@ async function openReportPopup() {
   reportWin.on('closed', () => {
     console.log('📝 보고서 팝업 닫힘');
 
-    // 챗봇에 종료 이벤트 전송
+    // 챗봇에 종료 이벤트 전송 및 alwaysOnTop 복구
     if (characterWin && !characterWin.isDestroyed()) {
       characterWin.webContents.send('report-closed', {
         // 단순히 종료만 알림
       });
+      
+      // characterWin의 alwaysOnTop 복구
+      characterWin.setAlwaysOnTop(true);
+      console.log('✅ 캐릭터 창 alwaysOnTop 복구');
     }
 
     reportWin = null;
@@ -714,6 +764,62 @@ ipcMain.handle('get-main-cookies', async () => {
   }
 
   return {};
+});
+
+// 보고서 전용 창 열기 (Electron 앱 내부)
+let reportViewerWins = []; // 여러 보고서 창을 관리
+
+ipcMain.on('open-report-window', async (event, data) => {
+  const { url, title } = data;
+  console.log('📄 보고서 창 열기 요청:', { url, title });
+
+  try {
+    // 새 보고서 뷰어 창 생성
+    const reportViewerWin = new BrowserWindow({
+      width: 1200,
+      height: 900,
+      center: true,
+      resizable: true,
+      frame: true,
+      backgroundColor: '#f5f5f5',
+      title: title || '보고서',
+      webPreferences: {
+        contextIsolation: false,
+        nodeIntegration: true,
+        partition: 'persist:main' // 세션 공유
+      },
+      parent: null, // 독립적인 창으로 설정 (부모 없음)
+      modal: false, // 모달이 아님
+      alwaysOnTop: false // 항상 위에 표시하지 않음
+    });
+
+    // URL 로드
+    reportViewerWin.loadURL(url);
+
+    // 개발자 도구 (F12)
+    reportViewerWin.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12') {
+        if (reportViewerWin.webContents.isDevToolsOpened()) {
+          reportViewerWin.webContents.closeDevTools();
+        } else {
+          reportViewerWin.webContents.openDevTools({ mode: 'detach' });
+        }
+      }
+    });
+
+    // 창 닫힐 때 배열에서 제거
+    reportViewerWin.on('closed', () => {
+      console.log('📄 보고서 창 닫힘');
+      reportViewerWins = reportViewerWins.filter(win => win !== reportViewerWin);
+    });
+
+    // 배열에 추가
+    reportViewerWins.push(reportViewerWin);
+
+    console.log('✅ 보고서 창 열기 완료');
+  } catch (error) {
+    console.error('❌ 보고서 창 열기 실패:', error);
+  }
 });
 
 // 보고서 창 최대화 토글

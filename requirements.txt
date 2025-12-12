@@ -70,6 +70,7 @@ rank-bm25==0.2.2
 PyMuPDF==1.24.13
 pdfplumber==0.11.8
 Pillow==11.0.0
+pdfkit==1.2.0
 
 # ========================================
 # Utilities

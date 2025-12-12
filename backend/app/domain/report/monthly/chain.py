@@ -142,6 +142,7 @@ def generate_monthly_report(
         raise
     
     # 8. CanonicalMonthly 생성
+    # 주의: key_metrics는 LLM이 출력하지 않음 (시스템에서 자동 계산)
     # display_name 결정 (HTML 보고서용)
     actual_display_name = display_name or owner
     header = {
@@ -165,5 +166,20 @@ def generate_monthly_report(
         period_end=last_day,
         monthly=canonical_monthly
     )
+    
+    # 10. kpi_data를 report 객체에 임시 저장 (html_renderer에서 사용)
+    # LLM은 key_metrics를 출력하지 않으므로, kpi_data를 그대로 사용
+    if kpi_data:
+        # analysis 필드 제거 (숫자만 표시)
+        kpi_data_clean = {
+            "new_contracts": kpi_data.get("new_contracts", 0),
+            "renewals": kpi_data.get("renewals", 0),
+            "consultations": kpi_data.get("consultations", 0),
+            "analysis": ""  # 분석 문장 없음 (숫자만 표시)
+        }
+        setattr(report, '_kpi_data', kpi_data_clean)
+        print(f"[INFO] KPI 데이터 저장: new_contracts={kpi_data_clean.get('new_contracts', 0)}, renewals={kpi_data_clean.get('renewals', 0)}, consultations={kpi_data_clean.get('consultations', 0)}")
+    else:
+        print(f"[WARN] kpi_data가 제공되지 않았습니다.")
     
     return report

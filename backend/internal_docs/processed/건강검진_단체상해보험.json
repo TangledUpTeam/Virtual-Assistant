@@ -10,7 +10,7 @@
         "page_number": 1,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 15:10:19.567091",
+        "processed_at": "2025-12-11 12:11:38.294319",
         "file_size": null
       },
       "table_data": {
@@ -160,7 +160,7 @@
         "page_number": 1,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 15:10:19.579566",
+        "processed_at": "2025-12-11 12:11:38.368989",
         "file_size": null
       },
       "table_data": null,
@@ -174,7 +174,7 @@
         "page_number": 2,
         "content_type": "table",
         "total_pages": null,
-        "processed_at": "2025-12-11 15:10:19.650467",
+        "processed_at": "2025-12-11 12:11:38.734068",
         "file_size": null
       },
       "table_data": {
@@ -240,7 +240,7 @@
         "page_number": 2,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 15:10:19.653209",
+        "processed_at": "2025-12-11 12:11:38.734068",
         "file_size": null
       },
       "table_data": null,
@@ -254,13 +254,13 @@
         "page_number": 3,
         "content_type": "text",
         "total_pages": null,
-        "processed_at": "2025-12-11 15:10:19.664046",
+        "processed_at": "2025-12-11 12:11:38.805642",
         "file_size": null
       },
       "table_data": null,
       "translated_text": null
     }
   ],
-  "processed_at": "2025-12-11 15:10:19.664420",
-  "file_path": "/Users/jinmokim/dev/Virtual-Assistant/backend/internal_docs/uploads/건강검진_단체상해보험.pdf"
+  "processed_at": "2025-12-11 12:11:38.820411",
+  "file_path": "C:\\Users\\301\\Documents\\GitHub\\Virtual-Assistant\\backend\\internal_docs\\uploads\\건강검진_단체상해보험.pdf"
 }

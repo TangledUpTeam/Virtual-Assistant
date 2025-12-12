@@ -104,7 +104,7 @@ class InsuranceRAGConfig:
     RAG_MAX_CHUNK_SIZE: int = 500
     
     # 청크 설정 (토큰 기반 - 새 청킹 시스템)
-    RAG_CHUNK_TOKENS: int = 500
+    RAG_CHUNK_TOKENS: int = 384
     RAG_CHUNK_OVERLAP_TOKENS: int = 80
     
     # 검색 설정

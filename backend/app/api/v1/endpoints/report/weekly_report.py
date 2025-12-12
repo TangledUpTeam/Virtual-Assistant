@@ -53,8 +53,14 @@ async def generate_weekly(
     인증 비활성화: current_user가 없어도 동작합니다.
     """
     try:
-        # 인증 비활성화: current_user가 없어도 동작
-        resolved_owner = current_user.name if current_user and current_user.name else "사용자"
+        # 사용자 이름 결정: current_user 우선, 없으면 report 생성 후 확인
+        # 일일보고서와 동일하게 처리 (get_current_user 사용 권장)
+        if current_user and current_user.name:
+            resolved_owner = current_user.name
+        else:
+            # current_user가 없으면 일단 "사용자"로 설정하고, 
+            # report 생성 후 실제 이름이 있는지 확인
+            resolved_owner = "사용자"
 
         # ReportGenerationAgent 사용
         from multi_agent.tools.report_tools import get_report_generation_agent
@@ -67,6 +73,16 @@ async def generate_weekly(
             display_name=resolved_owner
         )
 
+        # report 생성 후 실제 사용자 이름 확인 (report.weekly.header의 성명 우선)
+        if report.weekly and report.weekly.header and report.weekly.header.get("성명"):
+            actual_name = report.weekly.header.get("성명")
+            if actual_name and actual_name != "사용자":
+                resolved_owner = actual_name
+        elif current_user and current_user.name:
+            # current_user가 있으면 사용
+            resolved_owner = current_user.name
+
+        # report의 owner와 header 성명을 실제 사용자 이름으로 업데이트
         if report.owner != resolved_owner:
             report_dict = report.model_dump(mode="json")
             report_dict["owner"] = resolved_owner
